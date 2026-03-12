@@ -1,0 +1,8 @@
+{
+  "skill_id": "text_summarization",
+  "domain": "communication",
+  "description": "Condense long text into key points.",
+  "trigger_conditions": ["summarize", "summary", "condense", "brief"],
+  "prompt_template": "Summarize the key points.",
+  "tags": ["communication", "writing"]
+}

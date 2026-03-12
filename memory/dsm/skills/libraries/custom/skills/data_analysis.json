@@ -1,0 +1,8 @@
+{
+  "skill_id": "data_analysis",
+  "domain": "analytics",
+  "description": "Analyze data and generate insights.",
+  "trigger_conditions": ["analyze", "data", "insights", "metrics"],
+  "prompt_template": "Analyze the data and provide insights.",
+  "tags": ["analytics", "data", "analysis"]
+}
