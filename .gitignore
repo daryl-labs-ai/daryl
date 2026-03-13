@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.pyc
+
+# Logs
+logs/
+*.log
+*.jsonl
+
+# Data and runtime
+data/
+data/index/
+memory/dsm/core/data/
+memory/dsm/data/
+
+# Build
+build/
+dist/
+*.egg-info/
+
+# Environment
+.env
+venv/
