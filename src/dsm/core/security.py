@@ -27,6 +27,11 @@ Architecture:
 - Excluded: data/shards/*.jsonl (append-only, hash chain protected)
 """
 
+# MIGRATION NOTE (March 2026):
+# Path constants (CRITICAL_FILES, PROTECTED_WRITE_FILES) updated during
+# src/ layout migration. No logic change. See repo-restructure branch.
+# This is a configuration-only exception to the kernel freeze.
+
 import hashlib
 import json
 import subprocess
