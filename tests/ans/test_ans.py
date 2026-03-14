@@ -8,6 +8,7 @@ Phase 2: Tests recommendation layer functionality.
 
 import os
 import sys
+import subprocess
 
 from pathlib import Path as _Path
 _dsm_root = _Path(__file__).resolve().parent.parent / "src" / "dsm"
@@ -188,9 +189,12 @@ def test_recommend_cli_commands():
     print("Test 7: CLI Recommendation Commands")
     print("-" * 60)
 
-    # Test recommend command
-    result = os.popen("python3 -m dsm.ans.cli recommend")
-    output, _ = result.communicate()
+    result = subprocess.run(
+        [sys.executable, "-m", "dsm.ans.cli", "recommend"],
+        capture_output=True,
+        text=True,
+    )
+    output = result.stdout or result.stderr or ""
 
     if result.returncode == 0 and output:
         print("✅ CLI 'recommend' command works")
