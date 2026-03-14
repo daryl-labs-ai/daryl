@@ -1,8 +1,24 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-DSM v2 - Session Graph
-Orchestration layer for DSM sessions with lifecycle management and safeguards
+DSM v2 - Session Graph.
+
+Orchestration layer for DSM sessions with lifecycle management and safeguards.
+Writes session_start, snapshot, tool_call, and session_end events to the
+`sessions` shard. Rate limits and action limits are enforced via
+SessionLimitsManager.
+
+API principale:
+  - start_session(source) -> Entry | None
+  - record_snapshot(snapshot_data) -> Entry | None
+  - execute_action(action_name, payload) -> Entry | None
+  - end_session() -> Entry | None
+
+Contraintes:
+  - At most one active session at a time; start_session() creates a new one.
+  - All session events go to the `sessions` shard.
+  - Snapshot and action writes may be skipped if limits/cooldowns are exceeded.
+  - Do not modify DSM core; this module uses only Storage.append() and core models.
 """
 
 import json

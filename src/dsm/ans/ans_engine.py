@@ -1,8 +1,21 @@
 """
-DSM-ANS (Audience Neural System) - Analysis Engine.
+DSM-ANS (Adaptive Navigation System) — Analysis Engine.
 
-This module provides core analysis engine for skill performance evaluation.
-ANS v1 (RR-based): optional query_engine for analyze_agent().
+Rôle: Analyze skill performance from usage/success telemetry and produce
+rankings, workflow recommendations, and optional RR-based agent insights.
+Does not write to DSM; reads log files (skills_usage.jsonl, skills_success.jsonl)
+and optionally RR query engine for shard-backed analysis.
+
+API principale (ANSEngine):
+  - load() / load_events(): load usage and success events from log paths.
+  - analyze_skills(): compute skill performance and recommendations.
+  - analyze_agent(): optional RR-based analysis when query_engine is provided.
+  - get_report() / get_skill_rankings() / get_workflow_recommendations(): access results.
+
+Contraintes:
+  - Telemetry is separate from DSM kernel (log files, not Storage).
+  - Does not modify DSM core or any shards.
+  - Optional dependency on RR (query_engine) for analyze_agent().
 """
 
 import os

@@ -1,11 +1,18 @@
 """
-DSM-SKILLS - Skill Router for matching tasks to appropriate skills.
+DSM-SKILLS — Skill Router.
 
-This module provides a simple router that matches task descriptions to skills
-based on trigger conditions.
+Rôle: Match task descriptions to skills using trigger conditions. Used by
+agents to select which skill to invoke for a given task. Requires a
+SkillRegistry; does not write to DSM.
 
-This is a v0 implementation with simple keyword matching.
-Future versions may include more sophisticated routing logic.
+API principale (SkillRouter):
+  - route(task_description) -> skill_id | None: first skill whose trigger matches.
+  - route_to(task_description) -> Skill | None: same as route but returns Skill object.
+
+Contraintes:
+  - Simple keyword matching: trigger in task_description (case-insensitive).
+  - First match wins; order of registration/list_skills() matters.
+  - Do not modify DSM core; this module is independent of the kernel.
 """
 
 from typing import Optional

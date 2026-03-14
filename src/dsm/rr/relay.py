@@ -1,21 +1,20 @@
 # -*- coding: utf-8 -*-
 """
-DSM-RR Minimal Implementation (Step 1).
+DSM-RR (Read Relay) — read-only relay over DSM Storage.
 
-See HEARTBEAT.md for the planned DSM-RR architecture. This module is a read-only
-relay over DSM Storage: it does not write to shards or modify the core. It uses
-only Storage.read() to inspect shard data.
+Rôle: Expose DSM shard data to agents without writing or modifying the core.
+Uses only Storage.read() to inspect shard data; does not write to shards or
+change DSM state.
 
-Current capabilities (Step 1):
-  - read_recent(shard_id, limit): return most recent entries from a shard.
-  - summary(shard_id, limit): lightweight activity summary (entry count, unique
-    sessions, errors, top actions).
+API principale (DSMReadRelay):
+  - read_recent(shard_id, limit) -> list of Entry: most recent entries.
+  - summary(shard_id, limit) -> dict: lightweight activity summary (entry count,
+    unique sessions, errors, top actions). Compatible with classic and block shards.
 
-Planned future features (not implemented here):
-  - Session reconstruction (reconstruct_session(session_id)).
-  - RR query engine for structured queries over shard data.
-  - Context pack generation for agents (prepared context from DSM for LLM use).
-  - Minimal indexing for faster lookups by session or time range.
+Contraintes:
+  - Read-only: no writes, no modifications to DSM core or segment files.
+  - Block-format entries are expanded in memory when reading; no persistence change.
+  - Planned (not in this module): session reconstruction, query engine, context packs.
 """
 
 import json

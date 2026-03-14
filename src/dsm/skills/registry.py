@@ -1,8 +1,19 @@
 """
-DSM-SKILLS - Skill Registry for managing available skills.
+DSM-SKILLS — Skill Registry.
 
-This module provides a simple in-memory registry for skill management.
-Currently minimal and intended for testing only.
+Rôle: In-memory registry of available skills (Skill objects). Used by the
+router to resolve task descriptions to skills. No persistence; registration
+is process-local.
+
+API principale (SkillRegistry):
+  - register(skill): add a skill; raises ValueError if skill_id already exists.
+  - get(skill_id) -> Skill | None
+  - list_skills() -> list of Skill
+  - search(query) -> list of Skill: simple match on id, description, trigger keywords.
+
+Contraintes:
+  - In-memory only; no disk or DSM writes. Skills must be registered after load.
+  - Do not modify DSM core; this module is independent of the kernel.
 """
 
 import os

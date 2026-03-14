@@ -8,6 +8,9 @@ version = "0.1.0"
 description = "Daryl Sharding Memory (DSM) v2 - deterministic memory kernel"
 requires-python = ">=3.8"
 
+[project.optional-dependencies]
+dev = ["pytest", "pytest-cov"]
+
 [project.scripts]
 dsm = "dsm.cli:main_dsm"
 
