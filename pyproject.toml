@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dsm-v2"
+version = "0.1.0"
+description = "Daryl Sharding Memory (DSM) v2 - deterministic memory kernel"
+requires-python = ">=3.8"
+
+[project.scripts]
+dsm = "dsm.cli:main_dsm"
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -41,6 +41,13 @@ DSM (Daryl Sharding Memory)
 - shard-based event logs
 - deterministic replay
 
+### Session components
+
+- **SessionTracker** (`memory/dsm/core/session.py`): runtime heartbeat tracking (kernel).
+- **SessionGraph** (`memory/dsm/session/session_graph.py`): event logging system — records `session_start`, `tool_call`, `snapshot`, `session_end`.
+
+Clawdbot writes session events to the DSM shard **`clawdbot_sessions`**.
+
 Clawdbot
 - main runtime agent
 - interacts with DSM

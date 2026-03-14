@@ -1,0 +1,8 @@
+{
+  "skill_id": "task_decomposition",
+  "domain": "reasoning",
+  "description": "Break complex tasks into smaller, manageable steps.",
+  "trigger_conditions": ["complex", "multi-step", "break down", "trading", "strategy", "workflow", "automation"],
+  "prompt_template": "Break the task into logical steps.",
+  "tags": ["planning", "reasoning"]
+}
