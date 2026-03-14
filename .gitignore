@@ -4,14 +4,11 @@ __pycache__/
 
 # Logs
 logs/
-*.log
-*.jsonl
+**/logs/
 
 # Data and runtime
 data/
 data/index/
-memory/dsm/core/data/
-memory/dsm/data/
 
 # Build
 build/
