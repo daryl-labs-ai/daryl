@@ -22,6 +22,7 @@ Contraintes:
 """
 
 import json
+import logging
 import uuid
 from datetime import datetime
 from typing import Optional, Dict, Any, Tuple
@@ -30,6 +31,8 @@ from pathlib import Path
 from .session_limits_manager import SessionLimitsManager
 from ..core.storage import Storage
 from ..core.models import Entry
+
+logger = logging.getLogger(__name__)
 
 
 class SessionGraph:
@@ -84,6 +87,13 @@ class SessionGraph:
         Returns:
             Entry: L'événement session_start écrit, ou None si échec
         """
+        if self.current_session_id is not None:
+            logger.warning(
+                "Session %s still active — auto-closing before new start",
+                self.current_session_id,
+            )
+            self.end_session()
+
         # Générer un nouveau session_id
         self.current_session_id = f"session_{int(datetime.utcnow().timestamp())}_{uuid.uuid4().hex[:8]}"
         self.session_start_time = datetime.utcnow()
@@ -109,11 +119,14 @@ class SessionGraph:
         )
         
         # Écrire l'événement via Storage
-        written_entry = self.storage.append(entry)
-        
-        print(f"📌 Session started: {self.current_session_id} (source: {source})")
+        try:
+            written_entry = self.storage.append(entry)
+        except OSError as e:
+            logger.error("Failed to append entry to storage: %s", e)
+            return None
+        logger.info("Session started: %s (source: %s)", self.current_session_id, source)
         return written_entry
-    
+
     def record_snapshot(self, snapshot_data: Dict[str, Any]) -> Optional[Entry]:
         """
         Enregistre un snapshot d'état (avec vérification de cooldown)
@@ -125,14 +138,14 @@ class SessionGraph:
             Entry: L'événement snapshot écrit, ou None si cooldown
         """
         if not self.current_session_id:
-            print("❌ Cannot record snapshot: no active session")
+            logger.warning("Cannot record snapshot: no active session")
             return None
-        
+
         # Vérifier le cooldown de polling home
         can_poll, reason = self.limits_manager.can_poll_home()
-        
+
         if not can_poll:
-            print(f"📦 Snapshot skipped: {reason}")
+            logger.info("Snapshot skipped: %s", reason)
             # Marquer le skip dans les limites
             self.limits_manager.mark_home_poll_skipped()
             return None
@@ -158,14 +171,16 @@ class SessionGraph:
         )
         
         # Écrire l'événement via Storage
-        written_entry = self.storage.append(entry)
-        
+        try:
+            written_entry = self.storage.append(entry)
+        except OSError as e:
+            logger.error("Failed to append entry to storage: %s", e)
+            return None
         # Marquer le polling comme effectué
         self.limits_manager.mark_home_polled()
-        
-        print(f"📦 Snapshot recorded (session: {self.current_session_id[:12]}...)")
+        logger.info("Snapshot recorded (session: %s...)", self.current_session_id[:12])
         return written_entry
-    
+
     def execute_action(self, action_name: str, payload: Dict[str, Any]) -> Optional[Entry]:
         """
         Exécute une action (avec vérification des limites)
@@ -178,14 +193,14 @@ class SessionGraph:
             Entry: L'événement tool_call écrit, ou None si limites
         """
         if not self.current_session_id:
-            print("❌ Cannot execute action: no active session")
+            logger.warning("Cannot execute action: no active session")
             return None
-        
+
         # Vérifier si l'action est autorisée
         can_execute, reason = self.limits_manager.can_execute_action()
-        
+
         if not can_execute:
-            print(f"🛑 Action blocked: {reason}")
+            logger.info("Action blocked: %s", reason)
             # Marquer l'action comme skipée
             self.limits_manager.mark_action_skipped_cooldown(reason=reason)
             return None
@@ -212,14 +227,16 @@ class SessionGraph:
         )
         
         # Écrire l'événement via Storage
-        written_entry = self.storage.append(entry)
-        
+        try:
+            written_entry = self.storage.append(entry)
+        except OSError as e:
+            logger.error("Failed to append entry to storage: %s", e)
+            return None
         # Marquer l'action comme exécutée
         self.limits_manager.mark_action_executed()
-        
-        print(f"⚡ Action executed: {action_name} (session: {self.current_session_id[:12]}...)")
+        logger.info("Action executed: %s (session: %s...)", action_name, self.current_session_id[:12])
         return written_entry
-    
+
     def end_session(self) -> Optional[Entry]:
         """
         Termine la session active
@@ -227,10 +244,10 @@ class SessionGraph:
         Returns:
             Entry: L'événement session_end écrit, ou None si aucune session active
         """
-        if not self.current_session_id:
-            print("❌ Cannot end session: no active session")
+        if self.current_session_id is None:
+            logger.warning("end_session called with no active session")
             return None
-        
+
         # Calculer la durée de session
         session_end_time = datetime.utcnow()
         session_duration = (session_end_time - self.session_start_time).total_seconds() if self.session_start_time else 0
@@ -257,15 +274,17 @@ class SessionGraph:
         )
         
         # Écrire l'événement via Storage
-        written_entry = self.storage.append(entry)
-        
+        try:
+            written_entry = self.storage.append(entry)
+        except OSError as e:
+            logger.error("Failed to append entry to storage: %s", e)
+            return None
         # Réinitialiser l'état de session
         session_id = self.current_session_id
         self.current_session_id = None
         self.session_start_time = None
         self.session_source = None
-        
-        print(f"🏁 Session ended: {session_id} (duration: {session_duration:.1f}s)")
+        logger.info("Session ended: %s (duration: %.1fs)", session_id, session_duration)
         return written_entry
     
     def get_session_id(self) -> Optional[str]:
