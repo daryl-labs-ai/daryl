@@ -638,7 +638,8 @@ class SecurityLayer:
 
         self.security_dir.mkdir(parents=True, exist_ok=True)
 
-        with open(AUDIT_LOG, 'a', encoding='utf-8') as f:
+        audit_log = self.security_dir / "audit.jsonl"
+        with open(audit_log, 'a', encoding='utf-8') as f:
             f.write(json.dumps(event) + '\n')
 
     def _check_git_status(self) -> Dict[str, str]:
