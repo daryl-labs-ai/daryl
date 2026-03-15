@@ -45,6 +45,12 @@ or cause verify/replay to report inconsistency.
 segment content with metadata manually (do not modify kernel). Prefer
 single-writer usage to reduce crash surface.
 
+**Mitigation (v0.3.0)**: SessionGraph now uses an intent/result receipt
+pattern. `execute_action()` writes an `action_intent` entry before the
+action executes. `confirm_action()` writes an `action_result` entry after.
+Orphaned intents (intent without matching result) are detectable via
+`session.find_orphaned_intents()` or `dsm orphans`.
+
 **Fix**: Deferred until kernel freeze is lifted — persist last_hash in the
 same critical section as the segment write (e.g. write last_hash before
 or in same fsync scope as segment tail).
