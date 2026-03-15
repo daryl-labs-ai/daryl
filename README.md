@@ -95,6 +95,27 @@ actions = [e for e in entries if e.metadata.get("action_name") == "search"]
 
 This doesn't prevent an LLM from hallucinating. It makes hallucinations about past behavior **detectable and provable** — the agent's memory is a chain of cryptographic facts, not a probabilistic reconstruction.
 
+### Self-aware agents
+
+An agent with DSM can detect **its own** hallucinations before responding:
+
+```python
+# Agent "remembers" searching for weather yesterday.
+# Instead of trusting its context window, it checks:
+
+entries = storage.read("sessions", limit=100)
+searches = [e for e in entries if e.metadata.get("action_name") == "search"]
+
+if searches:
+    # Memory confirmed — respond with confidence
+    last_search = searches[0]
+else:
+    # No search in the log. The "memory" is a hallucination.
+    # Agent corrects itself before the user ever sees the mistake.
+```
+
+The agent's context window is lossy and probabilistic. DSM is neither. When the two disagree, DSM is right.
+
 ## Architecture
 
 ```
