@@ -3,9 +3,9 @@ requires = ["setuptools>=61", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "dsm-v2"
-version = "0.1.0"
-description = "Daryl Sharding Memory (DSM) v2 - deterministic memory kernel"
+name = "daryl-dsm"
+version = "0.3.0"
+description = "Deterministic Sharding Memory for AI agents — append-only, hash-chained, tamper-evident event log"
 requires-python = ">=3.8"
 
 [project.optional-dependencies]
