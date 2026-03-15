@@ -1,3 +1,8 @@
+<!-- TODO: replace <org> with your GitHub organization when repo is public -->
+<!-- ![CI](https://github.com/<org>/daryl/actions/workflows/ci.yml/badge.svg) -->
+![Python](https://img.shields.io/badge/python-3.10%2B-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+
 # Daryl — Deterministic Sharding Memory for AI Agents
 
 ## Overview
@@ -32,6 +37,46 @@ For development (tests, coverage):
 ```bash
 pip install -e .[dev]
 ```
+
+## Quick Example
+
+From the repository root (after `pip install -e .`):
+
+```python
+from datetime import datetime
+from uuid import uuid4
+import tempfile
+from dsm.core.storage import Storage
+from dsm.core.models import Entry
+
+with tempfile.TemporaryDirectory() as tmp:
+    storage = Storage(data_dir=tmp)
+    entry = Entry(
+        id=str(uuid4()),
+        timestamp=datetime.utcnow(),
+        session_id="example",
+        source="readme",
+        content="Hello DSM",
+        shard="default",
+        hash="",
+        prev_hash=None,
+        metadata={},
+        version="v2.0",
+    )
+    storage.append(entry)
+    entries = storage.read("default", limit=10)
+    print("Entries:", len(entries))
+    if entries:
+        print("Latest:", entries[0].content)
+```
+
+## Why DSM?
+
+| Approach | Model | Trade-off |
+|----------|-------|-----------|
+| RAG + Vector DB | Semantic similarity search | Fast retrieval, but non-deterministic — same query can return different results |
+| Structured logs | Append-only text files | Deterministic, but no query layer or integrity guarantees |
+| DSM | Append-only sharded event log with hash chain | Deterministic replay and verification, but no semantic search |
 
 ## Running tests
 
