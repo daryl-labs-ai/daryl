@@ -237,33 +237,46 @@ class SessionGraph:
         intent_id: str,
         result_data: Dict[str, Any] = None,
         success: bool = True,
+        input_hash: str = None,
+        input_preview: str = None,
     ) -> Optional[Entry]:
         """
         Write the result of a previously declared intent.
         Links to the intent via intent_id in metadata.
+        Optionally store input_hash/input_preview (input receipt) to prove what the agent saw.
         If this is never called (crash), the orphaned intent is detectable.
         """
         if self.current_session_id is None:
             logger.warning("Cannot confirm action: no active session")
             return None
 
+        content_data = {
+            "result": result_data or {},
+            "success": success,
+        }
+        if input_hash:
+            content_data["input_hash"] = input_hash
+        if input_preview:
+            content_data["input_preview"] = input_preview[:200]
+
+        metadata = {
+            "event_type": "action_result",
+            "intent_id": intent_id,
+            "success": success,
+        }
+        if input_hash:
+            metadata["input_hash"] = input_hash
+
         entry = Entry(
             id=str(uuid.uuid4()),
             timestamp=datetime.utcnow(),
             session_id=self.current_session_id,
             source="session_graph",
-            content=json.dumps({
-                "result": result_data or {},
-                "success": success,
-            }),
+            content=json.dumps(content_data),
             shard="sessions",
             hash="",
             prev_hash=None,
-            metadata={
-                "event_type": "action_result",
-                "intent_id": intent_id,
-                "success": success,
-            },
+            metadata=metadata,
             version="v2.0",
         )
         try:
