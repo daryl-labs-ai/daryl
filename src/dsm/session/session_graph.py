@@ -11,7 +11,8 @@ SessionLimitsManager.
 API principale:
   - start_session(source) -> Entry | None
   - record_snapshot(snapshot_data) -> Entry | None
-  - execute_action(action_name, payload) -> Entry | None
+  - execute_action(action_name, payload) -> Entry | None  (writes intent; WAL pattern)
+  - confirm_action(intent_id, result_data, success) -> Entry | None  (writes result receipt)
   - end_session() -> Entry | None
 
 Contraintes:
@@ -181,61 +182,127 @@ class SessionGraph:
         logger.info("Snapshot recorded (session: %s...)", self.current_session_id[:12])
         return written_entry
 
-    def execute_action(self, action_name: str, payload: Dict[str, Any]) -> Optional[Entry]:
+    def execute_action(self, action_name: str, payload: Dict[str, Any] = None) -> Optional[Entry]:
         """
-        Exécute une action (avec vérification des limites)
-        
-        Args:
-            action_name: Nom de l'action (ex: "post_reply", "create_post")
-            payload: Payload de l'action
-        
-        Returns:
-            Entry: L'événement tool_call écrit, ou None si limites
+        Write an action intent to the log. Returns the intent entry.
+        Call confirm_action() after the action completes to record the result.
+        If the process crashes between execute_action and confirm_action,
+        the intent entry exists without a matching result — detectable on replay.
         """
-        if not self.current_session_id:
+        if self.current_session_id is None:
             logger.warning("Cannot execute action: no active session")
             return None
 
-        # Vérifier si l'action est autorisée
         can_execute, reason = self.limits_manager.can_execute_action()
-
         if not can_execute:
             logger.info("Action blocked: %s", reason)
-            # Marquer l'action comme skipée
             self.limits_manager.mark_action_skipped_cooldown(reason=reason)
             return None
-        
-        # Créer l'événement tool_call
-        timestamp = datetime.utcnow()
-        content = json.dumps({
-            "action": action_name,
-            "payload": payload,
-            "timestamp": timestamp.isoformat()
-        })
-        
+
+        intent_id = str(uuid.uuid4())
         entry = Entry(
-            id=str(uuid.uuid4()),
-            timestamp=timestamp,
+            id=intent_id,
+            timestamp=datetime.utcnow(),
             session_id=self.current_session_id,
-            source=self.session_source or "session_graph",
-            content=content,
+            source="session_graph",
+            content=json.dumps({
+                "action_name": action_name,
+                "payload": payload or {},
+            }),
             shard="sessions",
             hash="",
             prev_hash=None,
-            metadata={"event_type": "tool_call", "action_name": action_name},
-            version="v2.0"
+            metadata={
+                "event_type": "action_intent",
+                "action_name": action_name,
+                "intent_id": intent_id,
+            },
+            version="v2.0",
         )
-        
-        # Écrire l'événement via Storage
         try:
-            written_entry = self.storage.append(entry)
+            result = self.storage.append(entry)
+            logger.info(
+                "Action intent: %s (session: %s, intent: %s)",
+                action_name,
+                self.current_session_id[:12],
+                intent_id[:8],
+            )
+            return result
         except OSError as e:
-            logger.error("Failed to append entry to storage: %s", e)
+            logger.error("Failed to append action intent: %s", e)
             return None
-        # Marquer l'action comme exécutée
-        self.limits_manager.mark_action_executed()
-        logger.info("Action executed: %s (session: %s...)", action_name, self.current_session_id[:12])
-        return written_entry
+
+    def confirm_action(
+        self,
+        intent_id: str,
+        result_data: Dict[str, Any] = None,
+        success: bool = True,
+    ) -> Optional[Entry]:
+        """
+        Write the result of a previously declared intent.
+        Links to the intent via intent_id in metadata.
+        If this is never called (crash), the orphaned intent is detectable.
+        """
+        if self.current_session_id is None:
+            logger.warning("Cannot confirm action: no active session")
+            return None
+
+        entry = Entry(
+            id=str(uuid.uuid4()),
+            timestamp=datetime.utcnow(),
+            session_id=self.current_session_id,
+            source="session_graph",
+            content=json.dumps({
+                "result": result_data or {},
+                "success": success,
+            }),
+            shard="sessions",
+            hash="",
+            prev_hash=None,
+            metadata={
+                "event_type": "action_result",
+                "intent_id": intent_id,
+                "success": success,
+            },
+            version="v2.0",
+        )
+        try:
+            result = self.storage.append(entry)
+            self.limits_manager.mark_action_executed()
+            logger.info(
+                "Action result: intent %s, success=%s (session: %s)",
+                intent_id[:8],
+                success,
+                self.current_session_id[:12],
+            )
+            return result
+        except OSError as e:
+            logger.error("Failed to append action result: %s", e)
+            return None
+
+    def find_orphaned_intents(self, storage=None, limit: int = 1000) -> list:
+        """
+        Find action intents that have no matching action result.
+        These indicate crashes between intent and completion.
+        Returns list of orphaned intent entries.
+        """
+        s = storage or self.storage
+        entries = s.read("sessions", limit=limit)
+
+        intents = {}
+        results = set()
+
+        for e in entries:
+            event_type = e.metadata.get("event_type")
+            intent_id = e.metadata.get("intent_id")
+
+            if event_type == "action_intent" and intent_id:
+                intents[intent_id] = e
+            elif event_type == "action_result" and intent_id:
+                results.add(intent_id)
+
+        orphaned = [e for iid, e in intents.items() if iid not in results]
+        return orphaned
 
     def end_session(self) -> Optional[Entry]:
         """
