@@ -15,6 +15,7 @@ from .core.signing import Signing
 from .core.session import SessionTracker
 from .core.security import SecurityLayer
 from .session.session_graph import SessionGraph
+from .witness import ShardWitness
 from . import verify as dsm_verify
 
 
@@ -268,6 +269,52 @@ def _entry_to_json_line(e: Entry) -> str:
     return json.dumps(line, ensure_ascii=False)
 
 
+def _cmd_witness(args) -> None:
+    """dsm witness --data-dir <path> --witness-dir <path> [--key <secret>]: capture witness for all shards."""
+    data_dir = getattr(args, "data_dir", None) or "data"
+    witness_dir = getattr(args, "witness_dir", None)
+    if not witness_dir:
+        print("Error: --witness-dir is required", file=sys.stderr)
+        sys.exit(1)
+    witness_key = getattr(args, "key", None) or ""
+    storage = _get_storage(data_dir)
+    witness = ShardWitness(witness_dir, witness_key=witness_key)
+    records = witness.capture_all(storage)
+    for r in records:
+        print(json.dumps(r, ensure_ascii=False))
+    if not records:
+        print("No shards to witness.")
+
+
+def _cmd_witness_check(args) -> int:
+    """dsm witness-check: verify shards against witness log. Exit 0 if OK, 1 if any DIVERGED."""
+    data_dir = getattr(args, "data_dir", None) or "data"
+    witness_dir = getattr(args, "witness_dir", None)
+    if not witness_dir:
+        print("Error: --witness-dir is required", file=sys.stderr)
+        return 1
+    witness_key = getattr(args, "key", None) or ""
+    shard_id = getattr(args, "shard", None)
+
+    storage = _get_storage(data_dir)
+    witness = ShardWitness(witness_dir, witness_key=witness_key)
+
+    if shard_id:
+        results = [witness.verify_shard_against_witness(storage, shard_id)]
+    else:
+        log_records = witness.read_log()
+        shard_ids = list({r["shard_id"] for r in log_records})
+        results = [witness.verify_shard_against_witness(storage, sid) for sid in shard_ids]
+
+    any_diverged = False
+    for r in results:
+        print(json.dumps(r, ensure_ascii=False))
+        if r.get("status") == "DIVERGED":
+            any_diverged = True
+
+    return 1 if any_diverged else 0
+
+
 def _cmd_orphans(args) -> int:
     """dsm orphans --data-dir <path>: list intents without result (crash detection). Exit 0 if none, 1 if any."""
     data_dir = getattr(args, "data_dir", None) or "data"
@@ -387,6 +434,21 @@ def main_dsm() -> None:
     p_orphans = subparsers.add_parser("orphans", help="List action intents without result (crash detection)")
     p_orphans.add_argument("--data-dir", default=None, help="DSM data directory (default: data)")
     p_orphans.set_defaults(func=_cmd_orphans)
+
+    # dsm witness
+    p_witness = subparsers.add_parser("witness", help="Capture witness snapshot for all shards")
+    p_witness.add_argument("--data-dir", default=None, help="DSM data directory (default: data)")
+    p_witness.add_argument("--witness-dir", default=None, help="Directory for witness log (required)")
+    p_witness.add_argument("--key", default=None, help="Optional witness key for signing")
+    p_witness.set_defaults(func=_cmd_witness)
+
+    # dsm witness-check
+    p_witness_check = subparsers.add_parser("witness-check", help="Verify shards against witness log")
+    p_witness_check.add_argument("--data-dir", default=None, help="DSM data directory (default: data)")
+    p_witness_check.add_argument("--witness-dir", default=None, help="Directory for witness log (required)")
+    p_witness_check.add_argument("--key", default=None, help="Optional witness key (must match capture)")
+    p_witness_check.add_argument("--shard", default=None, help="Check a single shard by ID")
+    p_witness_check.set_defaults(func=_cmd_witness_check)
 
     args = parser.parse_args()
     ret = args.func(args)
