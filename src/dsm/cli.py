@@ -14,6 +14,7 @@ from .core.storage import Storage
 from .core.signing import Signing
 from .core.session import SessionTracker
 from .core.security import SecurityLayer
+from . import verify as dsm_verify
 
 
 # =============================================================================
@@ -154,6 +155,26 @@ def _cmd_append(args) -> None:
     print(f"Appended entry {stored.id[:8]}... to shard {args.shard_id}")
     if stored.hash:
         print(f"Hash: {stored.hash[:16]}...")
+
+
+def _cmd_verify(args) -> int:
+    """dsm verify --all | --shard <shard_id>: verify hash chain integrity. Exit 0 if OK, 1 if tampered/broken."""
+    storage = _get_storage(args.data_dir)
+    if getattr(args, "all", False):
+        results = dsm_verify.verify_all(storage)
+    else:
+        shard_id = getattr(args, "shard", None)
+        if not shard_id:
+            print("Error: use --all or --shard <shard_id>", file=sys.stderr)
+            return 1
+        results = [dsm_verify.verify_shard(storage, shard_id)]
+
+    any_fail = False
+    for r in results:
+        print(f"Shard: {r['shard_id']} | entries: {r['total_entries']} | verified: {r['verified']} | tampered: {r['tampered']} | chain_breaks: {r['chain_breaks']} | status: {r['status']}")
+        if r["status"] != "OK":
+            any_fail = True
+    return 0 if not any_fail else 1
 
 
 def _cmd_replay(args) -> None:
@@ -309,6 +330,13 @@ def main_dsm() -> None:
     p_append.add_argument("--data-dir", default=None, help="DSM data directory (default: data)")
     p_append.set_defaults(func=_cmd_append)
 
+    # dsm verify --all | --shard <shard_id>
+    p_verify = subparsers.add_parser("verify", help="Verify hash chain integrity (--all or --shard <id>)")
+    p_verify.add_argument("--all", action="store_true", help="Verify all shards")
+    p_verify.add_argument("--shard", type=str, default=None, help="Verify a single shard by ID")
+    p_verify.add_argument("--data-dir", default=None, help="DSM data directory (default: data)")
+    p_verify.set_defaults(func=_cmd_verify)
+
     # dsm replay <shard_id>
     p_replay = subparsers.add_parser("replay", help="Verify hash chain for a shard (integrity replay)")
     p_replay.add_argument("shard_id", help="Shard ID")
@@ -333,7 +361,9 @@ def main_dsm() -> None:
     p_tail.set_defaults(func=_cmd_tail)
 
     args = parser.parse_args()
-    args.func(args)
+    ret = args.func(args)
+    if ret is not None and ret != 0:
+        sys.exit(ret)
 
 
 class DSMCLI:
