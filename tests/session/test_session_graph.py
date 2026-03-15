@@ -210,3 +210,51 @@ def test_confirm_without_session_returns_none(tmp_path):
     graph, _ = _make_graph(tmp_path)
     result = graph.confirm_action("fake_intent_id", {})
     assert result is None
+
+
+def test_confirm_with_input_receipt(tmp_path):
+    """confirm_action stores input_hash and input_preview."""
+    graph, storage = _make_graph(tmp_path)
+    graph.start_session(source="test")
+
+    intent = graph.execute_action("api_call", {"url": "https://example.com"})
+    intent_id = intent.metadata.get("intent_id") or intent.id
+
+    from dsm.receipts import make_receipt
+
+    api_response = '{"temperature": 25, "city": "Paris"}'
+    receipt = make_receipt(api_response)
+
+    result = graph.confirm_action(intent_id, {"parsed": "25°C"}, **receipt)
+    assert result is not None
+
+    graph.end_session()
+
+    entries = storage.read("sessions", limit=20)
+    results = [e for e in entries if e.metadata.get("event_type") == "action_result"]
+    assert len(results) == 1
+    assert results[0].metadata.get("input_hash") is not None
+    assert len(results[0].metadata["input_hash"]) == 64
+
+    from dsm.receipts import hash_input
+
+    assert results[0].metadata["input_hash"] == hash_input(api_response)
+
+
+def test_confirm_without_receipt_still_works(tmp_path):
+    """confirm_action without input_hash works (backward compatible)."""
+    graph, storage = _make_graph(tmp_path)
+    graph.start_session(source="test")
+
+    intent = graph.execute_action("simple_action", {})
+    intent_id = intent.metadata.get("intent_id") or intent.id
+
+    result = graph.confirm_action(intent_id, {"done": True})
+    assert result is not None
+
+    graph.end_session()
+
+    entries = storage.read("sessions", limit=20)
+    results = [e for e in entries if e.metadata.get("event_type") == "action_result"]
+    assert len(results) == 1
+    assert results[0].metadata.get("input_hash") is None
