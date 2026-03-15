@@ -16,6 +16,7 @@ from .core.session import SessionTracker
 from .core.security import SecurityLayer
 from .session.session_graph import SessionGraph
 from .witness import ShardWitness
+from .audit import Policy, audit_shard, audit_all
 from . import verify as dsm_verify
 
 
@@ -269,6 +270,34 @@ def _entry_to_json_line(e: Entry) -> str:
     return json.dumps(line, ensure_ascii=False)
 
 
+def _cmd_audit(args) -> int:
+    """dsm audit --data-dir <path> --policy <path> [--shard <id>]: verify actions against policy. Exit 0 if COMPLIANT, 1 if VIOLATIONS_FOUND."""
+    data_dir = getattr(args, "data_dir", None) or "data"
+    policy_path = getattr(args, "policy", None)
+    if not policy_path:
+        print("Error: --policy is required", file=sys.stderr)
+        return 1
+    shard_id = getattr(args, "shard", None)
+    try:
+        policy = Policy.from_file(policy_path)
+    except Exception as e:
+        print(f"Error loading policy: {e}", file=sys.stderr)
+        return 1
+    storage = _get_storage(data_dir)
+    if shard_id:
+        results = [audit_shard(storage, shard_id, policy)]
+    else:
+        results = audit_all(storage, policy)
+
+    any_violations = False
+    for r in results:
+        print(f"Shard: {r['shard_id']} | entries: {r['total_entries']} | actions_checked: {r['actions_checked']} | violations: {r['violation_count']} | status: {r['status']}")
+        for v in r["violations"]:
+            any_violations = True
+            print(f"  violation | rule={v['rule']} detail={v['detail']} action_name={v.get('action_name')} entry_id={v.get('entry_id')}")
+    return 1 if any_violations else 0
+
+
 def _cmd_witness(args) -> None:
     """dsm witness --data-dir <path> --witness-dir <path> [--key <secret>]: capture witness for all shards."""
     data_dir = getattr(args, "data_dir", None) or "data"
@@ -434,6 +463,13 @@ def main_dsm() -> None:
     p_orphans = subparsers.add_parser("orphans", help="List action intents without result (crash detection)")
     p_orphans.add_argument("--data-dir", default=None, help="DSM data directory (default: data)")
     p_orphans.set_defaults(func=_cmd_orphans)
+
+    # dsm audit
+    p_audit = subparsers.add_parser("audit", help="Verify shard actions against a policy")
+    p_audit.add_argument("--data-dir", default=None, help="DSM data directory (default: data)")
+    p_audit.add_argument("--policy", default=None, help="Path to policy JSON file (required)")
+    p_audit.add_argument("--shard", default=None, help="Audit a single shard by ID")
+    p_audit.set_defaults(func=_cmd_audit)
 
     # dsm witness
     p_witness = subparsers.add_parser("witness", help="Capture witness snapshot for all shards")
