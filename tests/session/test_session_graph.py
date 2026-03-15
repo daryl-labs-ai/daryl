@@ -25,6 +25,14 @@ def _make_limits_permissive(base_dir: str) -> SessionLimitsManager:
     return m
 
 
+def _make_graph(tmp_path):
+    """Return (SessionGraph, Storage) with permissive limits for intent/confirm tests."""
+    storage = Storage(data_dir=str(tmp_path))
+    limits = _make_limits_permissive(str(tmp_path))
+    graph = SessionGraph(storage=storage, limits_manager=limits)
+    return graph, storage
+
+
 def test_start_session_end_session(tmp_path):
     """start_session then end_session."""
     storage = Storage(data_dir=str(tmp_path))
@@ -52,13 +60,14 @@ def test_record_snapshot_in_session(tmp_path):
 
 
 def test_execute_action_in_session(tmp_path):
-    """execute_action within an active session."""
+    """execute_action within an active session writes action_intent."""
     storage = Storage(data_dir=str(tmp_path))
     limits = _make_limits_permissive(str(tmp_path))
     sg = SessionGraph(storage=storage, limits_manager=limits)
     sg.start_session("test")
     e = sg.execute_action("post_reply", {"text": "hello"})
     assert e is not None
+    assert e.metadata.get("event_type") == "action_intent"
     sg.end_session()
 
 
@@ -137,3 +146,67 @@ def test_full_cycle_multiple_actions(tmp_path):
     assert e is not None
     entries = storage.read("sessions", limit=20)
     assert len(entries) >= 5
+    intents = [x for x in entries if x.metadata.get("event_type") == "action_intent"]
+    assert len(intents) >= 2
+
+
+def test_intent_and_confirm(tmp_path):
+    """Intent + confirm produces two linked entries."""
+    graph, storage = _make_graph(tmp_path)
+    graph.start_session(source="test")
+
+    intent = graph.execute_action("search", {"query": "test"})
+    assert intent is not None
+    intent_id = intent.metadata.get("intent_id") or intent.id
+
+    result = graph.confirm_action(intent_id, {"found": True}, success=True)
+    assert result is not None
+
+    graph.end_session()
+
+    entries = storage.read("sessions", limit=20)
+    intents = [e for e in entries if e.metadata.get("event_type") == "action_intent"]
+    results = [e for e in entries if e.metadata.get("event_type") == "action_result"]
+
+    assert len(intents) == 1
+    assert len(results) == 1
+    assert results[0].metadata.get("intent_id") == intents[0].metadata.get("intent_id")
+    assert results[0].metadata.get("success") is True
+
+
+def test_orphaned_intent_detected(tmp_path):
+    """Intent without confirm is detected as orphaned."""
+    graph, storage = _make_graph(tmp_path)
+    graph.start_session(source="test")
+
+    graph.execute_action("risky_action", {"data": "test"})
+
+    graph.end_session()
+
+    orphans = graph.find_orphaned_intents(storage)
+    assert len(orphans) == 1
+    assert orphans[0].metadata.get("action_name") == "risky_action"
+
+
+def test_no_orphans_when_all_confirmed(tmp_path):
+    """All intents confirmed -> no orphans."""
+    graph, storage = _make_graph(tmp_path)
+    graph.start_session(source="test")
+
+    intent1 = graph.execute_action("action_1", {})
+    graph.confirm_action(intent1.metadata.get("intent_id") or intent1.id, {"ok": True})
+
+    intent2 = graph.execute_action("action_2", {})
+    graph.confirm_action(intent2.metadata.get("intent_id") or intent2.id, {"ok": True})
+
+    graph.end_session()
+
+    orphans = graph.find_orphaned_intents(storage)
+    assert len(orphans) == 0
+
+
+def test_confirm_without_session_returns_none(tmp_path):
+    """Confirm outside session returns None."""
+    graph, _ = _make_graph(tmp_path)
+    result = graph.confirm_action("fake_intent_id", {})
+    assert result is None
