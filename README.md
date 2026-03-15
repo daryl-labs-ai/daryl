@@ -32,6 +32,22 @@ It introduces **DSM (Daryl Sharding Memory)** — an append-only sharded event l
 
 DSM enables AI agents to store events in a **deterministic memory layer** that can be replayed, verified and audited.
 
+## Project Status
+
+Daryl is an experimental research project exploring deterministic
+memory architectures for AI agents.
+
+The core storage layer (**DSM Core**) is frozen as of March 2026
+and considered stable.
+
+Higher-level modules such as:
+
+- RR (Read Relay)
+- ANS (Adaptive Navigation System)
+- Skills
+
+may evolve as the architecture grows.
+
 ---
 
 ## Overview
@@ -52,6 +68,8 @@ DSM does not provide query/search or vector search; it is an ordered, append-onl
 - **RR (Read Relay)**: Read-only relay over DSM storage (summaries, recent reads).
 - **ANS (Adaptive Navigation System)**: Analysis of skill performance and workflow recommendations.
 - **Skills**: Registry and router for matching tasks to skills.
+
+See full architecture diagram in: [docs/architecture_diagram.md](docs/architecture_diagram.md)
 
 ## Installation
 
@@ -113,12 +131,41 @@ with tempfile.TemporaryDirectory() as tmp:
 python -m pytest tests/ -v
 ```
 
-## Repository structure
+## Repository Structure
+
+```
+src/
+  dsm/
+    core/       # frozen append-only storage
+    rr/         # read relay navigation
+    ans/        # analytics and insights
+    skills/     # agent skill registry
+    session/    # session graph
+
+tests/          # unit and integration tests
+assets/         # logos and images
+docs/           # architecture documentation
+```
 
 - `src/dsm/` — DSM package: `core` (frozen), `session`, `rr`, `ans`, `skills`, etc.
 - `tests/` — Pytest test suite (core, session, skills, rr, ans, integration).
 - `scripts/` — Runners and utilities.
 - `docs/` — Documentation.
+
+## Contributing Quick Start
+
+```bash
+git clone https://github.com/daryl-labs-ai/daryl
+cd daryl
+
+pip install -e .[dev]
+
+python -m pytest tests/
+```
+
+Note: the DSM storage kernel located in `src/dsm/core/`
+is considered frozen and should not be modified without
+opening a design discussion.
 
 ## Contributing
 
