@@ -40,6 +40,19 @@ class SessionLimitsManager:
         self.DAILY_ACTION_BUDGET = 10  # Actions max par jour
         self.PER_CYCLE_BUDGET = 1  # Actions max par cycle
 
+    @classmethod
+    def agent_defaults(cls, base_dir: str):
+        """
+        Recommended limits for autonomous agents.
+
+        Removes human-oriented cooldowns so agents can perform
+        multiple actions per session without being blocked.
+        """
+        limits = cls(base_dir=base_dir)
+        limits.ACTION_COOLDOWN = 0
+        limits.POLL_INTERVAL = 1
+        return limits
+
     # ============================================================================
     # CHEMINS & FICHIERS
     # ============================================================================
