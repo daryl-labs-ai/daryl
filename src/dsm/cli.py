@@ -17,6 +17,7 @@ from .core.security import SecurityLayer
 from .session.session_graph import SessionGraph
 from .witness import ShardWitness
 from .audit import Policy, audit_shard, audit_all
+from .coverage import check_coverage
 from . import verify as dsm_verify
 
 
@@ -363,6 +364,54 @@ def _cmd_orphans(args) -> int:
     return 1
 
 
+def _cmd_coverage(args) -> int:
+    """dsm coverage --data-dir <path> --index-file <path> [--shard <id>]: check agent index coverage against DSM log."""
+    data_dir = getattr(args, "data_dir", None) or "data"
+    index_file = getattr(args, "index_file", None)
+    shard_id = getattr(args, "shard", None)
+
+    if not index_file:
+        print("Error: --index-file is required (JSON with 'ids' and/or 'hashes' arrays)", file=sys.stderr)
+        return 1
+
+    try:
+        with open(index_file, "r", encoding="utf-8") as f:
+            index_data = json.load(f)
+    except Exception as e:
+        print(f"Error loading index file: {e}", file=sys.stderr)
+        return 1
+
+    indexed_ids = set(index_data.get("ids", []))
+    indexed_hashes = set(index_data.get("hashes", []))
+
+    if not indexed_ids and not indexed_hashes:
+        print("Error: index file must contain 'ids' and/or 'hashes' arrays", file=sys.stderr)
+        return 1
+
+    storage = _get_storage(data_dir)
+    shard_ids = [shard_id] if shard_id else None
+
+    result = check_coverage(
+        storage,
+        indexed_ids=indexed_ids or None,
+        indexed_hashes=indexed_hashes or None,
+        shard_ids=shard_ids,
+    )
+
+    print(f"Coverage: {result['coverage_percent']}% | indexed: {result['indexed_entries']}/{result['total_entries']} | missing: {result['missing_entries']} | status: {result['status']}")
+    if result["per_shard"]:
+        for sid, info in result["per_shard"].items():
+            print(f"  shard {sid}: {info['indexed']}/{info['total']} indexed, {info['missing']} missing")
+    if result["gaps"]:
+        print(f"Gaps ({len(result['gaps'])}{'+ (truncated)' if result['gaps_truncated'] else ''}):")
+        for g in result["gaps"][:20]:
+            print(f"  entry={g['entry_id'][:12]}... event={g['event_type']} preview={g['content_preview'][:60]}")
+        if len(result["gaps"]) > 20:
+            print(f"  ... and {len(result['gaps']) - 20} more")
+
+    return 0 if result["status"] in ("FULLY_COVERED", "PARTIAL_COVERAGE") else 1
+
+
 def _cmd_tail(args) -> None:
     """dsm tail <shard_id>: continuously display new entries (like tail -f), poll Storage.read."""
     storage = _get_storage(args.data_dir)
@@ -470,6 +519,13 @@ def main_dsm() -> None:
     p_audit.add_argument("--policy", default=None, help="Path to policy JSON file (required)")
     p_audit.add_argument("--shard", default=None, help="Audit a single shard by ID")
     p_audit.set_defaults(func=_cmd_audit)
+
+    # dsm coverage
+    p_coverage = subparsers.add_parser("coverage", help="Check agent index coverage against DSM log")
+    p_coverage.add_argument("--data-dir", default=None, help="DSM data directory (default: data)")
+    p_coverage.add_argument("--index-file", default=None, help="JSON file with 'ids' and/or 'hashes' arrays (required)")
+    p_coverage.add_argument("--shard", default=None, help="Check a single shard by ID")
+    p_coverage.set_defaults(func=_cmd_coverage)
 
     # dsm witness
     p_witness = subparsers.add_parser("witness", help="Capture witness snapshot for all shards")
