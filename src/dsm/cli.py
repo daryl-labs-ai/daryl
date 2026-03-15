@@ -14,6 +14,7 @@ from .core.storage import Storage
 from .core.signing import Signing
 from .core.session import SessionTracker
 from .core.security import SecurityLayer
+from .session.session_graph import SessionGraph
 from . import verify as dsm_verify
 
 
@@ -34,7 +35,7 @@ def _entry_event_type(e: Entry) -> str:
     et = meta.get("event_type")
     if et in ("session_start", "session_end", "snapshot"):
         return "session"
-    if et == "tool_call":
+    if et in ("tool_call", "action_intent", "action_result"):
         return "tool_call"
     if et == "error" or meta.get("error"):
         return "error"
@@ -238,7 +239,10 @@ def _cmd_inspect(args) -> None:
     actions = []
     for e in session_entries:
         meta = e.metadata or {}
-        if meta.get("event_type") == "tool_call":
+        et = meta.get("event_type")
+        if et == "tool_call":
+            actions.append(meta.get("action_name", "?") or "?")
+        elif et == "action_intent":
             actions.append(meta.get("action_name", "?") or "?")
     if actions:
         print(f"Recent actions (last {len(actions)}):")
@@ -262,6 +266,25 @@ def _entry_to_json_line(e: Entry) -> str:
         "metadata": e.metadata,
     }
     return json.dumps(line, ensure_ascii=False)
+
+
+def _cmd_orphans(args) -> int:
+    """dsm orphans --data-dir <path>: list intents without result (crash detection). Exit 0 if none, 1 if any."""
+    data_dir = getattr(args, "data_dir", None) or "data"
+    storage = _get_storage(data_dir)
+    graph = SessionGraph(storage=storage)
+    orphaned = graph.find_orphaned_intents(storage=storage)
+    if not orphaned:
+        print("No orphaned intents.")
+        return 0
+    print(f"Found {len(orphaned)} orphaned intent(s):")
+    for e in orphaned:
+        meta = e.metadata or {}
+        intent_id = meta.get("intent_id") or e.id
+        action_name = meta.get("action_name", "?")
+        ts = e.timestamp.isoformat() if hasattr(e.timestamp, "isoformat") else str(e.timestamp)
+        print(f"  intent_id={intent_id[:12]}... action_name={action_name} timestamp={ts}")
+    return 1
 
 
 def _cmd_tail(args) -> None:
@@ -359,6 +382,11 @@ def main_dsm() -> None:
     p_tail.add_argument("--limit", type=int, default=100, help="Max entries to read per poll (default: 100)")
     p_tail.add_argument("--interval", type=float, default=1.0, help="Poll interval in seconds (default: 1.0)")
     p_tail.set_defaults(func=_cmd_tail)
+
+    # dsm orphans
+    p_orphans = subparsers.add_parser("orphans", help="List action intents without result (crash detection)")
+    p_orphans.add_argument("--data-dir", default=None, help="DSM data directory (default: data)")
+    p_orphans.set_defaults(func=_cmd_orphans)
 
     args = parser.parse_args()
     ret = args.func(args)
