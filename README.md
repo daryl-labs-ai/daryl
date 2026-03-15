@@ -75,9 +75,25 @@ If anyone — or anything — modifies the history, DSM catches it.
 | Replay exact agent history | ❌ | ❌ | ✅ |
 | Prove nothing was altered | ❌ | ❌ | ✅ |
 | Audit agent behavior | ❌ | ❌ | ✅ |
+| Detect hallucinated memories | ❌ | ❌ | ✅ |
 | Semantic search | ❌ | ✅ | ❌ |
 
 DSM doesn't replace a vector database. It complements it — **the vector DB searches, DSM proves.**
+
+## Agents that can't lie about what they did
+
+When an agent says *"I searched the web and found X"*, how do you know it actually did?
+
+With DSM, you don't trust — you verify. Every action the agent claims to have taken is either in the hash-chained log or it isn't. There is no middle ground.
+
+```python
+# Agent says it searched for weather — did it?
+entries = storage.read("sessions", limit=20)
+actions = [e for e in entries if e.metadata.get("action_name") == "search"]
+# Either the search entry exists with its exact payload, or the agent is hallucinating.
+```
+
+This doesn't prevent an LLM from hallucinating. It makes hallucinations about past behavior **detectable and provable** — the agent's memory is a chain of cryptographic facts, not a probabilistic reconstruction.
 
 ## Architecture
 
