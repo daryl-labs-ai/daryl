@@ -14,6 +14,7 @@ from .core.storage import Storage
 from .core.signing import Signing
 from .core.session import SessionTracker
 from .core.security import SecurityLayer
+from .agent import DarylAgent
 from .session.session_graph import SessionGraph
 from .witness import ShardWitness
 from .audit import Policy, audit_shard, audit_all
@@ -271,6 +272,30 @@ def _entry_to_json_line(e: Entry) -> str:
     return json.dumps(line, ensure_ascii=False)
 
 
+def _cmd_agent_check(args) -> int:
+    """dsm agent-check --data-dir <path>: verify + orphan detection, print summary. Exit 0 if OK, 1 if any issue."""
+    data_dir = getattr(args, "data_dir", None) or "data"
+    try:
+        agent = DarylAgent(agent_id="cli-check", data_dir=data_dir)
+    except Exception as e:
+        print(f"Error initializing agent: {e}", file=sys.stderr)
+        return 1
+    verify_result = agent.verify()
+    orphans = agent.orphaned_intents()
+    results = verify_result if isinstance(verify_result, list) else [verify_result]
+    total_entries = sum(r.get("total_entries", 0) for r in results)
+    ok = all(r.get("status") == "OK" for r in results)
+    orphan_count = len(orphans)
+    print(f"Shards: {len(results)} | entries: {total_entries} | integrity: {'OK' if ok else 'FAIL'} | orphaned intents: {orphan_count}")
+    for r in results:
+        print(f"  {r.get('shard_id', '?')}: {r.get('total_entries', 0)} entries, status={r.get('status', '?')}")
+    if orphan_count > 0:
+        for e in orphans[:10]:
+            meta = e.metadata or {}
+            print(f"  orphan intent_id={(meta.get('intent_id') or e.id)[:12]}... action={meta.get('action_name', '?')}")
+    return 0 if ok and orphan_count == 0 else 1
+
+
 def _cmd_audit(args) -> int:
     """dsm audit --data-dir <path> --policy <path> [--shard <id>]: verify actions against policy. Exit 0 if COMPLIANT, 1 if VIOLATIONS_FOUND."""
     data_dir = getattr(args, "data_dir", None) or "data"
@@ -512,6 +537,11 @@ def main_dsm() -> None:
     p_orphans = subparsers.add_parser("orphans", help="List action intents without result (crash detection)")
     p_orphans.add_argument("--data-dir", default=None, help="DSM data directory (default: data)")
     p_orphans.set_defaults(func=_cmd_orphans)
+
+    # dsm agent-check
+    p_agent_check = subparsers.add_parser("agent-check", help="Verify integrity and orphan intents (summary)")
+    p_agent_check.add_argument("--data-dir", default=None, help="DSM data directory (default: data)")
+    p_agent_check.set_defaults(func=_cmd_agent_check)
 
     # dsm audit
     p_audit = subparsers.add_parser("audit", help="Verify shard actions against a policy")
