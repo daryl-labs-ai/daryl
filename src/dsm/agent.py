@@ -9,6 +9,7 @@ import logging
 from pathlib import Path
 from typing import Any, List, Optional, Set
 
+from .anchor import AnchorLog, pre_commit, post_commit, capture_environment, verify_all_commitments
 from .audit import Policy, audit_all, audit_shard
 from .coverage import check_coverage
 from .core.storage import Storage
@@ -44,6 +45,8 @@ class DarylAgent:
         self._witness = (
             ShardWitness(witness_dir, witness_key) if witness_dir else None
         )
+        self._anchor_log = AnchorLog(str(self.data_dir / "anchors"))
+        self._pending_commitments = {}  # intent_id -> commitment_hash
 
     @property
     def storage(self):
@@ -79,7 +82,14 @@ class DarylAgent:
             entry = self._graph.execute_action(action_name, params or {})
             if entry is None:
                 return None
-            return entry.metadata.get("intent_id") or entry.id
+            intent_id = entry.metadata.get("intent_id") or entry.id
+            # P4: pre-commit anchoring
+            try:
+                anchor = pre_commit(self._anchor_log, intent_id, action_name, params or {})
+                self._pending_commitments[intent_id] = anchor["commitment_hash"]
+            except OSError:
+                pass  # anchor failure should not block agent
+            return intent_id
         except OSError as e:
             logger.error("intend failed: %s", e)
             return None
@@ -95,6 +105,15 @@ class DarylAgent:
         if raw_input is not None:
             receipt = make_receipt(raw_input)
         result_data = result if isinstance(result, dict) else {"value": result}
+        # P4: post-commit anchoring
+        try:
+            commitment_hash = self._pending_commitments.pop(intent_id, None)
+            post_commit(
+                self._anchor_log, intent_id, result_data,
+                raw_input=raw_input, commitment_hash=commitment_hash,
+            )
+        except OSError:
+            pass  # anchor failure should not block agent
         try:
             return self._graph.confirm_action(
                 intent_id,
@@ -152,3 +171,11 @@ class DarylAgent:
         if shard_id:
             return [audit_shard(self._storage, shard_id, policy)]
         return audit_all(self._storage, policy)
+
+    def capture_env(self, source: str, raw_data, headers: Optional[dict] = None) -> dict:
+        """Capture environment fingerprint for external data."""
+        return capture_environment(self._anchor_log, source, raw_data, headers)
+
+    def verify_commitments(self) -> dict:
+        """Verify all pre/post commitment pairs."""
+        return verify_all_commitments(self._anchor_log)

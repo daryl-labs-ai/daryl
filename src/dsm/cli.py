@@ -17,6 +17,7 @@ from .core.security import SecurityLayer
 from .agent import DarylAgent
 from .session.session_graph import SessionGraph
 from .witness import ShardWitness
+from .anchor import AnchorLog, verify_commitment, verify_all_commitments
 from .audit import Policy, audit_shard, audit_all
 from .coverage import check_coverage
 from . import verify as dsm_verify
@@ -389,6 +390,26 @@ def _cmd_orphans(args) -> int:
     return 1
 
 
+def _cmd_anchor_verify(args) -> int:
+    """dsm anchor-verify --anchor-dir <path> [--intent <id>]: verify pre/post commitment pairs."""
+    anchor_dir = getattr(args, "anchor_dir", None)
+    if not anchor_dir:
+        print("Error: --anchor-dir is required", file=sys.stderr)
+        return 1
+    intent_id = getattr(args, "intent", None)
+
+    anchor_log = AnchorLog(anchor_dir)
+
+    if intent_id:
+        result = verify_commitment(anchor_log, intent_id)
+        print(f"Intent: {intent_id} | status: {result['status']} | pre: {result['pre_commit_at']} | post: {result['post_commit_at']} | delta_ms: {result['time_delta_ms']}")
+        return 0 if result["status"] == "VERIFIED" else 1
+
+    result = verify_all_commitments(anchor_log)
+    print(f"Commits: {result['total_commits']} | verified: {result['verified']} | violations: {result['violations']} | incomplete: {result['incomplete']} | status: {result['status']}")
+    return 0 if result["status"] == "ALL_VERIFIED" else 1
+
+
 def _cmd_coverage(args) -> int:
     """dsm coverage --data-dir <path> --index-file <path> [--shard <id>]: check agent index coverage against DSM log."""
     data_dir = getattr(args, "data_dir", None) or "data"
@@ -549,6 +570,12 @@ def main_dsm() -> None:
     p_audit.add_argument("--policy", default=None, help="Path to policy JSON file (required)")
     p_audit.add_argument("--shard", default=None, help="Audit a single shard by ID")
     p_audit.set_defaults(func=_cmd_audit)
+
+    # dsm anchor-verify
+    p_anchor = subparsers.add_parser("anchor-verify", help="Verify pre/post commitment pairs")
+    p_anchor.add_argument("--anchor-dir", default=None, help="Directory containing anchor_log.jsonl (required)")
+    p_anchor.add_argument("--intent", default=None, help="Verify a single intent by ID")
+    p_anchor.set_defaults(func=_cmd_anchor_verify)
 
     # dsm coverage
     p_coverage = subparsers.add_parser("coverage", help="Check agent index coverage against DSM log")
