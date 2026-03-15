@@ -1,9 +1,38 @@
-<!-- TODO: replace <org> with your GitHub organization when repo is public -->
-<!-- ![CI](https://github.com/<org>/daryl/actions/workflows/ci.yml/badge.svg) -->
-![Python](https://img.shields.io/badge/python-3.10%2B-blue)
-![License](https://img.shields.io/badge/license-MIT-green)
+<p align="center">
+  <img src="assets/daryl_logo.png" width="220">
+</p>
 
-# Daryl — Deterministic Sharding Memory for AI Agents
+<h1 align="center">Daryl</h1>
+
+<p align="center">
+Deterministic Sharding Memory for AI Agents
+</p>
+
+<p align="center">
+Created by <strong>Mohamed Azizi</strong><br>
+<a href="https://www.daryl.md">www.daryl.md</a>
+</p>
+
+<p align="center">
+<img src="https://github.com/daryl-labs-ai/daryl/actions/workflows/ci.yml/badge.svg">
+<img src="https://img.shields.io/badge/python-3.10%2B-blue">
+<img src="https://img.shields.io/badge/license-MIT-green">
+</p>
+
+---
+
+Daryl is an experimental architecture for deterministic AI agent memory.
+
+It introduces **DSM (Daryl Sharding Memory)** — an append-only sharded event log designed for:
+
+- deterministic memory
+- replayable agent history
+- verifiable integrity
+- scalable shard segmentation
+
+DSM enables AI agents to store events in a **deterministic memory layer** that can be replayed, verified and audited.
+
+---
 
 ## Overview
 
