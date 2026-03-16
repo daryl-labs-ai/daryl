@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "daryl-dsm"
-version = "0.3.0"
+version = "0.6.0"
 description = "Deterministic Sharding Memory for AI agents — append-only, hash-chained, tamper-evident event log"
 requires-python = ">=3.8"
-dependencies = ["PyNaCl>=1.5.0"]
+dependencies = ["PyNaCl>=1.5.0", "cryptography>=41.0"]
 
 [project.optional-dependencies]
 dev = ["pytest", "pytest-cov"]
