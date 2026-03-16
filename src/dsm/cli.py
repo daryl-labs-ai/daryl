@@ -388,6 +388,72 @@ def _cmd_receipt_list(args) -> int:
     return 0
 
 
+def _cmd_session_index(args) -> int:
+    """dsm session-index: build/rebuild session index."""
+    data_dir = getattr(args, "data_dir", None) or "data"
+    shard_id = getattr(args, "shard", None) or "sessions"
+    storage = _get_storage(data_dir)
+    from .session.session_index import SessionIndex
+    index_dir = str(Path(data_dir) / "index")
+    index = SessionIndex(index_dir, shard_id=shard_id)
+    result = index.build_from_storage(storage)
+    print(f"✓ Indexed {result['entries_indexed']} entries from {result['sessions_found']} sessions in {result['duration_seconds']}s")
+    return 0
+
+
+def _cmd_session_find(args) -> int:
+    """dsm session-find: look up session by ID."""
+    data_dir = getattr(args, "data_dir", None) or "data"
+    shard_id = getattr(args, "shard", None) or "sessions"
+    from .session.session_index import SessionIndex
+    index_dir = str(Path(data_dir) / "index")
+    index = SessionIndex(index_dir, shard_id=shard_id)
+    sess = index.find_session(args.session_id)
+    if not sess:
+        print(f"Session {args.session_id} not found. Run 'dsm session-index' first.", file=sys.stderr)
+        return 1
+    print(json.dumps(sess, indent=2, ensure_ascii=False))
+    return 0
+
+
+def _cmd_session_query(args) -> int:
+    """dsm session-query: query actions with optional filters."""
+    data_dir = getattr(args, "data_dir", None) or "data"
+    shard_id = getattr(args, "shard", None) or "sessions"
+    from .session.session_index import SessionIndex
+    index_dir = str(Path(data_dir) / "index")
+    index = SessionIndex(index_dir, shard_id=shard_id)
+    actions = index.get_actions(
+        action_name=getattr(args, "action_name", None),
+        start_time=getattr(args, "start", None),
+        end_time=getattr(args, "end", None),
+        limit=getattr(args, "limit", 100),
+    )
+    if not actions:
+        print("No matching actions found.")
+        return 0
+    for a in actions:
+        status = "✓" if a.get("success") else "✗"
+        print(f"  {status} {a['timestamp']}  {a['action_name']}  session={a['session_id']}")
+    return 0
+
+
+def _cmd_session_list(args) -> int:
+    """dsm session-list: list sessions."""
+    data_dir = getattr(args, "data_dir", None) or "data"
+    shard_id = getattr(args, "shard", None) or "sessions"
+    from .session.session_index import SessionIndex
+    index_dir = str(Path(data_dir) / "index")
+    index = SessionIndex(index_dir, shard_id=shard_id)
+    sessions = index.list_sessions(limit=getattr(args, "limit", 20))
+    if not sessions:
+        print("No sessions indexed. Run 'dsm session-index' first.")
+        return 0
+    for s in sessions:
+        print(f"  {s['session_id']}  entries={s['entry_count']}  {s['start_time']} → {s['end_time']}")
+    return 0
+
+
 def _cmd_seal(args) -> int:
     """dsm seal --data-dir <path> --shard <id> [--archive <path>]: seal shard, optionally archive. Exit 0 on success."""
     data_dir = getattr(args, "data_dir", None) or "data"
@@ -723,6 +789,36 @@ def main_dsm() -> None:
     p_receipt_list = subparsers.add_parser("receipt-list", help="List received receipts")
     p_receipt_list.add_argument("--data-dir", default=None, help="DSM data directory (default: data)")
     p_receipt_list.set_defaults(func=_cmd_receipt_list)
+
+    # dsm session-index (P7)
+    p_session_index = subparsers.add_parser("session-index", help="Build/rebuild session index")
+    p_session_index.add_argument("--data-dir", default=None, help="DSM data directory (default: data)")
+    p_session_index.add_argument("--shard", default="sessions", help="Shard to index")
+    p_session_index.set_defaults(func=_cmd_session_index)
+
+    # dsm session-find (P7)
+    p_session_find = subparsers.add_parser("session-find", help="Find session by ID")
+    p_session_find.add_argument("session_id", help="Session ID to look up")
+    p_session_find.add_argument("--data-dir", default=None, help="DSM data directory (default: data)")
+    p_session_find.add_argument("--shard", default="sessions", help="Shard ID")
+    p_session_find.set_defaults(func=_cmd_session_find)
+
+    # dsm session-query (P7)
+    p_session_query = subparsers.add_parser("session-query", help="Query actions with filters")
+    p_session_query.add_argument("action_name", nargs="?", default=None, help="Action name filter")
+    p_session_query.add_argument("--data-dir", default=None, help="DSM data directory (default: data)")
+    p_session_query.add_argument("--start", default=None, help="Start time (ISO 8601)")
+    p_session_query.add_argument("--end", default=None, help="End time (ISO 8601)")
+    p_session_query.add_argument("--limit", type=int, default=100, help="Max results")
+    p_session_query.add_argument("--shard", default="sessions", help="Shard ID")
+    p_session_query.set_defaults(func=_cmd_session_query)
+
+    # dsm session-list (P7)
+    p_session_list = subparsers.add_parser("session-list", help="List sessions")
+    p_session_list.add_argument("--data-dir", default=None, help="DSM data directory (default: data)")
+    p_session_list.add_argument("--limit", type=int, default=20, help="Max sessions to list")
+    p_session_list.add_argument("--shard", default="sessions", help="Shard ID")
+    p_session_list.set_defaults(func=_cmd_session_list)
 
     # dsm anchor-verify
     p_anchor = subparsers.add_parser("anchor-verify", help="Verify pre/post commitment pairs")

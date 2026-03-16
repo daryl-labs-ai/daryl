@@ -15,6 +15,7 @@ from .coverage import check_coverage
 from .core.storage import Storage
 from .receipts import make_receipt
 from .session.session_graph import SessionGraph
+from .session.session_index import SessionIndex
 from .session.session_limits_manager import SessionLimitsManager
 from .exchange import (
     TaskReceipt,
@@ -54,6 +55,7 @@ class DarylAgent:
             ShardWitness(witness_dir, witness_key) if witness_dir else None
         )
         self._anchor_log = AnchorLog(str(self.data_dir / "anchors"))
+        self._index_dir = str(self.data_dir / "index")
         self._pending_commitments = {}  # intent_id -> commitment_hash
 
     @property
@@ -212,6 +214,32 @@ class DarylAgent:
 
     def list_receipts(self) -> List[dict]:
         return [r.to_dict() for r in list_received_receipts(self._storage, shard_id="receipts")]
+
+    def index_sessions(self) -> dict:
+        """Build or rebuild session index for this agent's shard."""
+        index = SessionIndex(self._index_dir, shard_id=self.shard)
+        return index.build_from_storage(self._storage)
+
+    def find_session(self, session_id: str) -> Optional[dict]:
+        """Quick O(1) lookup for session metadata via index."""
+        index = SessionIndex(self._index_dir, shard_id=self.shard)
+        return index.find_session(session_id)
+
+    def query_actions(
+        self,
+        action_name: Optional[str] = None,
+        start_time: Optional[str] = None,
+        end_time: Optional[str] = None,
+        limit: int = 100,
+    ) -> list:
+        """Query actions across sessions using index."""
+        index = SessionIndex(self._index_dir, shard_id=self.shard)
+        return index.get_actions(
+            action_name=action_name,
+            start_time=start_time,
+            end_time=end_time,
+            limit=limit,
+        )
 
     def capture_env(self, source: str, raw_data, headers: Optional[dict] = None) -> dict:
         """Capture environment fingerprint for external data."""
