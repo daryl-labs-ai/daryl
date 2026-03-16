@@ -26,6 +26,34 @@ from .core.storage import Storage
 
 logger = logging.getLogger(__name__)
 
+# Max size for policy source (path or inline JSON)
+_POLICY_SOURCE_MAX_BYTES = 64 * 1024
+
+
+def _read_policy_source(source: str) -> dict:
+    """
+    Read and validate policy source (file path or JSON string).
+    Shared by InkogAdapter and OPAAdapter.
+    - 64 KB max for source string and file content
+    - Reject '..' in path components (allow absolute paths)
+    - Result must be a dict with 'engine' and 'rules' keys
+    """
+    if len(source) > _POLICY_SOURCE_MAX_BYTES:
+        raise ValueError("source exceeds 64 KB limit")
+    if ".." in Path(source).parts:
+        raise ValueError("path must not contain '..' in components")
+    path = Path(source)
+    if path.exists() and path.is_file():
+        content = path.read_text(encoding="utf-8")
+        if len(content) > _POLICY_SOURCE_MAX_BYTES:
+            raise ValueError("file content exceeds 64 KB limit")
+        data = json.loads(content)
+    else:
+        data = json.loads(source)
+    if not isinstance(data, dict) or "engine" not in data or "rules" not in data:
+        raise ValueError("policy must be a dict with 'engine' and 'rules' keys")
+    return data
+
 
 # ── Policy Adapters ──────────────────────────────────────────────
 
@@ -120,21 +148,7 @@ class InkogAdapter(PolicyAdapter):
 
     def _read_source(self, source: str) -> dict:
         """Read policy from file or JSON string. Validates size and path."""
-        if len(source) > 64 * 1024:
-            raise ValueError("source exceeds 64 KB limit")
-        if ".." in Path(source).parts:
-            raise ValueError("path must not contain '..' in components")
-        path = Path(source)
-        if path.exists() and path.is_file():
-            content = path.read_text(encoding="utf-8")
-            if len(content) > 64 * 1024:
-                raise ValueError("file content exceeds 64 KB limit")
-            data = json.loads(content)
-        else:
-            data = json.loads(source)
-        if not isinstance(data, dict) or "engine" not in data or "rules" not in data:
-            raise ValueError("policy must be a dict with 'engine' and 'rules' keys")
-        return data
+        return _read_policy_source(source)
 
 
 class OPAAdapter(PolicyAdapter):
@@ -179,11 +193,8 @@ class OPAAdapter(PolicyAdapter):
             return False
 
     def _read_source(self, source: str) -> dict:
-        path = Path(source)
-        if path.exists() and path.is_file():
-            with open(path, "r", encoding="utf-8") as f:
-                return json.load(f)
-        return json.loads(source)
+        """Read policy from file or JSON string. Same validation as InkogAdapter."""
+        return _read_policy_source(source)
 
 
 # ── Adapter Registry ─────────────────────────────────────────────

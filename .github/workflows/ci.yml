@@ -39,5 +39,11 @@ jobs:
           python --version
           pip list
 
+      - name: Lint with ruff
+        run: ruff check src/ tests/
+
+      - name: Security check with bandit
+        run: bandit -r src/ -ll
+
       - name: Run tests
         run: python -m pytest tests/ -v --tb=short

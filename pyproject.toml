@@ -10,7 +10,7 @@ requires-python = ">=3.8"
 dependencies = ["PyNaCl>=1.5.0", "cryptography>=41.0"]
 
 [project.optional-dependencies]
-dev = ["pytest", "pytest-cov"]
+dev = ["pytest", "pytest-cov", "ruff", "bandit"]
 
 [project.scripts]
 dsm = "dsm.cli:main_dsm"
@@ -25,3 +25,13 @@ where = ["src"]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 addopts = "-ra"
+
+[tool.ruff]
+lint.ignore = [
+    "F401",   # unused imports
+    "F541",   # f-string without placeholders
+    "F811",   # redefinition
+    "F821",   # undefined name
+    "F841",   # unused variable
+    "E402",   # module import not at top
+]
