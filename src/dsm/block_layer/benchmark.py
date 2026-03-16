@@ -25,13 +25,13 @@ if __name__ == "__main__" and "__file__" in dir():
 from dsm.core.storage import Storage
 from dsm.core.models import Entry
 from dsm.block_layer.manager import BlockManager
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 def make_entry(i: int, shard: str = "sessions") -> Entry:
     return Entry(
         id=str(uuid.uuid4()),
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
         session_id="bench-session",
         source="benchmark",
         content=f"entry {i} content",

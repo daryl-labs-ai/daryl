@@ -19,7 +19,7 @@ Contraintes:
 
 import json
 from collections import Counter
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
 
 from ..core.storage import Storage
@@ -56,9 +56,9 @@ def _dict_to_entry(data: Dict[str, Any]) -> Entry:
         try:
             timestamp = datetime.fromisoformat(ts)
         except ValueError:
-            timestamp = datetime.utcnow()
+            timestamp = datetime.now(timezone.utc)
     else:
-        timestamp = datetime.utcnow()
+        timestamp = datetime.now(timezone.utc)
     return Entry(
         id=data.get("id", ""),
         timestamp=timestamp,

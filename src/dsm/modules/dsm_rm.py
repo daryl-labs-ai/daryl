@@ -6,6 +6,7 @@ Module prototype pour le recyclage de mémoire des sessions DSM
 """
 
 import json
+import logging
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta, timezone
@@ -20,6 +21,8 @@ if str(_repo_root) not in sys.path:
 sys.path.insert(0, str(_dsm_root))
 
 from dsm.core.shard_segments import ShardSegmentManager
+
+logger = logging.getLogger(__name__)
 
 
 class DSMRecyclingMemory:
@@ -100,8 +103,8 @@ class DSMRecyclingMemory:
             if "karma_gain=" in outcome:
                 try:
                     karma_gain += int(outcome.split("karma_gain=")[1].split()[0])
-                except ValueError:
-                    pass
+                except ValueError as e:
+                    logger.debug("timestamp parse failed: %s", e)
 
         # Trouver le dernier event
         last_event = events[-1] if events else None
@@ -257,8 +260,8 @@ class DSMRecyclingMemory:
                                 f.write(json.dumps(archived_event, ensure_ascii=False) + '\n')
 
                             sessions_archived += 1
-                    except ValueError:
-                        pass
+                    except ValueError as e:
+                        logger.debug("timestamp parse failed: %s", e)
 
         return sessions_archived
 

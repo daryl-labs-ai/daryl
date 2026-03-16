@@ -11,11 +11,14 @@ This is a v0 implementation for skill outcome tracking.
 """
 
 import json
+import logging
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, List
 
 from .models import Skill
+
+logger = logging.getLogger(__name__)
 
 
 class SkillSuccessLogger:
@@ -70,7 +73,7 @@ class SkillSuccessLogger:
         """
         # Create success event
         event = {
-            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
             "event_type": "skill_success",
             "task_description": task_description,
             "skill_id": skill_id,
@@ -85,8 +88,7 @@ class SkillSuccessLogger:
             with open(self.log_file, 'a', encoding='utf-8') as f:
                 f.write(json.dumps(event) + '\n')
         except Exception as e:
-            # Silent fail - don't break flow if logging fails
-            pass
+            logger.debug("skill success log write failed: %s", e)
 
     def get_success_stats(self, skill_id: Optional[str] = None) -> Dict[str, Dict]:
         """Get success statistics for a specific skill or all skills.

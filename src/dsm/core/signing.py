@@ -20,8 +20,11 @@ Verification uses same canonical entry hash as storage (session_id, source, time
 """
 
 import hashlib
+import logging
 from typing import Optional, List
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 from .storage import _compute_canonical_entry_hash
 
@@ -62,8 +65,8 @@ class Signing:
                     recalculated = _compute_canonical_entry_hash(entry, entry.prev_hash)
                     if recalculated != entry.hash:
                         tampering_detected += 1
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("core signing skipped: %s", e)
 
             last_valid_hash = entry.hash if entry.hash else last_valid_hash
 

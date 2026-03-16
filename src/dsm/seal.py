@@ -81,8 +81,8 @@ class SealRegistry:
             try:
                 import os
                 os.fsync(f.fileno())
-            except (OSError, AttributeError):
-                pass
+            except (OSError, AttributeError) as e:
+                logger.debug("seal dir scan skipped: %s", e)
 
     def read_all(self) -> List[SealRecord]:
         if not self.registry_file.exists():
@@ -123,7 +123,7 @@ def _compute_seal_hash(shard_id: str, entry_count: int, first_hash: str, last_ha
 
 
 def seal_shard(storage, shard_id: str, registry: SealRegistry, archive_path: Optional[str] = None) -> SealRecord:
-    from datetime import datetime
+    from datetime import datetime, timezone
     vr = verify_shard(storage, shard_id)
     if vr["status"] != "OK":
         raise ValueError("Cannot seal corrupted shard")
@@ -134,7 +134,7 @@ def seal_shard(storage, shard_id: str, registry: SealRegistry, archive_path: Opt
     first, last = entries_chrono[0], entries_chrono[-1]
     first_ts = first.timestamp.isoformat() if hasattr(first.timestamp, "isoformat") else str(first.timestamp)
     last_ts = last.timestamp.isoformat() if hasattr(last.timestamp, "isoformat") else str(last.timestamp)
-    seal_ts = datetime.utcnow().isoformat() + "Z"
+    seal_ts = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     seal_hash = _compute_seal_hash(shard_id, len(entries_chrono), first.hash or "", last.hash or "", seal_ts)
     record = SealRecord(
         shard_id=shard_id,

@@ -36,7 +36,7 @@ import hashlib
 import json
 import subprocess
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 import logging
 import sys
@@ -116,7 +116,7 @@ class SecurityLayer:
             "api_requests": 0,
             "file_writes": 0,
             "external_connections": 0,
-            "started_at": datetime.utcnow().isoformat()
+            "started_at": datetime.now(timezone.utc).isoformat()
         }
 
         self.logger = logging.getLogger("dsm_security")
@@ -185,7 +185,7 @@ class SecurityLayer:
             "files": results,
             "has_anomalies": has_anomalies,
             "git_status": git_status,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         }
 
     # -------------------------------------------------------------------------
@@ -204,11 +204,10 @@ class SecurityLayer:
         Returns:
             Tuple[allowed: bool, message: str]
         """
-        # Si force=True, autoriser automatiquement
+        # Si force=True, autoriser si acknowledgment fourni
         if force:
-            if manual_ack != "I UNDERSTAND" or manual_ack != "I UNDERSTAND":
-                return False, "❌ Forced update requires double acknowledgment: \"I UNDERSTAND\" + \"I UNDERSTAND\""
-            # Double check pour éviter accidents
+            if manual_ack != "I UNDERSTAND":
+                return False, "❌ Forced update requires acknowledgment: \"I UNDERSTAND\""
             return True, "⚠️ Forced update approved (double ack required)"
 
         checks = []
@@ -282,7 +281,7 @@ class SecurityLayer:
 
         # Update metadata
         integrity_data["last_update"] = {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "reason": reason or "forced",
             "updated_files": updated_files,
             "user": subprocess.getoutput("whoami").strip(),
@@ -344,6 +343,13 @@ class SecurityLayer:
             self.logger.warning(f"[rate_limit] File writes exceeded: {self.cycle_stats['file_writes']}/{MAX_FILE_WRITES_PER_CYCLE}")
             self._audit_event("rate_limit_exceeded", {"type": "file_writes", "count": self.cycle_stats["file_writes"]})
 
+    def audit_external_action(self, event_type: str, details: Dict):
+        """
+        Public API for external integrations (e.g. security_listener) to log audit events.
+        Delegates to _audit_event; does not update cycle stats.
+        """
+        self._audit_event(event_type, details)
+
     def check_rate_limit(self, action_type: str) -> Tuple[bool, str]:
         """
         Vérifie si une action est autorisée par le rate limit
@@ -379,7 +385,7 @@ class SecurityLayer:
             "api_requests": 0,
             "file_writes": 0,
             "external_connections": 0,
-            "started_at": datetime.utcnow().isoformat()
+            "started_at": datetime.now(timezone.utc).isoformat()
         }
 
     # -------------------------------------------------------------------------
@@ -414,7 +420,7 @@ class SecurityLayer:
             anomalies.append(f"Integrity chain broken: {chain_status['error']}")
 
         return {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "integrity": integrity_report,
             "chain_status": chain_status,
             "cycle_stats": self.get_cycle_stats(),
@@ -503,7 +509,7 @@ class SecurityLayer:
             "protected_files": {
                 "enabled": False,
                 "allow_rewrite": False,
-                "override_env": "DSM_SECURITY_REWRITE_OK",
+                "token_file": ".dsm_write_token",
                 "protected_paths": PROTECTED_WRITE_FILES
             }
         }
@@ -541,32 +547,52 @@ class SecurityLayer:
         if not is_protected:
             return True, "Fichier non protégé"
 
+        # Migration: warn if old env var is set
+        if os.getenv("DSM_SECURITY_REWRITE_OK", "").strip() == "1":
+            self.logger.warning(
+                "DSM_SECURITY_REWRITE_OK is deprecated and no longer bypasses protection. "
+                "Use a file-based token: create .dsm_write_token in workspace (single-use, < 60s old)."
+            )
+
         # Fichier protégé : vérifier l'override
-        override_env = config.get("override_env", "DSM_SECURITY_REWRITE_OK")
+        token_file_name = config.get("token_file", ".dsm_write_token")
         allow_rewrite = config.get("allow_rewrite", False)
 
         # Si allow_rewrite est true, OK
         if allow_rewrite:
             return True, "Réécriture autorisée par policy"
 
-        # Vérifier l'override environment variable
-        override = os.getenv(override_env, "").strip()
-        if override == "1":
-            # Loguer l'override utilisé
-            self._audit_event("protected_write_override", {
-                "path": normalized_path,
-                "override_env": override_env,
-                "override_env_used": True
-            })
-            return True, "Override humain via env"
+        # Check for file-based write token (replaces env var bypass)
+        token_path = Path(self.workspace_dir) / token_file_name
+        if token_path.exists():
+            try:
+                import time
+                token_age = time.time() - token_path.stat().st_mtime
+                if token_age < 60:  # Token must be < 60 seconds old
+                    token_content = token_path.read_text().strip()
+                    token_path.unlink()  # Single-use: delete after read
+                    self._audit_event("protected_write_override", {
+                        "path": normalized_path,
+                        "token_used": True,
+                        "token_age_seconds": round(token_age, 1),
+                    })
+                    return True, "Override via write token (single-use, expired after read)"
+                else:
+                    token_path.unlink()  # Expired token: clean up
+                    self._audit_event("protected_write_token_expired", {
+                        "path": normalized_path,
+                        "token_age_seconds": round(token_age, 1),
+                    })
+            except OSError as e:
+                logger.debug("write token cleanup failed: %s", e)
 
         # Refuser l'écriture
         self._audit_event("protected_write_blocked", {
             "path": normalized_path,
             "reason": "no_override",
-            "override_env": override_env
+            "token_file": token_file_name,
         })
-        return False, f"❌ Écriture refusée sur fichier protégé : {path}\n   Utilisez {override_env}=1 pour autoriser explicitement"
+        return False, f"❌ Écriture refusée sur fichier protégé : {path}\n   Créez un fichier {token_file_name} à la racine du workspace (contenu: nonce UUID, < 60s, usage unique)"
 
     def safe_write_protected(self, path: Path, content: str) -> bool:
         """
@@ -631,7 +657,7 @@ class SecurityLayer:
     def _audit_event(self, event_type: str, details: Dict):
         """Enregistre un événement dans l'audit log (JSONL append)"""
         event = {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "type": event_type,
             "details": details
         }

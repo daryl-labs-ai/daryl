@@ -117,8 +117,8 @@ class DarylAgent:
             try:
                 anchor = pre_commit(self._anchor_log, intent_id, action_name, params or {})
                 self._pending_commitments[intent_id] = anchor["commitment_hash"]
-            except OSError:
-                pass  # anchor failure should not block agent
+            except OSError as e:
+                logger.debug("anchor pre-commit skipped: %s", e)
             # P9: sign entry if signing enabled
             if self._signing and self._signing.has_keypair() and entry and entry.hash:
                 try:
@@ -131,8 +131,8 @@ class DarylAgent:
                         "public_key": self._signing.get_public_key(),
                         "timestamp": datetime.now(timezone.utc).isoformat(),
                     })
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("entry signing skipped: %s", e)
             return intent_id
         except OSError as e:
             logger.error("intend failed: %s", e)
@@ -156,8 +156,8 @@ class DarylAgent:
                     raw_input, source=f"confirm:{intent_id}", artifact_type="raw_input"
                 )
                 artifact_hash = art["artifact_hash"]
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("artifact store skipped: %s", e)
         # P4: post-commit anchoring
         try:
             commitment_hash = self._pending_commitments.pop(intent_id, None)
@@ -165,8 +165,8 @@ class DarylAgent:
                 self._anchor_log, intent_id, result_data,
                 raw_input=raw_input, commitment_hash=commitment_hash,
             )
-        except OSError:
-            pass  # anchor failure should not block agent
+        except OSError as e:
+            logger.debug("anchor post-commit skipped: %s", e)
         try:
             result_entry = self._graph.confirm_action(
                 intent_id,
@@ -178,8 +178,8 @@ class DarylAgent:
             if result_entry is not None and artifact_hash is not None and self._artifact_store is not None:
                 try:
                     self._artifact_store.link_to_entry(artifact_hash, result_entry.id)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("confirm signing skipped: %s", e)
             return result_entry
         except OSError as e:
             logger.error("confirm failed: %s", e)
@@ -251,8 +251,8 @@ class DarylAgent:
             try:
                 result["signature"] = self._signing.sign_receipt(receipt.receipt_hash)
                 result["public_key"] = self._signing.get_public_key()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("receipt signing skipped: %s", e)
         return result
 
     def receive_receipt(self, receipt_json: str) -> dict:

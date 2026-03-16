@@ -19,6 +19,7 @@ Gestionnaire de segmentation des shards DSM pour éviter les fichiers trop volum
 Uses segment_meta.json per shard family for O(1) active segment resolution (no line counting).
 """
 
+import fcntl
 import json
 import logging
 import os
@@ -109,24 +110,33 @@ class ShardSegmentManager:
         return family_dir / SEGMENT_META_FILENAME
 
     def _read_segment_meta(self, family_dir: Path) -> Optional[Dict[str, Any]]:
-        """Read segment_meta.json if present. Returns None if missing or invalid."""
+        """Read segment_meta.json with shared lock."""
         meta_path = self._segment_meta_path(family_dir)
         if not meta_path.exists():
             return None
         try:
             with open(meta_path, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
+                fcntl.flock(f.fileno(), fcntl.LOCK_SH)
+                try:
+                    return json.load(f)
+                finally:
+                    fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+        except Exception as e:
+            logger.debug("segment meta read failed: %s", e)
             return None
 
     def _write_segment_meta_atomic(self, family_dir: Path, data: Dict[str, Any]) -> None:
-        """Write segment_meta.json atomically (temp → fsync → replace)."""
+        """Write segment_meta.json atomically with exclusive lock."""
         meta_path = self._segment_meta_path(family_dir)
         tmp_path = meta_path.with_suffix(".json.tmp")
         with open(tmp_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
-            f.flush()
-            os.fsync(f.fileno())
+            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+            try:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+                f.flush()
+                os.fsync(f.fileno())
+            finally:
+                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
         os.replace(tmp_path, meta_path)
 
     def _get_active_segment_path(self, family_dir: Path) -> Path:
@@ -147,8 +157,8 @@ class ShardSegmentManager:
                     or size_bytes >= self.MAX_BYTES_PER_SEGMENT
                 )
                 if limit_reached:
-                    last_number = self._get_segment_number(active_name)
-                    next_number = last_number + 1
+                    # Hold exclusive lock during rotation to prevent race
+                    next_number = self._get_segment_number(active_name) + 1
                     next_name = f"{family_dir.name}_{next_number:04d}.jsonl"
                     self._write_segment_meta_atomic(
                         family_dir,

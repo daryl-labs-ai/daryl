@@ -16,7 +16,7 @@ import hashlib
 import json
 import logging
 from abc import ABC, abstractmethod
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
@@ -339,7 +339,7 @@ def generate_audit_report(
         shard_results = audit_all(storage, policy)
 
     report_id = str(uuid4())
-    timestamp = datetime.utcnow().isoformat() + "Z"
+    timestamp = datetime.now(timezone.utc).isoformat() + "Z"
 
     payload = {
         "report_id": report_id,

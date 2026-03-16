@@ -12,6 +12,7 @@ Indexes are derived data and can be rebuilt at any time.
 """
 
 import json
+import logging
 import os
 import tempfile
 from datetime import datetime
@@ -21,6 +22,7 @@ from typing import Any, Dict, List, Optional
 from ...core.storage import Storage
 from ...core.models import Entry
 
+logger = logging.getLogger(__name__)
 
 INDEX_VERSION = 1
 
@@ -200,8 +202,8 @@ class RRIndexBuilder:
             except Exception:
                 try:
                     os.unlink(tmp_path)
-                except OSError:
-                    pass
+                except OSError as e:
+                    logger.debug("index file cleanup failed: %s", e)
                 raise
 
     def load(self) -> bool:

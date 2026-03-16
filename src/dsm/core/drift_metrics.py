@@ -6,7 +6,7 @@ Simple metrics without complex verification
 """
 
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import List
 
@@ -29,7 +29,7 @@ class DriftMetrics:
             details: Détails du check
         """
         record = {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "check_type": check_type,
             "shard": shard,
             "entry_id": entry_id,

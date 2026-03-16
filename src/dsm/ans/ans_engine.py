@@ -147,7 +147,7 @@ class ANSEngine:
         Returns:
             ANSReport object with rankings and insights
         """
-        from datetime import datetime
+        from datetime import datetime, timezone
 
         # Ensure analysis is done
         if not self.skill_performance:
@@ -164,7 +164,7 @@ class ANSEngine:
         notes = self._generate_insights()
 
         report = ANSReport(
-            generated_at=datetime.utcnow().isoformat() + "Z",
+            generated_at=datetime.now(timezone.utc).isoformat() + "Z",
             top_skills=top_skills,
             weakest_skills=weakest_skills,
             transition_rankings=transition_rankings,
@@ -182,7 +182,7 @@ class ANSEngine:
         Returns:
             ANSReport object with Phase 2 recommendations
         """
-        from datetime import datetime
+        from datetime import datetime, timezone
         from .ans_models import (
             SkillRecommendation,
             WorkflowRecommendation
@@ -219,7 +219,7 @@ class ANSEngine:
 
         # Create extended report
         report = ANSReport(
-            generated_at=datetime.utcnow().isoformat() + "Z",
+            generated_at=datetime.now(timezone.utc).isoformat() + "Z",
             top_skills=self.rank_top_skills(limit=5),
             weakest_skills=self.rank_weakest_skills(limit=5),
             transition_rankings=self.rank_transitions(limit=10),

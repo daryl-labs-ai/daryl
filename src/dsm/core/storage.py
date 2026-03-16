@@ -25,7 +25,7 @@ import os
 from collections import deque
 from pathlib import Path
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 from .models import Entry, ShardMeta
 
@@ -305,7 +305,7 @@ class Storage:
         data = {
             "shard_id": shard_id,
             "last_hash": hash_value,
-            "updated_at": datetime.utcnow().isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
             "entry_count": existing.get("entry_count"),
             "first_timestamp": existing.get("first_timestamp"),
             "last_timestamp": existing.get("last_timestamp"),
@@ -345,8 +345,8 @@ class Storage:
             )
         return ShardMeta(
             shard_id=shard_id,
-            created_at=datetime.utcnow(),
-            last_updated=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
+            last_updated=datetime.now(timezone.utc),
             entry_count=0,
             size_bytes=0,
             integrity_status="unknown",
@@ -373,7 +373,7 @@ class Storage:
         data = {
             "shard_id": shard_id,
             "last_hash": existing.get("last_hash"),
-            "updated_at": datetime.utcnow().isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
             "entry_count": entry_count,
             "first_timestamp": first_ts,
             "last_timestamp": last_ts,

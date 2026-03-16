@@ -9,7 +9,7 @@ as one record via the DSM Storage API. Append-only semantics preserved.
 import hashlib
 import json
 from dataclasses import dataclass, asdict
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any, Iterator
 
 # Use DSM core API only (no core modifications)
@@ -46,7 +46,7 @@ def _dict_to_entry(data: Dict[str, Any]) -> Entry:
     """Deserialize dict to Entry."""
     return Entry(
         id=data.get("id", ""),
-        timestamp=datetime.fromisoformat(data["timestamp"]) if data.get("timestamp") else datetime.utcnow(),
+        timestamp=datetime.fromisoformat(data["timestamp"]) if data.get("timestamp") else datetime.now(timezone.utc),
         session_id=data.get("session_id", ""),
         source=data.get("source", ""),
         content=data.get("content", ""),
@@ -204,7 +204,7 @@ class BlockManager:
                 else:
                     yield Entry(
                         id=event_data.get("id", ""),
-                        timestamp=datetime.fromisoformat(event_data.get("timestamp", "")) if event_data.get("timestamp") else datetime.utcnow(),
+                        timestamp=datetime.fromisoformat(event_data.get("timestamp", "")) if event_data.get("timestamp") else datetime.now(timezone.utc),
                         session_id=event_data.get("session_id", ""),
                         source=event_data.get("source", ""),
                         content=content,
@@ -217,7 +217,7 @@ class BlockManager:
             except (json.JSONDecodeError, KeyError, TypeError):
                 yield Entry(
                     id=event_data.get("id", ""),
-                    timestamp=datetime.fromisoformat(event_data.get("timestamp", "")) if event_data.get("timestamp") else datetime.utcnow(),
+                    timestamp=datetime.fromisoformat(event_data.get("timestamp", "")) if event_data.get("timestamp") else datetime.now(timezone.utc),
                     session_id=event_data.get("session_id", ""),
                     source=event_data.get("source", ""),
                     content=content,

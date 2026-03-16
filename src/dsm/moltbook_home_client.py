@@ -8,7 +8,7 @@ Client pour /api/v1/home - le nouveau endpoint unifié Moltbook
 import hashlib
 import json
 from typing import Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 import subprocess
 
 
@@ -215,7 +215,7 @@ class MoltbookHomeClient:
         """Récupère une valeur du cache"""
         if key in self.cache:
             cached_data, cached_time = self.cache[key]
-            age = (datetime.utcnow() - cached_time).total_seconds()
+            age = (datetime.now(timezone.utc) - cached_time).total_seconds()
 
             if age < self.cache_ttl:
                 return cached_data
@@ -224,4 +224,4 @@ class MoltbookHomeClient:
 
     def _set_cached(self, key: str, data: Dict):
         """Met en cache une valeur"""
-        self.cache[key] = (data, datetime.utcnow())
+        self.cache[key] = (data, datetime.now(timezone.utc))

@@ -17,7 +17,7 @@ an external key).
 import hashlib
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
@@ -84,7 +84,7 @@ class ShardWitness:
 
         tip_hash = all_entries[0].hash if all_entries[0].hash else "no_hash"
 
-        timestamp = datetime.utcnow().isoformat() + "Z"
+        timestamp = datetime.now(timezone.utc).isoformat() + "Z"
         witness_id = str(uuid4())
 
         witness_hash = self._compute_witness_hash(

@@ -28,7 +28,7 @@ def test_protected_files_write_guard():
             "protected_files": {
                 "enabled": True,
                 "allow_rewrite": False,
-                "override_env": "DSM_SECURITY_REWRITE_OK",
+                "token_file": ".dsm_write_token",
                 "protected_paths": PROTECTED_WRITE_FILES
             }
         }
@@ -46,15 +46,15 @@ def test_protected_files_write_guard():
             f"❌ Cas A FAILED: Wrong message: {message}"
         print(f"✅ Cas A PASSED: {message}")
 
-        # Cas B: Écriture avec override → accepte
-        print("\n[Test B] Écriture avec override env → should accept")
-        os.environ["DSM_SECURITY_REWRITE_OK"] = "1"
+        # Cas B: Écriture avec token → accepte (single-use)
+        print("\n[Test B] Écriture avec write token → should accept")
+        import uuid
+        token_path = workspace / ".dsm_write_token"
+        token_path.write_text(str(uuid.uuid4()))
         allowed, message = security.check_protected_write("src/dsm/core/security.py")
-        assert allowed, f"❌ Cas B FAILED: Should accept write with override - {message}"
+        assert allowed, f"❌ Cas B FAILED: Should accept write with token - {message}"
+        assert not token_path.exists(), "Token should be deleted after use"
         print(f"✅ Cas B PASSED: {message}")
-
-        # Nettoyer l'env
-        del os.environ["DSM_SECURITY_REWRITE_OK"]
 
         # Cas C: Écriture sur fichier non protégé → accepte
         print("\n[Test C] Écriture sur fichier non protégé → should accept")
@@ -74,17 +74,17 @@ def test_protected_files_write_guard():
         else:
             print("⚠️ Cas D SKIPPED: Audit file not created yet")
 
-        # Cas E: Vérifier l'audit log pour override
-        print("\n[Test E] Vérifier l'audit log pour override_env_used")
-        os.environ["DSM_SECURITY_REWRITE_OK"] = "1"
+        # Cas E: Vérifier l'audit log pour token override
+        print("\n[Test E] Vérifier l'audit log pour protected_write_override (token)")
+        token_path = workspace / ".dsm_write_token"
+        token_path.write_text(str(uuid.uuid4()))
         security.check_protected_write("src/dsm/cli.py")
-        del os.environ["DSM_SECURITY_REWRITE_OK"]
 
         if audit_file.exists():
             with open(audit_file, 'r') as f:
                 content = f.read()
                 assert "protected_write_override" in content, "❌ Cas E FAILED: Audit should contain protected_write_override"
-                assert "override_env_used" in content, "❌ Cas E FAILED: Audit should contain override_env_used"
+                assert "token_used" in content, "❌ Cas E FAILED: Audit should contain token_used"
             print("✅ Cas E PASSED: Audit log contains protected_write_override event")
         else:
             print("⚠️ Cas E SKIPPED: Audit file not created yet")

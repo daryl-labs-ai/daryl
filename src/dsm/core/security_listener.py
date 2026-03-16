@@ -66,7 +66,7 @@ def run_periodic_security_check():
 def generate_security_report():
     """Génère un rapport de sécurité"""
     security = get_security_layer()
-    return security.generate_security_report()
+    return security.generate_report()
 
 def update_security_baseline():
     """Met à jour la baseline de sécurité"""

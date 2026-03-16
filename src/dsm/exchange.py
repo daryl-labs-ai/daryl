@@ -3,14 +3,21 @@ Cross-Agent Trust Receipts (P6).
 
 Portable proof of work: Agent B issues a TaskReceipt; Agent A stores it.
 Third parties can verify the receipt against B's DSM.
+P9: optional Ed25519 signature and public_key on receipt.
 """
 
 import hashlib
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 from uuid import uuid4
+
+try:
+    import nacl.signing
+    NACL_AVAILABLE = True
+except ImportError:
+    NACL_AVAILABLE = False
 
 from .core.models import Entry
 from .core.storage import Storage
@@ -50,6 +57,8 @@ class TaskReceipt:
         shard_entry_count: int,
         timestamp: str,
         receipt_hash: str,
+        signature: Optional[str] = None,
+        public_key: Optional[str] = None,
     ):
         self.receipt_id = receipt_id
         self.issuer_agent_id = issuer_agent_id
@@ -61,9 +70,11 @@ class TaskReceipt:
         self.shard_entry_count = shard_entry_count
         self.timestamp = timestamp
         self.receipt_hash = receipt_hash
+        self.signature = signature
+        self.public_key = public_key
 
     def to_dict(self) -> dict:
-        return {
+        out = {
             "receipt_id": self.receipt_id,
             "issuer_agent_id": self.issuer_agent_id,
             "task_description": self.task_description,
@@ -75,6 +86,11 @@ class TaskReceipt:
             "timestamp": self.timestamp,
             "receipt_hash": self.receipt_hash,
         }
+        if self.signature is not None:
+            out["signature"] = self.signature
+        if self.public_key is not None:
+            out["public_key"] = self.public_key
+        return out
 
     @classmethod
     def from_dict(cls, d: dict) -> "TaskReceipt":
@@ -89,6 +105,8 @@ class TaskReceipt:
             shard_entry_count=d["shard_entry_count"],
             timestamp=d["timestamp"],
             receipt_hash=d["receipt_hash"],
+            signature=d.get("signature"),
+            public_key=d.get("public_key"),
         )
 
     def to_json(self) -> str:
@@ -113,7 +131,7 @@ def issue_receipt(
     tip_entries = storage.read(shard_id, limit=1)
     shard_tip_hash = tip_entries[0].hash if tip_entries else ""
     shard_entry_count = len(entries)
-    timestamp = datetime.utcnow().isoformat() + "Z"
+    timestamp = datetime.now(timezone.utc).isoformat() + "Z"
     receipt_id = str(uuid4())
     payload = {
         "receipt_id": receipt_id,
@@ -141,11 +159,52 @@ def issue_receipt(
     )
 
 
+def _verify_receipt_signature(receipt: TaskReceipt) -> Optional[bool]:
+    """Verify Ed25519 signature if present. Returns True/False/None (None = no signature)."""
+    sig = getattr(receipt, "signature", None)
+    pub = getattr(receipt, "public_key", None)
+    if not sig or not pub:
+        return None
+    if not NACL_AVAILABLE:
+        return False
+    try:
+        pub_bytes = bytes.fromhex(pub)
+        sig_bytes = bytes.fromhex(sig)
+    except (ValueError, TypeError):
+        return False
+    if len(pub_bytes) != 32 or len(sig_bytes) != 64:
+        return False
+    try:
+        vk = nacl.signing.VerifyKey(pub_bytes)
+        msg = receipt.receipt_hash.encode("utf-8")
+        signed = sig_bytes + msg
+        vk.verify(signed)
+        return True
+    except Exception:
+        return False
+
+
 def verify_receipt(receipt: TaskReceipt) -> dict:
     payload = _receipt_payload(receipt)
     expected = _compute_receipt_hash(payload)
     status = "INTACT" if expected == receipt.receipt_hash else "TAMPERED"
-    return {"receipt_id": receipt.receipt_id, "status": status, "issuer": receipt.issuer_agent_id, "task": receipt.task_description}
+    result = {
+        "receipt_id": receipt.receipt_id,
+        "status": status,
+        "issuer": receipt.issuer_agent_id,
+        "task": receipt.task_description,
+        "signature_verified": None,
+    }
+    sig_ok = _verify_receipt_signature(receipt)
+    if sig_ok is None:
+        result["signature_verified"] = None
+    elif sig_ok is True:
+        result["signature_verified"] = True
+    else:
+        result["signature_verified"] = False
+        if getattr(receipt, "signature", None) and getattr(receipt, "public_key", None):
+            result["status"] = "SIGNATURE_INVALID"
+    return result
 
 
 def verify_receipt_against_storage(storage: Storage, receipt: TaskReceipt) -> dict:
@@ -169,7 +228,7 @@ def store_external_receipt(
 ) -> Entry:
     entry = Entry(
         id=str(uuid4()),
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
         session_id=receiver_agent_id,
         source=receiver_agent_id,
         content=receipt.to_json(),

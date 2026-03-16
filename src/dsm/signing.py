@@ -20,6 +20,12 @@ try:
 except ImportError:
     NACL_AVAILABLE = False
 
+try:
+    from cryptography.fernet import Fernet
+    FERNET_AVAILABLE = True
+except ImportError:
+    FERNET_AVAILABLE = False
+
 
 class AgentSigning:
     """Ed25519 signing for DSM entries and receipts.
@@ -37,6 +43,15 @@ class AgentSigning:
         self._signing_key = None
         self._verify_key = None
 
+    def _derive_key(self) -> bytes:
+        """Derive Fernet key from agent_id + machine identifier."""
+        import hashlib
+        import base64
+        import platform
+        salt = f"{platform.node()}:{os.path.abspath(self.keys_dir)}"
+        raw = hashlib.pbkdf2_hmac("sha256", self.agent_id.encode(), salt.encode(), 100_000)
+        return base64.urlsafe_b64encode(raw)
+
     def generate_keypair(self, force: bool = False) -> dict:
         """Generate ed25519 keypair for this agent."""
         if not NACL_AVAILABLE:
@@ -51,12 +66,21 @@ class AgentSigning:
         key = nacl.signing.SigningKey.generate()
         seed = bytes(key)
         pub = bytes(key.verify_key)
-        self._seed_path.write_bytes(seed)
+        if FERNET_AVAILABLE:
+            fernet = Fernet(self._derive_key())
+            encrypted = fernet.encrypt(seed)
+            self._seed_path.write_bytes(encrypted)
+        else:
+            logger.warning(
+                "cryptography not installed; seed file stored unencrypted. "
+                "Install with: pip install cryptography"
+            )
+            self._seed_path.write_bytes(seed)
         self._pub_path.write_bytes(pub)
         try:
             os.chmod(self._seed_path, 0o600)
-        except OSError:
-            pass
+        except OSError as e:
+            logger.debug("keypair file not found: %s", e)
         self._signing_key = key
         self._verify_key = key.verify_key
         return {
@@ -80,10 +104,29 @@ class AgentSigning:
         return bytes(self._verify_key).hex()
 
     def _load_keypair(self) -> None:
-        """Load keypair from disk into memory."""
+        """Load keypair from disk into memory (decrypt seed if encrypted)."""
         if not self._seed_path.exists():
             return
-        seed = self._seed_path.read_bytes()
+        encrypted = self._seed_path.read_bytes()
+        seed = None
+        if FERNET_AVAILABLE:
+            try:
+                fernet = Fernet(self._derive_key())
+                seed = fernet.decrypt(encrypted)
+            except Exception as e:
+                logger.warning("failed to decrypt seed file: %s", e)
+        if seed is None:
+            # Fallback: try reading as raw bytes (migration from unencrypted)
+            if len(encrypted) == 32:
+                seed = encrypted
+                if FERNET_AVAILABLE:
+                    try:
+                        fernet = Fernet(self._derive_key())
+                        self._seed_path.write_bytes(fernet.encrypt(seed))
+                    except Exception as e:
+                        logger.warning("failed to re-encrypt seed file: %s", e)
+            else:
+                return
         if len(seed) != 32:
             return
         try:

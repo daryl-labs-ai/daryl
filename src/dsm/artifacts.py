@@ -9,10 +9,13 @@ the agent's claims match the actual evidence. Composes with P4
 import gzip
 import hashlib
 import json
+import logging
 import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Union
+
+logger = logging.getLogger(__name__)
 
 
 def _content_hash(raw: bytes) -> str:
@@ -91,13 +94,13 @@ class ArtifactStore:
         try:
             with open(meta_path, "rb") as f:
                 os.fsync(f.fileno())
-        except (OSError, AttributeError):
-            pass
+        except (OSError, AttributeError) as e:
+            logger.debug("artifact metadata read failed: %s", e)
         try:
             with open(bin_path, "rb") as f:
                 os.fsync(f.fileno())
-        except (OSError, AttributeError):
-            pass
+        except (OSError, AttributeError) as e:
+            logger.debug("artifact data read failed: %s", e)
 
         return {
             "artifact_hash": artifact_hash,

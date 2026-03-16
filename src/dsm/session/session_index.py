@@ -12,7 +12,7 @@ Trust comes from the shard; speed comes from the index.
 import json
 import logging
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -113,7 +113,7 @@ class SessionIndex:
             "shard_id": self.shard_id,
             "entries_indexed": len(entries),
             "sessions_found": len(sessions),
-            "built_at": datetime.utcnow().isoformat() + "Z",
+            "built_at": datetime.now(timezone.utc).isoformat() + "Z",
         }
         with open(self.index_dir / "meta.json", "w", encoding="utf-8") as f:
             json.dump(self._meta, f, ensure_ascii=False)

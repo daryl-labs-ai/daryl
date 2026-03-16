@@ -25,7 +25,7 @@ Contraintes:
 import json
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any, Tuple
 from pathlib import Path
 
@@ -96,8 +96,8 @@ class SessionGraph:
             self.end_session()
 
         # Générer un nouveau session_id
-        self.current_session_id = f"session_{int(datetime.utcnow().timestamp())}_{uuid.uuid4().hex[:8]}"
-        self.session_start_time = datetime.utcnow()
+        self.current_session_id = f"session_{int(datetime.now(timezone.utc).timestamp())}_{uuid.uuid4().hex[:8]}"
+        self.session_start_time = datetime.now(timezone.utc)
         self.session_source = source
         
         # Créer l'événement session_start
@@ -152,7 +152,7 @@ class SessionGraph:
             return None
         
         # Créer l'événement snapshot
-        timestamp = datetime.utcnow()
+        timestamp = datetime.now(timezone.utc)
         content = json.dumps({
             "snapshot_data": snapshot_data,
             "timestamp": timestamp.isoformat()
@@ -202,7 +202,7 @@ class SessionGraph:
         intent_id = str(uuid.uuid4())
         entry = Entry(
             id=intent_id,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             session_id=self.current_session_id,
             source="session_graph",
             content=json.dumps({
@@ -269,7 +269,7 @@ class SessionGraph:
 
         entry = Entry(
             id=str(uuid.uuid4()),
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             session_id=self.current_session_id,
             source="session_graph",
             content=json.dumps(content_data),
@@ -329,7 +329,7 @@ class SessionGraph:
             return None
 
         # Calculer la durée de session
-        session_end_time = datetime.utcnow()
+        session_end_time = datetime.now(timezone.utc)
         session_duration = (session_end_time - self.session_start_time).total_seconds() if self.session_start_time else 0
         
         # Créer l'événement session_end

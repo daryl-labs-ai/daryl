@@ -10,11 +10,14 @@ This is a separate logging system that does not touch the DSM kernel.
 """
 
 import json
+import logging
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
 from .models import Skill
+
+logger = logging.getLogger(__name__)
 
 
 class SkillUsageLogger:
@@ -62,7 +65,7 @@ class SkillUsageLogger:
         """
         # Create usage event
         event = {
-            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
             "event_type": "skill_usage",
             "task_description": task_description,
             "skill_id": skill_id,
@@ -74,8 +77,7 @@ class SkillUsageLogger:
             with open(self.log_file, 'a', encoding='utf-8') as f:
                 f.write(json.dumps(event) + '\n')
         except Exception as e:
-            # Silent fail - don't break flow if logging fails
-            pass
+            logger.debug("skill usage log write failed: %s", e)
 
     def get_usage_stats(self, skill_id: Optional[str] = None) -> Dict[str, int]:
         """Get usage statistics for a specific skill or all skills.

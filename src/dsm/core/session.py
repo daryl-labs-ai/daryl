@@ -5,9 +5,11 @@ DSM v2 - Session Tracking
 session_id, provenance, heartbeat tracking
 """
 
+import fcntl
 import json
+import os
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional, List
 from dataclasses import dataclass, field
@@ -39,18 +41,27 @@ class SessionTracker:
         self.state = self._load_state()
 
     def _load_state(self) -> dict:
-        """Charge l'état des sessions"""
+        """Charge l'état des sessions (with shared lock)."""
         if not self.state_file.exists():
             return {"sessions": [], "current_session": None}
-
-        with open(self.state_file, 'r') as f:
-            return json.load(f)
+        with open(self.state_file, "r", encoding="utf-8") as f:
+            fcntl.flock(f.fileno(), fcntl.LOCK_SH)
+            try:
+                return json.load(f)
+            finally:
+                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
 
     def _save_state(self):
-        """Sauvegarde l'état"""
+        """Sauvegarde l'état (with exclusive lock)."""
         self.state_file.parent.mkdir(parents=True, exist_ok=True)
-        with open(self.state_file, 'w') as f:
-            json.dump(self.state, f, indent=2)
+        with open(self.state_file, "w", encoding="utf-8") as f:
+            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+            try:
+                json.dump(self.state, f, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            finally:
+                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
 
     def start_session(self) -> Session:
         """
@@ -60,7 +71,7 @@ class SessionTracker:
             Session: Nouvelle session
         """
         session_id = str(uuid.uuid4())
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
 
         session = Session(
             id=session_id,
@@ -111,7 +122,7 @@ class SessionTracker:
             return None
 
         # Update session
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
         session.ended_at = now
         if stability_score is not None:
             session.stability_score = stability_score

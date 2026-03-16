@@ -7,7 +7,7 @@ import sys
 import time
 import uuid
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 
 from .core.models import Entry
 from .core.storage import Storage
@@ -138,7 +138,7 @@ def _cmd_read(args) -> None:
                 _print_entry(e, use_color=use_color, flush=True)
                 seen_ids.add(e.id)
     except KeyboardInterrupt:
-        pass
+        pass  # User cancelled — clean exit
 
 
 def _cmd_append(args) -> None:
@@ -154,7 +154,7 @@ def _cmd_append(args) -> None:
         content = args.json
     entry = Entry(
         id=str(uuid.uuid4()),
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
         session_id=args.session_id or "cli",
         source=args.source or "cli",
         content=content,
@@ -801,7 +801,7 @@ def _cmd_tail(args) -> None:
                 _print_entry(e, use_color=use_color, flush=True)
                 seen_ids.add(e.id)
     except KeyboardInterrupt:
-        pass
+        pass  # User cancelled — clean exit
 
 
 def main_dsm() -> None:
@@ -1084,7 +1084,7 @@ class DSMCLI:
         # Create entry
         entry = Entry(
             id=str(uuid.uuid4()),
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             session_id=self.session_tracker.state.get("current_session", "unknown"),
             source=source,
             content=content,
