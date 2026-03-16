@@ -388,6 +388,77 @@ def _cmd_receipt_list(args) -> int:
     return 0
 
 
+def _cmd_keygen(args) -> int:
+    """dsm keygen: generate ed25519 keypair for an agent."""
+    from .signing import AgentSigning
+    data_dir = getattr(args, "data_dir", None) or "data"
+    keys_dir = getattr(args, "keys_dir", None) or str(Path(data_dir) / "keys")
+    agent_id = getattr(args, "agent_id", None) or "cli"
+    try:
+        sign = AgentSigning(keys_dir, agent_id)
+        result = sign.generate_keypair(force=getattr(args, "force", False))
+        pub = result["public_key"]
+        created = "Generated" if result["created"] else "Using existing"
+        print(f"✓ {created} ed25519 keypair for {agent_id}. Public key: {pub[:32]}...")
+        return 0
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+
+def _cmd_pubkey(args) -> int:
+    """dsm pubkey: show agent's public key (hex)."""
+    from .signing import AgentSigning
+    data_dir = getattr(args, "data_dir", None) or "data"
+    keys_dir = getattr(args, "keys_dir", None) or str(Path(data_dir) / "keys")
+    agent_id = getattr(args, "agent_id", None) or "cli"
+    sign = AgentSigning(keys_dir, agent_id)
+    pub = sign.get_public_key()
+    if not pub:
+        print(f"No keypair for {agent_id}. Run 'dsm keygen --agent-id {agent_id}' first.", file=sys.stderr)
+        return 1
+    print(pub)
+    return 0
+
+
+def _cmd_artifact_store(args) -> int:
+    """dsm artifact-store: store artifact from stdin or file."""
+    from .artifacts import ArtifactStore
+    data_dir = getattr(args, "data_dir", None) or "data"
+    artifact_dir = str(Path(data_dir) / "artifacts")
+    store = ArtifactStore(artifact_dir)
+    source = getattr(args, "source", None)
+    if not source:
+        print("Error: --source is required", file=sys.stderr)
+        return 1
+    file_path = getattr(args, "file", None)
+    if file_path:
+        raw = Path(file_path).read_bytes()
+    else:
+        raw = sys.stdin.buffer.read()
+    artifact_type = getattr(args, "artifact_type", None) or "response"
+    out = store.store(raw, source=source, artifact_type=artifact_type)
+    size_k = out["size_bytes"] / 1024
+    comp_k = out["compressed_bytes"] / 1024
+    print(f"✓ Stored artifact {out['artifact_hash'][:16]}... ({size_k:.1f} KB → {comp_k:.1f} KB gzip)")
+    return 0
+
+
+def _cmd_artifact_verify(args) -> int:
+    """dsm artifact-verify: verify artifact integrity."""
+    from .artifacts import ArtifactStore
+    data_dir = getattr(args, "data_dir", None) or "data"
+    artifact_dir = str(Path(data_dir) / "artifacts")
+    store = ArtifactStore(artifact_dir)
+    result = store.verify_artifact(args.artifact_hash)
+    status = result["status"]
+    size = result.get("size_bytes")
+    size_str = f" ({size / 1024:.1f} KB)" if size is not None else ""
+    icon = "✓" if status == "INTACT" else "✗"
+    print(f"{icon} Artifact {args.artifact_hash[:16]}... {status}{size_str}")
+    return 0 if status == "INTACT" else 1
+
+
 def _cmd_session_index(args) -> int:
     """dsm session-index: build/rebuild session index."""
     data_dir = getattr(args, "data_dir", None) or "data"
@@ -851,6 +922,35 @@ def main_dsm() -> None:
     p_receipt_list = subparsers.add_parser("receipt-list", help="List received receipts")
     p_receipt_list.add_argument("--data-dir", default=None, help="DSM data directory (default: data)")
     p_receipt_list.set_defaults(func=_cmd_receipt_list)
+
+    # dsm keygen (P9)
+    p_keygen = subparsers.add_parser("keygen", help="Generate ed25519 keypair for an agent")
+    p_keygen.add_argument("--agent-id", default="cli", help="Agent ID")
+    p_keygen.add_argument("--data-dir", default=None, help="DSM data directory (default: data)")
+    p_keygen.add_argument("--keys-dir", default=None, help="Keys directory (default: data-dir/keys)")
+    p_keygen.add_argument("--force", action="store_true", help="Overwrite existing keypair")
+    p_keygen.set_defaults(func=_cmd_keygen)
+
+    # dsm pubkey (P9)
+    p_pubkey = subparsers.add_parser("pubkey", help="Show agent's public key")
+    p_pubkey.add_argument("--agent-id", default="cli", help="Agent ID")
+    p_pubkey.add_argument("--data-dir", default=None, help="DSM data directory (default: data)")
+    p_pubkey.add_argument("--keys-dir", default=None, help="Keys directory (default: data-dir/keys)")
+    p_pubkey.set_defaults(func=_cmd_pubkey)
+
+    # dsm artifact-store (P9)
+    p_artifact_store = subparsers.add_parser("artifact-store", help="Store an artifact from stdin or file")
+    p_artifact_store.add_argument("--source", required=True, help="Source identifier")
+    p_artifact_store.add_argument("--type", default="response", dest="artifact_type", help="Artifact type")
+    p_artifact_store.add_argument("--file", default=None, help="Read from file (default: stdin)")
+    p_artifact_store.add_argument("--data-dir", default=None, help="DSM data directory (default: data)")
+    p_artifact_store.set_defaults(func=_cmd_artifact_store)
+
+    # dsm artifact-verify (P9)
+    p_artifact_verify = subparsers.add_parser("artifact-verify", help="Verify artifact integrity")
+    p_artifact_verify.add_argument("artifact_hash", help="SHA-256 hash of the artifact")
+    p_artifact_verify.add_argument("--data-dir", default=None, help="DSM data directory (default: data)")
+    p_artifact_verify.set_defaults(func=_cmd_artifact_verify)
 
     # dsm session-index (P7)
     p_session_index = subparsers.add_parser("session-index", help="Build/rebuild session index")

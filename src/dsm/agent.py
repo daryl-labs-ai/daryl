@@ -6,8 +6,9 @@ Agent developers need zero DSM knowledge; 5 lines to integrate.
 """
 
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, List, Optional, Set
+from typing import Any, List, Optional, Set, Union
 
 from .anchor import AnchorLog, pre_commit, post_commit, capture_environment, verify_all_commitments
 from .audit import Policy, audit_all, audit_shard
@@ -34,6 +35,8 @@ from .exchange import (
 from .seal import SealRegistry, list_sealed_shards, seal_shard as seal_shard_fn, verify_seal as verify_seal_fn
 from .verify import verify_all, verify_shard
 from .witness import ShardWitness
+from .signing import AgentSigning, import_public_key
+from .artifacts import ArtifactStore
 
 logger = logging.getLogger("dsm.agent")
 
@@ -51,6 +54,8 @@ class DarylAgent:
         shard: str = "sessions",
         witness_dir: Optional[str] = None,
         witness_key: str = "",
+        signing_dir: Optional[Union[str, bool]] = None,
+        artifact_dir: Optional[Union[str, bool]] = None,
     ):
         self.agent_id = agent_id
         self.data_dir = Path(data_dir)
@@ -64,6 +69,14 @@ class DarylAgent:
         self._anchor_log = AnchorLog(str(self.data_dir / "anchors"))
         self._index_dir = str(self.data_dir / "index")
         self._pending_commitments = {}  # intent_id -> commitment_hash
+        self._signing = None
+        if signing_dir is not False:
+            path = signing_dir if isinstance(signing_dir, str) else str(self.data_dir / "keys")
+            self._signing = AgentSigning(path, self.agent_id)
+        self._artifact_store = None
+        if artifact_dir is not False:
+            path = artifact_dir if isinstance(artifact_dir, str) else str(self.data_dir / "artifacts")
+            self._artifact_store = ArtifactStore(path)
 
     @property
     def storage(self):
@@ -106,6 +119,20 @@ class DarylAgent:
                 self._pending_commitments[intent_id] = anchor["commitment_hash"]
             except OSError:
                 pass  # anchor failure should not block agent
+            # P9: sign entry if signing enabled
+            if self._signing and self._signing.has_keypair() and entry and entry.hash:
+                try:
+                    signature = self._signing.sign_entry(entry.hash)
+                    self._anchor_log._append_record({
+                        "type": "entry_signature",
+                        "entry_id": entry.id,
+                        "entry_hash": entry.hash,
+                        "signature": signature,
+                        "public_key": self._signing.get_public_key(),
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    })
+                except Exception:
+                    pass
             return intent_id
         except OSError as e:
             logger.error("intend failed: %s", e)
@@ -122,6 +149,15 @@ class DarylAgent:
         if raw_input is not None:
             receipt = make_receipt(raw_input)
         result_data = result if isinstance(result, dict) else {"value": result}
+        artifact_hash = None
+        if self._artifact_store is not None and raw_input is not None:
+            try:
+                art = self._artifact_store.store(
+                    raw_input, source=f"confirm:{intent_id}", artifact_type="raw_input"
+                )
+                artifact_hash = art["artifact_hash"]
+            except Exception:
+                pass
         # P4: post-commit anchoring
         try:
             commitment_hash = self._pending_commitments.pop(intent_id, None)
@@ -132,13 +168,19 @@ class DarylAgent:
         except OSError:
             pass  # anchor failure should not block agent
         try:
-            return self._graph.confirm_action(
+            result_entry = self._graph.confirm_action(
                 intent_id,
                 result_data=result_data,
                 success=success,
                 input_hash=receipt.get("input_hash"),
                 input_preview=receipt.get("input_preview"),
             )
+            if result_entry is not None and artifact_hash is not None and self._artifact_store is not None:
+                try:
+                    self._artifact_store.link_to_entry(artifact_hash, result_entry.id)
+                except Exception:
+                    pass
+            return result_entry
         except OSError as e:
             logger.error("confirm failed: %s", e)
             return None
@@ -204,7 +246,14 @@ class DarylAgent:
 
     def issue_receipt(self, entry_id: str, shard_id: str, task_description: str) -> dict:
         receipt = issue_receipt_fn(self._storage, self.agent_id, entry_id, shard_id, task_description)
-        return receipt.to_dict()
+        result = receipt.to_dict()
+        if self._signing is not None and self._signing.has_keypair():
+            try:
+                result["signature"] = self._signing.sign_receipt(receipt.receipt_hash)
+                result["public_key"] = self._signing.get_public_key()
+            except Exception:
+                pass
+        return result
 
     def receive_receipt(self, receipt_json: str) -> dict:
         receipt = TaskReceipt.from_json(receipt_json)
@@ -221,6 +270,48 @@ class DarylAgent:
 
     def list_receipts(self) -> List[dict]:
         return [r.to_dict() for r in list_received_receipts(self._storage, shard_id="receipts")]
+
+    def generate_keys(self, force: bool = False) -> dict:
+        """Generate ed25519 keypair for this agent. Idempotent."""
+        if self._signing is None:
+            raise ValueError("Signing is disabled")
+        return self._signing.generate_keypair(force=force)
+
+    def public_key(self) -> Optional[str]:
+        """Return this agent's public key (hex), or None."""
+        if self._signing is None:
+            return None
+        return self._signing.get_public_key()
+
+    def import_agent_key(self, agent_id: str, public_key_hex: str) -> str:
+        """Import another agent's public key for receipt verification."""
+        if self._signing is None:
+            raise ValueError("Signing is disabled")
+        return import_public_key(str(self.data_dir / "keys"), agent_id, public_key_hex)
+
+    def store_artifact(
+        self,
+        raw_data: Union[str, bytes, dict],
+        source: str,
+        artifact_type: str = "response",
+        metadata: Optional[dict] = None,
+    ) -> dict:
+        """Store raw I/O data in content-addressable artifact store."""
+        if self._artifact_store is None:
+            raise ValueError("Artifact store is disabled")
+        return self._artifact_store.store(raw_data, source, artifact_type, metadata)
+
+    def retrieve_artifact(self, artifact_hash: str) -> Optional[bytes]:
+        """Retrieve raw bytes for an artifact by hash."""
+        if self._artifact_store is None:
+            raise ValueError("Artifact store is disabled")
+        return self._artifact_store.retrieve(artifact_hash)
+
+    def verify_artifact(self, artifact_hash: str) -> dict:
+        """Verify artifact integrity."""
+        if self._artifact_store is None:
+            raise ValueError("Artifact store is disabled")
+        return self._artifact_store.verify_artifact(artifact_hash)
 
     def index_sessions(self) -> dict:
         """Build or rebuild session index for this agent's shard."""
