@@ -16,7 +16,7 @@ Created by <strong>Mohamed Azizi</strong> · <a href="https://www.daryl.md">dary
 <img src="https://github.com/daryl-labs-ai/daryl/actions/workflows/ci.yml/badge.svg">
 <img src="https://img.shields.io/badge/python-3.10%2B-blue">
 <img src="https://img.shields.io/badge/license-MIT-green">
-<img src="https://img.shields.io/badge/tests-67%20passing-brightgreen">
+<img src="https://img.shields.io/badge/tests-184%20passing-brightgreen">
 <img src="https://img.shields.io/badge/kernel-frozen%20%C2%B7%20stable-blueviolet">
 </p>
 
@@ -128,7 +128,7 @@ RR (Read Relay)       ← query: recent entries, summaries, filters
 DSM Core              ← storage: append-only, hash-chained, frozen
 ```
 
-The kernel (`src/dsm/core/`) is **frozen since March 2026** — battle-tested, 67 tests, no modifications. Everything above it uses the public API without touching the internals.
+The kernel (`src/dsm/core/`) is **frozen since March 2026** — battle-tested, no modifications. Everything above it (P3-P6: SDK facade, pre-commitment, shard sealing, cross-agent receipts) uses the public API without touching the internals.
 
 For the full architecture: [ARCHITECTURE.md](ARCHITECTURE.md)
 
@@ -144,7 +144,7 @@ pip install -e .
 
 ```bash
 pip install -e .[dev]
-python -m pytest tests/ -v   # 67 tests, 0 failures
+python -m pytest tests/ -v   # 184 tests, 0 failures
 ```
 
 ## Read agent memory
@@ -186,8 +186,12 @@ src/dsm/
   rr/           # Read Relay — query layer over storage
   ans/          # Analytics — skill performance, workflow insights
   skills/       # Skill registry, router, ingestor
+  agent.py      # DarylAgent — SDK facade (P3)
+  anchor.py     # Pre-commitment & environment anchoring (P4)
+  seal.py       # Shard sealing for selective forgetting (P5)
+  exchange.py   # Cross-agent trust receipts (P6)
 
-tests/          # 67 tests — core, session, rr, ans, integration
+tests/          # 184 tests — core, session, rr, ans, P3-P6, integration
 docs/           # Architecture, known issues, roadmap
 ```
 
