@@ -16,7 +16,7 @@ Created by <strong>Mohamed Azizi</strong> · <a href="https://www.daryl.md">dary
 <img src="https://github.com/daryl-labs-ai/daryl/actions/workflows/ci.yml/badge.svg">
 <img src="https://img.shields.io/badge/python-3.10%2B-blue">
 <img src="https://img.shields.io/badge/license-MIT-green">
-<img src="https://img.shields.io/badge/tests-270%20passing-brightgreen">
+<img src="https://img.shields.io/badge/tests-281%20passing-brightgreen">
 <img src="https://img.shields.io/badge/kernel-frozen%20%C2%B7%20stable-blueviolet">
 </p>
 
@@ -193,9 +193,10 @@ src/dsm/
   signing.py    # Ed25519 entry signing (P9)
   artifacts.py  # Content-addressable artifact store (P9)
   causal.py     # Cross-agent causal binding (P10)
+  attestation.py # Compute attestation — input-output binding (P11)
   status.py     # Status enums (VerifyStatus, ReceiptStatus, etc.)
 
-tests/          # 270 tests — core, session, rr, ans, P3-P10, security, integration
+tests/          # 281 tests — core, session, rr, ans, P3-P11, security, integration
 docs/           # Architecture, known issues, roadmap
 ```
 
