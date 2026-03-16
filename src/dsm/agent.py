@@ -65,6 +65,7 @@ class DarylAgent:
         witness_dir: Optional[str] = None,
         witness_key: str = "",
         signing_dir: Optional[Union[str, bool]] = None,
+        signing_password: Optional[str] = None,
         artifact_dir: Optional[Union[str, bool]] = None,
         startup_verify: Union[bool, str] = "reconcile",
     ):
@@ -112,7 +113,7 @@ class DarylAgent:
         self._signing = None
         if signing_dir is not False:
             path = signing_dir if isinstance(signing_dir, str) else str(self.data_dir / "keys")
-            self._signing = AgentSigning(path, self.agent_id)
+            self._signing = AgentSigning(path, self.agent_id, password=signing_password)
         self._artifact_store = None
         if artifact_dir is not False:
             path = artifact_dir if isinstance(artifact_dir, str) else str(self.data_dir / "artifacts")
