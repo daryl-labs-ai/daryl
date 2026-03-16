@@ -1291,19 +1291,6 @@ class DSMCLI:
         parser_security_self = security_subparsers.add_parser("self-check", help="Self-check (JSON output)")
         parser_security_self.set_defaults(func=self.security_self_check)
 
-        # === TRACE REPLAY COMMANDS (PR-A) ===
-        parser_trace = subparsers.add_parser("trace", help="Commandes de trace")
-        trace_subparsers = parser_trace.add_subparsers(dest="trace_command", help="Sous-commandes trace")
-
-        # trace replay
-        parser_trace_replay = trace_subparsers.add_parser("replay", help="Rejoue une session de trace (audit-only)")
-        parser_trace_replay.add_argument("--session", required=True, help="Session ID à rejouer")
-        parser_trace_replay.add_argument("--strict", action="store_true", help="Mode strict: toute divergence = CORRUPT")
-        parser_trace_replay.add_argument("--limit", type=int, help="Limiter le nombre de records")
-        parser_trace_replay.add_argument("--trace-file", default="data/traces/trace_log.jsonl", help="Fichier de trace")
-        parser_trace_replay.add_argument("--output-dir", default="data/diagnostics", help="Répertoire de sortie")
-        parser_trace_replay.set_defaults(func=self.trace_replay)
-
         # Parse
         args = parser.parse_args()
 
