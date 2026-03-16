@@ -60,6 +60,8 @@ class TaskReceipt:
         receipt_hash: str,
         signature: Optional[str] = None,
         public_key: Optional[str] = None,
+        dispatch_hash: Optional[str] = None,
+        routing_hash: Optional[str] = None,
     ):
         self.receipt_id = receipt_id
         self.issuer_agent_id = issuer_agent_id
@@ -73,6 +75,8 @@ class TaskReceipt:
         self.receipt_hash = receipt_hash
         self.signature = signature
         self.public_key = public_key
+        self.dispatch_hash = dispatch_hash
+        self.routing_hash = routing_hash
 
     def to_dict(self) -> dict:
         out = {
@@ -91,6 +95,10 @@ class TaskReceipt:
             out["signature"] = self.signature
         if self.public_key is not None:
             out["public_key"] = self.public_key
+        if self.dispatch_hash is not None:
+            out["dispatch_hash"] = self.dispatch_hash
+        if self.routing_hash is not None:
+            out["routing_hash"] = self.routing_hash
         return out
 
     @classmethod
@@ -108,6 +116,8 @@ class TaskReceipt:
             receipt_hash=d["receipt_hash"],
             signature=d.get("signature"),
             public_key=d.get("public_key"),
+            dispatch_hash=d.get("dispatch_hash"),
+            routing_hash=d.get("routing_hash"),
         )
 
     def to_json(self) -> str:
@@ -124,6 +134,8 @@ def issue_receipt(
     entry_id: str,
     shard_id: str,
     task_description: str,
+    dispatch_hash: Optional[str] = None,
+    routing_hash: Optional[str] = None,
 ) -> TaskReceipt:
     entries = storage.read(shard_id, limit=10**6)
     entry = next((e for e in entries if e.id == entry_id), None)
@@ -157,6 +169,8 @@ def issue_receipt(
         shard_entry_count=shard_entry_count,
         timestamp=timestamp,
         receipt_hash=receipt_hash,
+        dispatch_hash=dispatch_hash,
+        routing_hash=routing_hash,
     )
 
 

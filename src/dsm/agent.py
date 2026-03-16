@@ -5,10 +5,12 @@ Single entry point: Storage, SessionGraph, Witness, Audit, Coverage.
 Agent developers need zero DSM knowledge; 5 lines to integrate.
 """
 
+import json
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, List, Optional, Set, Union
+from uuid import uuid4
 
 from .anchor import AnchorLog, pre_commit, post_commit, capture_environment, verify_all_commitments
 from .audit import Policy, audit_all, audit_shard
@@ -20,6 +22,7 @@ from .policy_adapter import (
     verify_report,
 )
 from .coverage import check_coverage
+from .core.models import Entry
 from .core.storage import Storage
 from .receipts import make_receipt
 from .session.session_graph import SessionGraph
@@ -244,8 +247,64 @@ class DarylAgent:
         registry = SealRegistry(str(self.data_dir / "seals"))
         return verify_seal_fn(registry, shard_id)
 
-    def issue_receipt(self, entry_id: str, shard_id: str, task_description: str) -> dict:
-        receipt = issue_receipt_fn(self._storage, self.agent_id, entry_id, shard_id, task_description)
+    def _add_entry(self, action: str, data: dict) -> Entry:
+        """Append an entry to the agent's shard (e.g. for dispatch). Returns the written entry with hash."""
+        session_id = getattr(self._graph, "current_session_id", None) or "none"
+        entry = Entry(
+            id=str(uuid4()),
+            timestamp=datetime.now(timezone.utc),
+            session_id=session_id,
+            source=self.agent_id,
+            content=json.dumps(data, ensure_ascii=False),
+            shard=self.shard,
+            hash="",
+            prev_hash=None,
+            metadata={"event_type": "tool_call", "action_name": action},
+            version="v2.0",
+        )
+        return self._storage.append(entry)
+
+    def dispatch_task(self, target_agent_id: str, task_params: dict) -> dict:
+        """Dispatch work to another agent. Returns dispatch record.
+
+        Creates a DSM entry recording the dispatch, then computes
+        dispatch_hash from the entry hash + task_params.
+        """
+        from .causal import create_dispatch_hash, DispatchRecord
+
+        entry = self._add_entry(
+            action="dispatch",
+            data={"target": target_agent_id, "task_params": task_params},
+        )
+        timestamp = datetime.now(timezone.utc).isoformat()
+        dispatch_hash = create_dispatch_hash(entry.hash or "", task_params, timestamp)
+        return DispatchRecord(
+            dispatch_hash=dispatch_hash,
+            dispatcher_agent_id=self.agent_id,
+            dispatcher_entry_hash=entry.hash or "",
+            target_agent_id=target_agent_id,
+            task_params=task_params,
+            timestamp=timestamp,
+        ).to_dict()
+
+    def issue_receipt(
+        self,
+        entry_id: str,
+        shard_id: str,
+        task_description: str = "",
+        dispatch_hash: Optional[str] = None,
+        routing_hash: Optional[str] = None,
+    ) -> dict:
+        """Issue a receipt for completed work, optionally with causal binding."""
+        receipt = issue_receipt_fn(
+            self._storage,
+            self.agent_id,
+            entry_id,
+            shard_id,
+            task_description,
+            dispatch_hash=dispatch_hash,
+            routing_hash=routing_hash,
+        )
         result = receipt.to_dict()
         if self._signing is not None and self._signing.has_keypair():
             try:
