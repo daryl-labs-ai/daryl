@@ -18,9 +18,10 @@ DSM v2 - Storage Operations
 Append/Read/List with JSONL format (append-only) - Monolithic Mode
 """
 
+import contextlib
 import fcntl
-import json
 import hashlib
+import json
 import os
 from collections import deque
 from pathlib import Path
@@ -62,10 +63,29 @@ class Storage:
         # Gestionnaire de segmentation
         self.segment_manager = ShardSegmentManager(base_dir=str(self.data_dir))
 
+    @contextlib.contextmanager
+    def _shard_lock(self, shard_id: str):
+        """
+        Acquire an exclusive POSIX lock for the entire shard operation.
+
+        Uses a dedicated lockfile (integrity/{shard_id}.lock) to serialize
+        all append operations on this shard — including metadata updates.
+        This is the fix for K-2 (crash window) and K-3 (metadata race).
+        """
+        lock_path = self.integrity_dir / f"{shard_id}.lock"
+        lock_fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR)
+        try:
+            fcntl.flock(lock_fd, fcntl.LOCK_EX)
+            yield
+        finally:
+            fcntl.flock(lock_fd, fcntl.LOCK_UN)
+            os.close(lock_fd)
+
     def append(self, entry: Entry) -> Entry:
         """
-        Ajoute une entrée (append-only)
-        Utilise la segmentation automatique si activée
+        Ajoute une entrée (append-only).
+        K-2/K-3 fix: toute l'opération (écriture segment + commit metadata)
+        est protégée par un shard-level lock dédié.
 
         Args:
             entry: Entry à ajouter
@@ -73,16 +93,11 @@ class Storage:
         Returns:
             Entry: L'entrée ajoutée avec hash calculé
         """
-        # Déterminer le shard
         shard = entry.shard or "default"
 
-        # Résoudre le chemin du segment actif via ShardSegmentManager
-        active_segment_path = self.segment_manager.get_active_segment(shard)
-
-        # Lock segment file for entire append (read last_hash → compute hash → write entry → set last_hash)
-        with open(active_segment_path, 'a', encoding='utf-8') as f:
-            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
-            try:
+        with self._shard_lock(shard):
+            active_segment_path = self.segment_manager.get_active_segment(shard)
+            with open(active_segment_path, "a", encoding="utf-8") as f:
                 prev_hash = self._get_last_hash(shard)
                 entry.prev_hash = prev_hash
 
@@ -99,19 +114,18 @@ class Storage:
                     "hash": entry.hash,
                     "prev_hash": entry.prev_hash,
                     "metadata": entry.metadata,
-                    "version": entry.version
+                    "version": entry.version,
                 }
-                line = json.dumps(entry_dict, ensure_ascii=False) + "\n"
+                line = json.dumps(entry_dict, sort_keys=True, separators=(",", ":"), ensure_ascii=False) + "\n"
                 f.write(line)
                 f.flush()
                 os.fsync(f.fileno())
 
-                self._set_last_hash(shard, entry.hash)
-                self.segment_manager.update_active_segment_metadata(shard, delta_events=1, delta_bytes=len(line.encode("utf-8")))
-            finally:
-                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+            self._commit_integrity_and_metadata(shard, entry)
 
-        self._update_shard_metadata(shard, entry)
+            self.segment_manager.update_active_segment_metadata(
+                shard, delta_events=1, delta_bytes=len(line.encode("utf-8"))
+            )
 
         return entry
 
@@ -290,8 +304,56 @@ class Storage:
 
         return None
 
+    def _commit_integrity_and_metadata(self, shard_id: str, entry: Entry):
+        """
+        Atomic commit of last_hash + shard metadata in a single file write.
+
+        Must be called while holding the shard lock (_shard_lock).
+        Replaces the separate _set_last_hash() + _update_shard_metadata() calls
+        that were the root cause of K-2 and K-3.
+        """
+        last_hash_file = self.integrity_dir / f"{shard_id}_last_hash.json"
+
+        existing = {}
+        if last_hash_file.exists():
+            try:
+                with open(last_hash_file, "r", encoding="utf-8") as f:
+                    existing = json.load(f)
+            except Exception:
+                existing = {}
+
+        entry_count = existing.get("entry_count", 0) + 1
+        first_ts = existing.get("first_timestamp")
+        if first_ts is None:
+            first_ts = (
+                entry.timestamp.isoformat()
+                if hasattr(entry.timestamp, "isoformat")
+                else str(entry.timestamp)
+            )
+        last_ts = (
+            entry.timestamp.isoformat()
+            if hasattr(entry.timestamp, "isoformat")
+            else str(entry.timestamp)
+        )
+
+        data = {
+            "shard_id": shard_id,
+            "last_hash": entry.hash,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "entry_count": entry_count,
+            "first_timestamp": first_ts,
+            "last_timestamp": last_ts,
+        }
+
+        tmp_path = last_hash_file.with_suffix(".json.tmp")
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, last_hash_file)
+
     def _set_last_hash(self, shard_id: str, hash_value: str):
-        """Définit le dernier hash de la chaîne pour un shard (préserve entry_count, first/last_timestamp)."""
+        """Définit le dernier hash de la chaîne pour un shard. Deprecated for use in append(); use _commit_integrity_and_metadata() instead (K-2/K-3 fix)."""
         last_hash_file = self.integrity_dir / f"{shard_id}_last_hash.json"
 
         existing = {}
@@ -353,7 +415,7 @@ class Storage:
         )
 
     def _update_shard_metadata(self, shard_id: str, entry: Entry):
-        """Met à jour les métadonnées du shard après un append (entry_count, first_timestamp, last_timestamp)."""
+        """Met à jour les métadonnées du shard après un append. Deprecated for use in append(); use _commit_integrity_and_metadata() instead (K-2/K-3 fix)."""
         last_hash_file = self.integrity_dir / f"{shard_id}_last_hash.json"
 
         existing = {}
@@ -385,3 +447,123 @@ class Storage:
             f.flush()
             os.fsync(f.fileno())
         os.replace(tmp_path, last_hash_file)
+
+    def _read_last_segment_tail(self, shard_id: str) -> Optional[dict]:
+        """
+        Read the last non-empty line from the last segment file.
+
+        O(1) relative to total shard size — seeks from end of file.
+        Returns parsed dict or None.
+        """
+        segments = self.segment_manager.get_segment_files_ordered(shard_id, reverse=True)
+        for segment_path in segments:
+            if not segment_path.exists():
+                continue
+            size = segment_path.stat().st_size
+            if size == 0:
+                continue
+            read_size = min(size, 8192)
+            with open(segment_path, "rb") as f:
+                f.seek(-read_size, 2)
+                tail = f.read().decode("utf-8", errors="replace")
+            lines = tail.strip().split("\n")
+            for line in reversed(lines):
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    return json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+        return None
+
+    def _count_shard_entries(self, shard_id: str) -> int:
+        """Count total entries across all segments for a shard. Used only during reconciliation."""
+        count = 0
+        for segment_path in self.segment_manager.get_segment_files_ordered(shard_id):
+            if not segment_path.exists():
+                continue
+            with open(segment_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    if line.strip():
+                        count += 1
+        return count
+
+    def reconcile_shard(self, shard_id: str) -> dict:
+        """
+        Reconcile segment content with integrity metadata after a crash.
+
+        Reads ONLY the last entry from the last segment (O(1) seek-from-end),
+        compares its hash with what last_hash.json reports.
+        If they differ, recalculates entry_count and updates metadata.
+
+        Returns:
+            dict: reconciled (bool), old_hash, new_hash, entry_count (if reconciled)
+        """
+        stored_hash = self._get_last_hash(shard_id)
+        last_event = self._read_last_segment_tail(shard_id)
+
+        if last_event is None:
+            return {"reconciled": False, "reason": "empty_shard"}
+
+        last_hash_on_disk = last_event.get("hash")
+        if last_hash_on_disk == stored_hash:
+            return {
+                "reconciled": False,
+                "old_hash": stored_hash,
+                "new_hash": stored_hash,
+            }
+
+        entry_count = self._count_shard_entries(shard_id)
+        first_ts = None
+        segments = self.segment_manager.get_segment_files_ordered(shard_id)
+        for seg in segments:
+            if not seg.exists():
+                continue
+            with open(seg, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        first_event = json.loads(line)
+                        first_ts = first_event.get("timestamp")
+                        break
+                    except json.JSONDecodeError:
+                        continue
+            if first_ts:
+                break
+
+        last_ts = last_event.get("timestamp")
+        last_hash_file = self.integrity_dir / f"{shard_id}_last_hash.json"
+        data = {
+            "shard_id": shard_id,
+            "last_hash": last_hash_on_disk,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "entry_count": entry_count,
+            "first_timestamp": first_ts,
+            "last_timestamp": last_ts,
+        }
+        data = {k: v for k, v in data.items() if v is not None}
+
+        tmp_path = last_hash_file.with_suffix(".json.tmp")
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, last_hash_file)
+
+        return {
+            "reconciled": True,
+            "old_hash": stored_hash,
+            "new_hash": last_hash_on_disk,
+            "entry_count": entry_count,
+        }
+
+    def reconcile_all(self) -> List[dict]:
+        """Reconcile all known shards. Call at startup. O(1) detection per shard."""
+        results = []
+        for shard_meta in self.list_shards():
+            result = self.reconcile_shard(shard_meta.shard_id)
+            results.append({"shard_id": shard_meta.shard_id, **result})
+        return results
