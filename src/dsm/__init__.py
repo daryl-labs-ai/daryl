@@ -14,6 +14,13 @@ from .causal import (
     verify_dispatch_hash,
     verify_causal_chain,
 )
+from .attestation import (
+    ComputeAttestation,
+    create_attestation,
+    verify_attestation,
+    verify_attestation_against_data,
+    sign_attestation,
+)
 
 __all__ = [
     "Storage",
@@ -24,4 +31,9 @@ __all__ = [
     "DispatchRecord",
     "verify_dispatch_hash",
     "verify_causal_chain",
+    "ComputeAttestation",
+    "create_attestation",
+    "verify_attestation",
+    "verify_attestation_against_data",
+    "sign_attestation",
 ]

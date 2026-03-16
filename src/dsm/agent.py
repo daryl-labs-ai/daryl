@@ -330,6 +330,33 @@ class DarylAgent:
     def list_receipts(self) -> List[dict]:
         return [r.to_dict() for r in list_received_receipts(self._storage, shard_id="receipts")]
 
+    def attest_compute(
+        self,
+        raw_input: Any,
+        raw_output: Any,
+        model_id: str,
+        dispatch_hash: Optional[str] = None,
+    ) -> dict:
+        """Create a signed compute attestation for input→output binding.
+
+        Returns attestation dict with hashes and optional signature.
+        """
+        from .attestation import create_attestation, sign_attestation
+
+        att = create_attestation(
+            agent_id=self.agent_id,
+            raw_input=raw_input,
+            raw_output=raw_output,
+            model_id=model_id,
+            dispatch_hash=dispatch_hash,
+        )
+        if self._signing is not None and self._signing.has_keypair():
+            try:
+                att = sign_attestation(att, self._signing)
+            except Exception as e:
+                logger.debug("attestation signing skipped: %s", e)
+        return att.to_dict()
+
     def generate_keys(self, force: bool = False) -> dict:
         """Generate ed25519 keypair for this agent. Idempotent."""
         if self._signing is None:
