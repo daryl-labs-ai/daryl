@@ -21,6 +21,12 @@ from .anchor import AnchorLog, verify_commitment, verify_all_commitments
 from .audit import Policy, audit_shard, audit_all
 from .coverage import check_coverage
 from .seal import SealRegistry, list_sealed_shards, seal_shard as seal_shard_fn, verify_seal as verify_seal_fn
+from .exchange import (
+    TaskReceipt,
+    issue_receipt as issue_receipt_fn,
+    list_received_receipts as list_received_receipts_fn,
+    verify_receipt as verify_receipt_fn,
+)
 from . import verify as dsm_verify
 
 
@@ -324,6 +330,62 @@ def _cmd_audit(args) -> int:
             any_violations = True
             print(f"  violation | rule={v['rule']} detail={v['detail']} action_name={v.get('action_name')} entry_id={v.get('entry_id')}")
     return 1 if any_violations else 0
+
+
+def _cmd_receipt_issue(args) -> int:
+    """dsm receipt-issue: issue a task receipt, print JSON to stdout."""
+    data_dir = getattr(args, "data_dir", None) or "data"
+    shard_id = getattr(args, "shard", None)
+    entry_id = getattr(args, "entry", None)
+    task = getattr(args, "task", "") or ""
+    agent_id = getattr(args, "agent_id", None) or "cli"
+    if not shard_id or not entry_id:
+        print("Error: --shard and --entry are required", file=sys.stderr)
+        return 1
+    try:
+        storage = _get_storage(data_dir)
+        receipt = issue_receipt_fn(storage, agent_id, entry_id, shard_id, task)
+        print(receipt.to_json())
+        return 0
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+
+def _cmd_receipt_verify(args) -> int:
+    """dsm receipt-verify: verify receipt integrity. Exit 0 if INTACT, 1 if TAMPERED."""
+    receipt_arg = getattr(args, "receipt", "")
+    if not receipt_arg:
+        print("Error: receipt (JSON or file path) required", file=sys.stderr)
+        return 1
+    if receipt_arg.strip().startswith("{"):
+        receipt_json = receipt_arg
+    elif Path(receipt_arg).exists():
+        with open(receipt_arg, "r", encoding="utf-8") as f:
+            receipt_json = f.read()
+    else:
+        receipt_json = receipt_arg
+    try:
+        receipt = TaskReceipt.from_json(receipt_json)
+    except Exception as e:
+        print(f"Error parsing receipt: {e}", file=sys.stderr)
+        return 1
+    result = verify_receipt_fn(receipt)
+    print(f"receipt_id={result['receipt_id']} status={result['status']} issuer={result['issuer']} task={result['task']}")
+    return 0 if result["status"] == "INTACT" else 1
+
+
+def _cmd_receipt_list(args) -> int:
+    """dsm receipt-list: list received receipts in receipts shard."""
+    data_dir = getattr(args, "data_dir", None) or "data"
+    storage = _get_storage(data_dir)
+    receipts = list_received_receipts_fn(storage, shard_id="receipts")
+    for r in receipts:
+        task_preview = (r.task_description[:50] + "…") if len(r.task_description) > 50 else r.task_description
+        print(f"receipt_id={r.receipt_id} issuer={r.issuer_agent_id} task={task_preview} timestamp={r.timestamp}")
+    if not receipts:
+        print("No received receipts.")
+    return 0
 
 
 def _cmd_seal(args) -> int:
@@ -642,6 +704,25 @@ def main_dsm() -> None:
     p_sealed = subparsers.add_parser("sealed", help="List sealed shards")
     p_sealed.add_argument("--data-dir", default=None, help="DSM data directory (default: data)")
     p_sealed.set_defaults(func=_cmd_sealed)
+
+    # dsm receipt-issue
+    p_receipt_issue = subparsers.add_parser("receipt-issue", help="Issue a cross-agent task receipt (prints JSON)")
+    p_receipt_issue.add_argument("--data-dir", default=None, help="DSM data directory (default: data)")
+    p_receipt_issue.add_argument("--shard", default=None, help="Shard containing the entry (required)")
+    p_receipt_issue.add_argument("--entry", default=None, help="Entry ID (required)")
+    p_receipt_issue.add_argument("--task", default="", help="Task description")
+    p_receipt_issue.add_argument("--agent-id", default="cli", help="Issuer agent ID")
+    p_receipt_issue.set_defaults(func=_cmd_receipt_issue)
+
+    # dsm receipt-verify
+    p_receipt_verify = subparsers.add_parser("receipt-verify", help="Verify receipt integrity (offline)")
+    p_receipt_verify.add_argument("receipt", help="JSON string or path to file containing receipt")
+    p_receipt_verify.set_defaults(func=_cmd_receipt_verify)
+
+    # dsm receipt-list
+    p_receipt_list = subparsers.add_parser("receipt-list", help="List received receipts")
+    p_receipt_list.add_argument("--data-dir", default=None, help="DSM data directory (default: data)")
+    p_receipt_list.set_defaults(func=_cmd_receipt_list)
 
     # dsm anchor-verify
     p_anchor = subparsers.add_parser("anchor-verify", help="Verify pre/post commitment pairs")

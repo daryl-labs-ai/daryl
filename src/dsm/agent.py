@@ -16,6 +16,13 @@ from .core.storage import Storage
 from .receipts import make_receipt
 from .session.session_graph import SessionGraph
 from .session.session_limits_manager import SessionLimitsManager
+from .exchange import (
+    TaskReceipt,
+    issue_receipt as issue_receipt_fn,
+    list_received_receipts,
+    store_external_receipt,
+    verify_receipt as verify_receipt_fn,
+)
 from .seal import SealRegistry, list_sealed_shards, seal_shard as seal_shard_fn, verify_seal as verify_seal_fn
 from .verify import verify_all, verify_shard
 from .witness import ShardWitness
@@ -185,6 +192,26 @@ class DarylAgent:
     def verify_seal(self, shard_id: str) -> dict:
         registry = SealRegistry(str(self.data_dir / "seals"))
         return verify_seal_fn(registry, shard_id)
+
+    def issue_receipt(self, entry_id: str, shard_id: str, task_description: str) -> dict:
+        receipt = issue_receipt_fn(self._storage, self.agent_id, entry_id, shard_id, task_description)
+        return receipt.to_dict()
+
+    def receive_receipt(self, receipt_json: str) -> dict:
+        receipt = TaskReceipt.from_json(receipt_json)
+        vr = verify_receipt_fn(receipt)
+        stored = False
+        if vr["status"] == "INTACT":
+            store_external_receipt(self._storage, receipt, self.agent_id, shard_id="receipts")
+            stored = True
+        return {"stored": stored, "receipt_id": receipt.receipt_id, "integrity": vr["status"]}
+
+    def verify_external_receipt(self, receipt_json: str) -> dict:
+        receipt = TaskReceipt.from_json(receipt_json)
+        return verify_receipt_fn(receipt)
+
+    def list_receipts(self) -> List[dict]:
+        return [r.to_dict() for r in list_received_receipts(self._storage, shard_id="receipts")]
 
     def capture_env(self, source: str, raw_data, headers: Optional[dict] = None) -> dict:
         """Capture environment fingerprint for external data."""
