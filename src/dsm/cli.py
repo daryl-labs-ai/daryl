@@ -20,6 +20,7 @@ from .witness import ShardWitness
 from .anchor import AnchorLog, verify_commitment, verify_all_commitments
 from .audit import Policy, audit_shard, audit_all
 from .coverage import check_coverage
+from .seal import SealRegistry, list_sealed_shards, seal_shard as seal_shard_fn, verify_seal as verify_seal_fn
 from . import verify as dsm_verify
 
 
@@ -325,6 +326,59 @@ def _cmd_audit(args) -> int:
     return 1 if any_violations else 0
 
 
+def _cmd_seal(args) -> int:
+    """dsm seal --data-dir <path> --shard <id> [--archive <path>]: seal shard, optionally archive. Exit 0 on success."""
+    data_dir = getattr(args, "data_dir", None) or "data"
+    shard_id = getattr(args, "shard", None)
+    archive_path = getattr(args, "archive", None)
+    if not shard_id:
+        print("Error: --shard is required", file=sys.stderr)
+        return 1
+    try:
+        storage = _get_storage(data_dir)
+        registry = SealRegistry(str(Path(data_dir) / "seals"))
+        record = seal_shard_fn(storage, shard_id, registry, archive_path)
+        print(f"shard_id={record.shard_id} entry_count={record.entry_count} seal_hash={record.seal_hash[:16]}... seal_timestamp={record.seal_timestamp}")
+        if record.archived_path:
+            print(f"archived_path={record.archived_path}")
+        return 0
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+
+def _cmd_seal_verify(args) -> int:
+    """dsm seal-verify --data-dir <path> [--shard <id>]: verify seal(s). Exit 0 if all VALID."""
+    data_dir = getattr(args, "data_dir", None) or "data"
+    shard_id = getattr(args, "shard", None)
+    registry = SealRegistry(str(Path(data_dir) / "seals"))
+    if shard_id:
+        results = [verify_seal_fn(registry, shard_id)]
+    else:
+        all_records = registry.read_all()
+        results = [verify_seal_fn(registry, r.shard_id) for r in all_records]
+    any_fail = False
+    for r in results:
+        print(f"shard_id={r['shard_id']} status={r['status']} entry_count={r.get('entry_count', 0)} sealed_at={r.get('sealed_at', '')}")
+        if r.get("status") != "VALID":
+            any_fail = True
+    return 1 if any_fail else 0
+
+
+def _cmd_sealed(args) -> None:
+    """dsm sealed --data-dir <path>: list all sealed shards."""
+    data_dir = getattr(args, "data_dir", None) or "data"
+    registry = SealRegistry(str(Path(data_dir) / "seals"))
+    items = list_sealed_shards(registry)
+    for s in items:
+        print(f"shard_id={s['shard_id']} entry_count={s['entry_count']} sealed_at={s['sealed_at']} archived={'yes' if s['archived'] else 'no'}")
+    if not items:
+        print("No sealed shards.")
+
+
 def _cmd_witness(args) -> None:
     """dsm witness --data-dir <path> --witness-dir <path> [--key <secret>]: capture witness for all shards."""
     data_dir = getattr(args, "data_dir", None) or "data"
@@ -570,6 +624,24 @@ def main_dsm() -> None:
     p_audit.add_argument("--policy", default=None, help="Path to policy JSON file (required)")
     p_audit.add_argument("--shard", default=None, help="Audit a single shard by ID")
     p_audit.set_defaults(func=_cmd_audit)
+
+    # dsm seal
+    p_seal = subparsers.add_parser("seal", help="Seal a shard (cryptographic proof)")
+    p_seal.add_argument("--data-dir", default=None, help="DSM data directory (default: data)")
+    p_seal.add_argument("--shard", default=None, help="Shard ID to seal (required)")
+    p_seal.add_argument("--archive", default=None, help="Directory to archive sealed data (gzip)")
+    p_seal.set_defaults(func=_cmd_seal)
+
+    # dsm seal-verify
+    p_seal_verify = subparsers.add_parser("seal-verify", help="Verify seal record(s)")
+    p_seal_verify.add_argument("--data-dir", default=None, help="DSM data directory (default: data)")
+    p_seal_verify.add_argument("--shard", default=None, help="Verify single shard seal")
+    p_seal_verify.set_defaults(func=_cmd_seal_verify)
+
+    # dsm sealed
+    p_sealed = subparsers.add_parser("sealed", help="List sealed shards")
+    p_sealed.add_argument("--data-dir", default=None, help="DSM data directory (default: data)")
+    p_sealed.set_defaults(func=_cmd_sealed)
 
     # dsm anchor-verify
     p_anchor = subparsers.add_parser("anchor-verify", help="Verify pre/post commitment pairs")

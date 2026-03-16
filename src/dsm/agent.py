@@ -16,6 +16,7 @@ from .core.storage import Storage
 from .receipts import make_receipt
 from .session.session_graph import SessionGraph
 from .session.session_limits_manager import SessionLimitsManager
+from .seal import SealRegistry, list_sealed_shards, seal_shard as seal_shard_fn, verify_seal as verify_seal_fn
 from .verify import verify_all, verify_shard
 from .witness import ShardWitness
 
@@ -171,6 +172,19 @@ class DarylAgent:
         if shard_id:
             return [audit_shard(self._storage, shard_id, policy)]
         return audit_all(self._storage, policy)
+
+    def seal_shard(self, shard_id: str, archive_path: Optional[str] = None) -> dict:
+        registry = SealRegistry(str(self.data_dir / "seals"))
+        record = seal_shard_fn(self._storage, shard_id, registry, archive_path)
+        return record.to_dict()
+
+    def sealed_shards(self) -> List[dict]:
+        registry = SealRegistry(str(self.data_dir / "seals"))
+        return list_sealed_shards(registry)
+
+    def verify_seal(self, shard_id: str) -> dict:
+        registry = SealRegistry(str(self.data_dir / "seals"))
+        return verify_seal_fn(registry, shard_id)
 
     def capture_env(self, source: str, raw_data, headers: Optional[dict] = None) -> dict:
         """Capture environment fingerprint for external data."""
