@@ -8,6 +8,7 @@ and storage._entry_from_event_data() + _compute_canonical_entry_hash from core.
 from typing import Dict, List, Any
 
 from .core.storage import Storage, _compute_canonical_entry_hash
+from .status import VerifyStatus
 
 
 def verify_shard(storage: Storage, shard_id: str) -> Dict[str, Any]:
@@ -19,7 +20,7 @@ def verify_shard(storage: Storage, shard_id: str) -> Dict[str, Any]:
 
     Returns:
         dict: shard_id, total_entries, verified, tampered, chain_breaks, status.
-        status is "OK" | "TAMPERED" | "CHAIN_BROKEN".
+        status is VerifyStatus.OK | VerifyStatus.TAMPERED | VerifyStatus.CHAIN_BROKEN.
     """
     entries_chrono: List[Any] = []
     for event_data in storage.segment_manager.iter_shard_events(shard_id):
@@ -61,11 +62,11 @@ def verify_shard(storage: Storage, shard_id: str) -> Dict[str, Any]:
         prev_hash = entry.hash if entry.hash else prev_hash
 
     if tampered > 0:
-        status = "TAMPERED"
+        status = VerifyStatus.TAMPERED
     elif chain_breaks > 0:
-        status = "CHAIN_BROKEN"
+        status = VerifyStatus.CHAIN_BROKEN
     else:
-        status = "OK"
+        status = VerifyStatus.OK
 
     return {
         "shard_id": shard_id,

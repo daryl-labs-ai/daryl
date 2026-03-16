@@ -4,10 +4,10 @@ Minimal test: write a session to DSM from Clawdbot runtime conditions.
 Run from Clawdbot dir with PYTHONPATH including repo, or from Daryl with dsm installed.
 
 Usage:
-  DATA_DIR=/home/buraluxtr/clawd/data PYTHONPATH=/opt/daryl python3 tests/clawdbot_dsm_session_test.py
+  DATA_DIR=<path_to_data> PYTHONPATH=<repo_root> python3 tests/integration/test_clawdbot_dsm_session.py
 
 Then verify:
-  dsm read sessions --data-dir /home/buraluxtr/clawd/data --limit 10
+  dsm read sessions --data-dir $DATA_DIR --limit 10
 """
 
 import os
@@ -25,7 +25,7 @@ def main():
         from dsm.session.session_graph import SessionGraph
     except ImportError as e:
         print("FAIL: cannot import dsm:", e, file=sys.stderr)
-        print("Run with PYTHONPATH=/opt/daryl (or pip install -e /opt/daryl)", file=sys.stderr)
+        print("Run with PYTHONPATH=<repo_root> (or pip install -e .)", file=sys.stderr)
         sys.exit(1)
 
     storage = Storage(data_dir=data_dir)

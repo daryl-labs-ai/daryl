@@ -12,6 +12,7 @@ import logging
 from pathlib import Path
 from typing import List, Optional
 
+from .status import SealStatus, SealStorageStatus
 from .verify import verify_shard
 
 logger = logging.getLogger(__name__)
@@ -174,28 +175,28 @@ def seal_shard(storage, shard_id: str, registry: SealRegistry, archive_path: Opt
 def verify_seal(registry: SealRegistry, shard_id: str) -> dict:
     rec = registry.find_seal(shard_id)
     if not rec:
-        return {"shard_id": shard_id, "status": "NOT_SEALED", "entry_count": 0, "sealed_at": ""}
+        return {"shard_id": shard_id, "status": SealStatus.NOT_SEALED, "entry_count": 0, "sealed_at": ""}
     expected = _compute_seal_hash(rec.shard_id, rec.entry_count, rec.first_hash, rec.last_hash, rec.seal_timestamp)
-    status = "VALID" if expected == rec.seal_hash else "HASH_MISMATCH"
+    status = SealStatus.VALID if expected == rec.seal_hash else SealStatus.HASH_MISMATCH
     return {"shard_id": shard_id, "status": status, "entry_count": rec.entry_count, "sealed_at": rec.seal_timestamp}
 
 
 def verify_seal_against_storage(storage, registry: SealRegistry, shard_id: str) -> dict:
     rec = registry.find_seal(shard_id)
     if not rec:
-        return {"shard_id": shard_id, "status": "NOT_SEALED", "seal_entries": 0, "current_entries": 0}
+        return {"shard_id": shard_id, "status": SealStorageStatus.NOT_SEALED, "seal_entries": 0, "current_entries": 0}
     entries = storage.read(shard_id, limit=1)
     if not entries:
-        return {"shard_id": shard_id, "status": "SHARD_GONE", "seal_entries": rec.entry_count, "current_entries": 0}
+        return {"shard_id": shard_id, "status": SealStorageStatus.SHARD_GONE, "seal_entries": rec.entry_count, "current_entries": 0}
     current_tip = entries[0].hash if entries[0].hash else ""
     all_entries = storage.read(shard_id, limit=10**6)
     current_count = len(all_entries)
     if current_count == rec.entry_count and current_tip == rec.last_hash:
-        status = "MATCHES"
+        status = SealStorageStatus.MATCHES
     elif current_count > rec.entry_count or (current_count == rec.entry_count and current_tip != rec.last_hash):
-        status = "DIVERGED"
+        status = SealStorageStatus.DIVERGED
     else:
-        status = "SHARD_GONE"
+        status = SealStorageStatus.SHARD_GONE
     return {"shard_id": shard_id, "status": status, "seal_entries": rec.entry_count, "current_entries": current_count}
 
 

@@ -21,6 +21,7 @@ except ImportError:
 
 from .core.models import Entry
 from .core.storage import Storage
+from .status import ReceiptStatus, StorageReceiptStatus
 
 logger = logging.getLogger(__name__)
 
@@ -187,7 +188,7 @@ def _verify_receipt_signature(receipt: TaskReceipt) -> Optional[bool]:
 def verify_receipt(receipt: TaskReceipt) -> dict:
     payload = _receipt_payload(receipt)
     expected = _compute_receipt_hash(payload)
-    status = "INTACT" if expected == receipt.receipt_hash else "TAMPERED"
+    status = ReceiptStatus.INTACT if expected == receipt.receipt_hash else ReceiptStatus.TAMPERED
     result = {
         "receipt_id": receipt.receipt_id,
         "status": status,
@@ -203,21 +204,21 @@ def verify_receipt(receipt: TaskReceipt) -> dict:
     else:
         result["signature_verified"] = False
         if getattr(receipt, "signature", None) and getattr(receipt, "public_key", None):
-            result["status"] = "SIGNATURE_INVALID"
+            result["status"] = ReceiptStatus.SIGNATURE_INVALID
     return result
 
 
 def verify_receipt_against_storage(storage: Storage, receipt: TaskReceipt) -> dict:
     entries = storage.read(receipt.shard_id, limit=10**6)
     if not entries:
-        return {"receipt_id": receipt.receipt_id, "status": "SHARD_MISSING", "entry_found": False, "hash_matches": False}
+        return {"receipt_id": receipt.receipt_id, "status": StorageReceiptStatus.SHARD_MISSING, "entry_found": False, "hash_matches": False}
     entry = next((e for e in entries if e.id == receipt.entry_id), None)
     if not entry:
-        return {"receipt_id": receipt.receipt_id, "status": "ENTRY_MISSING", "entry_found": False, "hash_matches": False}
+        return {"receipt_id": receipt.receipt_id, "status": StorageReceiptStatus.ENTRY_MISSING, "entry_found": False, "hash_matches": False}
     hash_matches = (entry.hash or "") == receipt.entry_hash
     if not hash_matches:
-        return {"receipt_id": receipt.receipt_id, "status": "HASH_MISMATCH", "entry_found": True, "hash_matches": False}
-    return {"receipt_id": receipt.receipt_id, "status": "CONFIRMED", "entry_found": True, "hash_matches": True}
+        return {"receipt_id": receipt.receipt_id, "status": StorageReceiptStatus.HASH_MISMATCH, "entry_found": True, "hash_matches": False}
+    return {"receipt_id": receipt.receipt_id, "status": StorageReceiptStatus.CONFIRMED, "entry_found": True, "hash_matches": True}
 
 
 def store_external_receipt(

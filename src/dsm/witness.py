@@ -21,6 +21,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
+from .status import WitnessStatus
+
 logger = logging.getLogger(__name__)
 
 
@@ -181,7 +183,7 @@ class ShardWitness:
         if not shard_records:
             return {
                 "shard_id": shard_id,
-                "status": "NO_WITNESS",
+                "status": WitnessStatus.NO_WITNESS,
             }
 
         latest = shard_records[-1]
@@ -196,7 +198,7 @@ class ShardWitness:
         if current_count == latest["entry_count"]:
             state_matches = current_tip == latest["tip_hash"]
 
-        status = "OK" if (witness_valid and state_matches) else "DIVERGED"
+        status = WitnessStatus.OK if (witness_valid and state_matches) else WitnessStatus.DIVERGED
 
         return {
             "shard_id": shard_id,

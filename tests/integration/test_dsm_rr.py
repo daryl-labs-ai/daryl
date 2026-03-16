@@ -4,22 +4,36 @@
 Integration test for DSM Read Relay (DSM-RR).
 
 Example usage (with real data):
+    Set DSM_TEST_DATA_DIR to your data path, or use default tmp_path in pytest.
     from dsm.rr import DSMReadRelay
-    rr = DSMReadRelay(data_dir="/home/buraluxtr/clawd/data")
+    rr = DSMReadRelay(data_dir=data_dir)
     summary = rr.summary("clawdbot_sessions")
     print(summary)
 """
 
 import os
+import pytest
 import sys
 import tempfile
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from dsm.core.storage import Storage
 from dsm.core.models import Entry
 from dsm.rr import DSMReadRelay
+
+
+@pytest.fixture
+def data_dir(tmp_path):
+    """Use DSM_TEST_DATA_DIR for real data, else tmp_path."""
+    return os.environ.get("DSM_TEST_DATA_DIR", str(tmp_path))
+
+
+def test_read_relay_init(data_dir):
+    """DSMReadRelay initializes with data_dir."""
+    rr = DSMReadRelay(data_dir=data_dir)
+    assert rr is not None
 
 
 def test_read_recent_empty():
@@ -40,7 +54,7 @@ def test_read_recent_classic():
         for i in range(5):
             e = Entry(
                 id=str(uuid.uuid4()),
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 session_id="s1",
                 source="test",
                 content=f"content_{i}",
@@ -66,7 +80,7 @@ def test_summary():
         for i in range(6):
             e = Entry(
                 id=str(uuid.uuid4()),
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 session_id="s1" if i % 2 == 0 else "s2",
                 source="test",
                 content=f"c{i}",
