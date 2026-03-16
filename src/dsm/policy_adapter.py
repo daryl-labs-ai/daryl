@@ -119,12 +119,22 @@ class InkogAdapter(PolicyAdapter):
             return False
 
     def _read_source(self, source: str) -> dict:
-        """Read policy from file or JSON string."""
+        """Read policy from file or JSON string. Validates size and path."""
+        if len(source) > 64 * 1024:
+            raise ValueError("source exceeds 64 KB limit")
+        if ".." in Path(source).parts:
+            raise ValueError("path must not contain '..' in components")
         path = Path(source)
         if path.exists() and path.is_file():
-            with open(path, "r", encoding="utf-8") as f:
-                return json.load(f)
-        return json.loads(source)
+            content = path.read_text(encoding="utf-8")
+            if len(content) > 64 * 1024:
+                raise ValueError("file content exceeds 64 KB limit")
+            data = json.loads(content)
+        else:
+            data = json.loads(source)
+        if not isinstance(data, dict) or "engine" not in data or "rules" not in data:
+            raise ValueError("policy must be a dict with 'engine' and 'rules' keys")
+        return data
 
 
 class OPAAdapter(PolicyAdapter):

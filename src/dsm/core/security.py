@@ -584,7 +584,7 @@ class SecurityLayer:
                         "token_age_seconds": round(token_age, 1),
                     })
             except OSError as e:
-                logger.debug("write token cleanup failed: %s", e)
+                self.logger.debug("write token cleanup failed: %s", e)
 
         # Refuser l'écriture
         self._audit_event("protected_write_blocked", {

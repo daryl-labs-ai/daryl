@@ -18,8 +18,8 @@ from dataclasses import dataclass, field
 class Session:
     """Session DSM v2"""
     id: str                          # UUID de session
-    started_at: datetime               # ISO 8601 UTC
-    ended_at: Optional[datetime]      # Null si active
+    started_at: str                  # ISO 8601 UTC
+    ended_at: Optional[str]          # Null si active
     heartbeat_count: int            # Nombre de heartbeats
     entries_count: int              # Nombre d'entrées créées
     stability_score: float          # 0-1 (heuristique)
@@ -142,6 +142,7 @@ class SessionTracker:
         Returns:
             Session: Session mise à jour
         """
+        self.state = self._load_state()
         current_id = self.state.get("current_session")
         if not current_id:
             return None
