@@ -567,3 +567,73 @@ class Storage:
             result = self.reconcile_shard(shard_meta.shard_id)
             results.append({"shard_id": shard_meta.shard_id, **result})
         return results
+
+    def startup_check(self, full_verify: bool = False) -> dict:
+        """
+        Run integrity checks at startup (S-5 fix).
+
+        Always runs reconcile_all() — O(1) detection per shard, fixes K-2 metadata
+        divergence (crash recovery). Does NOT detect tampering.
+        Optionally runs full hash-chain verification if full_verify=True — re-hashes
+        every entry from segments (detects tampering). Reconcile ≠ verify: only
+        full verify detects modification of data.
+
+        Args:
+            full_verify: If True, verify every hash in every shard (O(n) per shard).
+                         If False (default), only reconcile metadata.
+
+        Returns:
+            dict with keys: reconciled, verified, status, shards_reconciled, shards_with_errors.
+        """
+        import logging
+
+        logger = logging.getLogger("dsm.core.storage")
+
+        result = {
+            "reconciled": [],
+            "verified": [],
+            "status": "OK",
+            "shards_reconciled": 0,
+            "shards_with_errors": 0,
+        }
+
+        try:
+            reconcile_results = self.reconcile_all()
+            result["reconciled"] = reconcile_results
+            result["shards_reconciled"] = sum(
+                1 for r in reconcile_results if r.get("reconciled")
+            )
+            if result["shards_reconciled"] > 0:
+                result["status"] = "RECONCILED"
+                logger.info(
+                    "startup_check: reconciled %d shard(s)", result["shards_reconciled"]
+                )
+        except Exception as e:
+            logger.error("startup_check: reconcile_all failed: %s", e)
+            result["status"] = "INTEGRITY_ERROR"
+
+        if full_verify:
+            try:
+                from ..verify import verify_all as _verify_all
+
+                verify_results = _verify_all(self)
+                result["verified"] = verify_results
+                errors = sum(
+                    1
+                    for v in verify_results
+                    if v.get("status") is not None
+                    and getattr(v.get("status"), "value", str(v.get("status"))) != "OK"
+                )
+                result["shards_with_errors"] = errors
+                if errors > 0:
+                    result["status"] = "INTEGRITY_ERROR"
+                    logger.warning(
+                        "startup_check: %d shard(s) with integrity errors", errors
+                    )
+                elif result["status"] != "RECONCILED":
+                    result["status"] = "OK"
+            except Exception as e:
+                logger.error("startup_check: verify_all failed: %s", e)
+                result["status"] = "INTEGRITY_ERROR"
+
+        return result

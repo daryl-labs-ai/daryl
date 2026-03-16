@@ -50,6 +50,13 @@ class DarylAgent:
     Use agent_id as session source; all methods map to existing DSM modules.
     """
 
+    _startup_cache: dict = {}  # {abs_data_dir: report_dict} — S-5 deduplication
+
+    @classmethod
+    def _reset_startup_cache(cls) -> None:
+        """Clear the startup check cache. Call in test fixtures to ensure isolation."""
+        cls._startup_cache = {}
+
     def __init__(
         self,
         agent_id: str,
@@ -59,11 +66,41 @@ class DarylAgent:
         witness_key: str = "",
         signing_dir: Optional[Union[str, bool]] = None,
         artifact_dir: Optional[Union[str, bool]] = None,
+        startup_verify: Union[bool, str] = "reconcile",
     ):
+        """
+        startup_verify: Integrity check at boot. Default "reconcile" fixes crash
+            inconsistencies only (fast, O(1) per shard). Use "full" to also detect
+            tampering (slower, O(n) per shard). Use "strict" for production: same
+            as "full" but raises RuntimeError on integrity errors. Note: "reconcile"
+            does NOT detect tampering. Use "full", "strict", or call agent.verify() for that.
+        """
         self.agent_id = agent_id
         self.data_dir = Path(data_dir)
         self.shard = shard
         self._storage = Storage(data_dir=str(self.data_dir))
+
+        self._startup_report = None
+        if startup_verify:
+            abs_dir = str(self.data_dir.resolve())
+            if abs_dir in DarylAgent._startup_cache:
+                self._startup_report = DarylAgent._startup_cache[abs_dir]
+            else:
+                full = startup_verify in ("full", "strict")
+                self._startup_report = self._storage.startup_check(full_verify=full)
+                DarylAgent._startup_cache[abs_dir] = self._startup_report
+                if self._startup_report["status"] == "INTEGRITY_ERROR":
+                    if startup_verify == "strict":
+                        raise RuntimeError(
+                            f"DarylAgent({agent_id}): integrity check failed: "
+                            f"{self._startup_report}"
+                        )
+                    logger.warning(
+                        "DarylAgent(%s): startup integrity check found errors: %s",
+                        agent_id,
+                        self._startup_report,
+                    )
+
         limits = SessionLimitsManager.agent_defaults(str(self.data_dir))
         self._graph = SessionGraph(storage=self._storage, limits_manager=limits)
         self._witness = (
@@ -88,6 +125,16 @@ class DarylAgent:
     @property
     def graph(self):
         return self._graph
+
+    @property
+    def startup_report(self) -> Optional[dict]:
+        """
+        Return the startup integrity check report, or None if check was skipped.
+
+        Note: 'reconcile' mode only detects crash inconsistencies, not tampering.
+        Use startup_verify='full' or call self.verify() for tamper detection.
+        """
+        return self._startup_report
 
     def start(self) -> Optional[Any]:
         try:

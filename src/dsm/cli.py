@@ -214,6 +214,36 @@ def _cmd_replay(args) -> None:
     print(f"Status: {status}")
 
 
+def _cmd_startup_check(args) -> int:
+    """dsm startup-check [--full] [--data-dir <path>]: run integrity reconciliation and optional full verify (S-5)."""
+    storage = _get_storage(getattr(args, "data_dir", None))
+    full = getattr(args, "full", False)
+
+    result = storage.startup_check(full_verify=full)
+
+    print(f"Status: {result['status']}")
+    print(f"Shards reconciled: {result['shards_reconciled']}")
+
+    if result.get("reconciled"):
+        for r in result["reconciled"]:
+            if r.get("reconciled"):
+                old_h = (r.get("old_hash") or "?")[:8]
+                new_h = (r.get("new_hash") or "?")[:8]
+                print(f"  ⚠ {r['shard_id']}: reconciled (old={old_h}… → new={new_h}…)")
+
+    if full and result.get("verified"):
+        print(f"Shards with errors: {result['shards_with_errors']}")
+        for v in result["verified"]:
+            status = str(v.get("status", "?"))
+            sid = v.get("shard_id", "?")
+            total = v.get("total_entries", 0)
+            verified = v.get("verified", 0)
+            sym = "✓" if status == "OK" else "✗"
+            print(f"  {sym} {sid}: {status} ({verified}/{total} verified)")
+
+    return 0 if result["status"] in ("OK", "RECONCILED") else 1
+
+
 def _cmd_inspect(args) -> None:
     """dsm inspect: number of shards, entries per shard, last update, recent sessions, recent actions."""
     storage = _get_storage(args.data_dir)
@@ -852,6 +882,12 @@ def main_dsm() -> None:
     p_replay.add_argument("--limit", type=int, default=None, help="Max entries to verify (default: all)")
     p_replay.add_argument("--data-dir", default=None, help="DSM data directory (default: data)")
     p_replay.set_defaults(func=_cmd_replay)
+
+    # dsm startup-check (S-5)
+    p_startup_check = subparsers.add_parser("startup-check", help="Run startup integrity check (reconcile + optional verify)")
+    p_startup_check.add_argument("--full", action="store_true", help="Also run full hash chain verification (slower)")
+    p_startup_check.add_argument("--data-dir", default=None, help="DSM data directory (default: data)")
+    p_startup_check.set_defaults(func=_cmd_startup_check)
 
     # dsm inspect
     p_inspect = subparsers.add_parser("inspect", help="Show shard counts, last update, recent sessions and actions")
