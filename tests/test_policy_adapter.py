@@ -3,7 +3,7 @@
 import json
 import os
 import tempfile
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import uuid4
 
 import pytest
@@ -38,7 +38,7 @@ def _make_entry(session_id, action_name=None, source="agent_1", shard="sessions"
         meta["source"] = source
     return Entry(
         id=str(uuid4()),
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
         session_id=session_id,
         source=source,
         content=f"action: {action_name or 'start'}",

@@ -6,7 +6,7 @@ Pytest fixtures for RR module tests. Uses temporary DSM storage only.
 import json
 import sys
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 import pytest
 
@@ -26,7 +26,7 @@ def _make_entry(
 ) -> Entry:
     return Entry(
         id=str(uuid.uuid4()),
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
         session_id=session_id,
         source=source,
         content=content,

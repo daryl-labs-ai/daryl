@@ -10,7 +10,7 @@ import subprocess
 import json
 import time
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 
 # Ajouter le parent au PYTHONPATH
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -197,7 +197,7 @@ def run_all_tests():
     print("\n" + "=" * 70)
     print("📋 DSM V2 STABILITY VALIDATION REPORT")
     print("=" * 70)
-    print(f"\nTimestamp: {datetime.utcnow().isoformat()}")
+    print(f"\nTimestamp: {datetime.now(timezone.utc).isoformat()}")
     print(f"Tests exécutés: {len(all_results)}")
     
     # Tableau de synthèse
@@ -290,7 +290,7 @@ def run_all_tests():
     
     # Rapport final JSON
     final_report = {
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "tests_executed": len(all_results),
         "tests_passed": len(passed_tests),
         "tests_failed": len(failed_tests),

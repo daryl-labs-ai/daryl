@@ -1,6 +1,6 @@
 """Tests for Cross-Agent Trust Receipts (P6) — dsm.exchange."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import uuid4
 
 import pytest
@@ -20,7 +20,7 @@ from dsm.exchange import (
 def _make_entry(shard: str, content: str = "work"):
     return Entry(
         id=str(uuid4()),
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
         session_id="test",
         source="test",
         content=content,

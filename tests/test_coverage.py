@@ -1,7 +1,7 @@
 """Tests for dsm.coverage — Memory Coverage Check (P2b)."""
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from dsm.core.models import Entry
 from dsm.core.storage import Storage
@@ -12,7 +12,7 @@ def _make_entry(storage, shard_id, content="test", event_type="action"):
     """Helper: append an entry and return it."""
     entry = Entry(
         id=str(uuid.uuid4()),
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
         session_id="sess-1",
         source="test",
         content=content,

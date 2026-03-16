@@ -1,7 +1,7 @@
 """Tests for Policy Audit module."""
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import uuid4
 
 from dsm.audit import Policy, audit_all, audit_shard
@@ -200,7 +200,7 @@ def test_audit_all(tmp_path):
     for shard in ["sessions", "custom"]:
         entry = Entry(
             id=str(uuid4()),
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             session_id="test",
             source="test",
             content="{}",

@@ -1,7 +1,7 @@
 """Tests for Shard Sealing (P5)."""
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import uuid4
 
 import pytest
@@ -21,7 +21,7 @@ from dsm.seal import (
 def _make_entry(shard: str, content: str = "x"):
     return Entry(
         id=str(uuid4()),
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
         session_id="seal_test",
         source="test",
         content=content,

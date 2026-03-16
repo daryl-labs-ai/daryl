@@ -5,7 +5,7 @@ If a test fails, document the issue instead of changing the kernel.
 """
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -18,7 +18,7 @@ from dsm.verify import verify_shard
 def _make_entry(content: str, shard: str = "default") -> Entry:
     return Entry(
         id=str(uuid.uuid4()),
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
         session_id="edge_test",
         source="test",
         content=content,

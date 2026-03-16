@@ -6,7 +6,7 @@ Uses only public Storage API and dsm.verify; does not modify core.
 
 import json
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
 
@@ -18,7 +18,7 @@ from dsm import verify
 def _make_entry(content: str, shard: str) -> Entry:
     return Entry(
         id=str(uuid.uuid4()),
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
         session_id="test",
         source="test",
         content=content,

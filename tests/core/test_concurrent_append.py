@@ -11,7 +11,7 @@ threads drive appends (serialized), the final count and hash chain are correct.
 
 import threading
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from dsm.core.storage import Storage
 from dsm.core.models import Entry
@@ -24,7 +24,7 @@ _append_lock = threading.Lock()
 def _make_entry(content: str, shard: str = "concurrent") -> Entry:
     return Entry(
         id=str(uuid.uuid4()),
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
         session_id="thread_test",
         source="test",
         content=content,

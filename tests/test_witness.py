@@ -1,7 +1,7 @@
 """Tests for External Witness module."""
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import uuid4
 
 from dsm.core.models import Entry
@@ -12,7 +12,7 @@ from dsm.witness import ShardWitness
 def _make_entry(shard, content="test"):
     return Entry(
         id=str(uuid4()),
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
         session_id="witness_test",
         source="test",
         content=content,

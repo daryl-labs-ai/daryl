@@ -4,7 +4,7 @@ import json
 import os
 import tempfile
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
@@ -16,7 +16,7 @@ from dsm.session.session_index import SessionIndex
 
 def _make_entry(session_id, action_name=None, source="test_agent", ts=None, success=True):
     """Create a test entry."""
-    ts = ts or datetime.utcnow()
+    ts = ts or datetime.now(timezone.utc)
     meta = {"event_type": "tool_call"}
     if action_name:
         meta["action_name"] = action_name

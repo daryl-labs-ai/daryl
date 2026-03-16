@@ -8,7 +8,7 @@ in order and read back correctly from shards/<shard_id>/*.jsonl segments.
 """
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from dsm.core.storage import Storage
 from dsm.core.models import Entry
@@ -17,7 +17,7 @@ from dsm.core.models import Entry
 def _make_entry(content: str, shard: str = "test") -> Entry:
     return Entry(
         id=str(uuid.uuid4()),
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
         session_id="test",
         source="test",
         content=content,
