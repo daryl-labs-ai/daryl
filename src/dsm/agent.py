@@ -11,6 +11,13 @@ from typing import Any, List, Optional, Set
 
 from .anchor import AnchorLog, pre_commit, post_commit, capture_environment, verify_all_commitments
 from .audit import Policy, audit_all, audit_shard
+from .policy_adapter import (
+    AuditReport,
+    generate_audit_report,
+    list_adapters,
+    load_and_audit,
+    verify_report,
+)
 from .coverage import check_coverage
 from .core.storage import Storage
 from .receipts import make_receipt
@@ -240,6 +247,38 @@ class DarylAgent:
             end_time=end_time,
             limit=limit,
         )
+
+    def audit_report(self, policy_source: str, adapter_name: Optional[str] = None) -> dict:
+        """Generate audit report using external policy via adapter. Returns report dict."""
+        report = load_and_audit(
+            self._storage,
+            agent_id=self.agent_id,
+            policy_source=policy_source,
+            adapter_name=adapter_name,
+            shard_ids=[self.shard],
+        )
+        return report.to_dict()
+
+    def export_audit(
+        self, policy_source: str, output_path: str, adapter_name: Optional[str] = None
+    ) -> str:
+        """Generate and export audit report to JSON file. Returns output path."""
+        report = load_and_audit(
+            self._storage,
+            agent_id=self.agent_id,
+            policy_source=policy_source,
+            adapter_name=adapter_name,
+            shard_ids=[self.shard],
+        )
+        with open(output_path, "w", encoding="utf-8") as f:
+            f.write(report.to_json())
+        return output_path
+
+    def verify_audit_report(self, report_path: str) -> dict:
+        """Verify an audit report's integrity. Returns {report_id, status}."""
+        with open(report_path, "r", encoding="utf-8") as f:
+            report = AuditReport.from_json(f.read())
+        return verify_report(report)
 
     def capture_env(self, source: str, raw_data, headers: Optional[dict] = None) -> dict:
         """Capture environment fingerprint for external data."""

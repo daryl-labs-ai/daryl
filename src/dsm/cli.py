@@ -454,6 +454,68 @@ def _cmd_session_list(args) -> int:
     return 0
 
 
+def _cmd_audit_report(args) -> int:
+    """dsm audit-report: generate audit report from external policy."""
+    from .policy_adapter import load_and_audit
+    data_dir = getattr(args, "data_dir", None) or "data"
+    storage = _get_storage(data_dir)
+    shard_ids = [args.shard] if getattr(args, "shard", None) else None
+    try:
+        report = load_and_audit(
+            storage,
+            getattr(args, "agent_id", "default"),
+            args.policy_source,
+            adapter_name=getattr(args, "adapter", None),
+            shard_ids=shard_ids,
+        )
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+    summary = report.summary
+    status_icon = "✓" if summary["status"] == "COMPLIANT" else "✗"
+    print(f"{status_icon} {summary['status']} — {summary['shards_audited']} shards, "
+          f"{summary['total_entries']} entries, {summary['total_violations']} violations")
+    if summary["total_violations"] > 0:
+        for sr in report.shard_results:
+            for v in sr.get("violations", []):
+                print(f"  ✗ [{v['rule']}] {v['detail']}")
+    return 0
+
+
+def _cmd_audit_export(args) -> int:
+    """dsm audit-export: export audit report to JSON file."""
+    from .policy_adapter import load_and_audit
+    data_dir = getattr(args, "data_dir", None) or "data"
+    storage = _get_storage(data_dir)
+    shard_ids = [args.shard] if getattr(args, "shard", None) else None
+    try:
+        report = load_and_audit(
+            storage,
+            getattr(args, "agent_id", "default"),
+            args.policy_source,
+            adapter_name=getattr(args, "adapter", None),
+            shard_ids=shard_ids,
+        )
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+    with open(args.output, "w", encoding="utf-8") as f:
+        f.write(report.to_json())
+    print(f"✓ Report exported to {args.output} ({report.summary['status']})")
+    return 0
+
+
+def _cmd_audit_verify(args) -> int:
+    """dsm audit-verify: verify audit report integrity."""
+    from .policy_adapter import AuditReport, verify_report
+    with open(args.report_path, "r", encoding="utf-8") as f:
+        report = AuditReport.from_json(f.read())
+    result = verify_report(report)
+    icon = "✓" if result["status"] == "INTACT" else "✗"
+    print(f"{icon} Report {result['report_id'][:12]}... is {result['status']}")
+    return 0 if result["status"] == "INTACT" else 1
+
+
 def _cmd_seal(args) -> int:
     """dsm seal --data-dir <path> --shard <id> [--archive <path>]: seal shard, optionally archive. Exit 0 on success."""
     data_dir = getattr(args, "data_dir", None) or "data"
@@ -819,6 +881,30 @@ def main_dsm() -> None:
     p_session_list.add_argument("--limit", type=int, default=20, help="Max sessions to list")
     p_session_list.add_argument("--shard", default="sessions", help="Shard ID")
     p_session_list.set_defaults(func=_cmd_session_list)
+
+    # dsm audit-report (P8)
+    p_audit_report = subparsers.add_parser("audit-report", help="Generate audit report from external policy")
+    p_audit_report.add_argument("policy_source", help="Path to policy file or inline JSON")
+    p_audit_report.add_argument("--data-dir", default=None, help="DSM data directory (default: data)")
+    p_audit_report.add_argument("--adapter", default=None, help="Adapter name (auto-detect if omitted)")
+    p_audit_report.add_argument("--shard", default=None, help="Specific shard (default: all)")
+    p_audit_report.add_argument("--agent-id", default="default", help="Agent ID for report")
+    p_audit_report.set_defaults(func=_cmd_audit_report)
+
+    # dsm audit-export (P8)
+    p_audit_export = subparsers.add_parser("audit-export", help="Export audit report to JSON file")
+    p_audit_export.add_argument("policy_source", help="Path to policy file")
+    p_audit_export.add_argument("-o", "--output", required=True, help="Output file path")
+    p_audit_export.add_argument("--data-dir", default=None, help="DSM data directory (default: data)")
+    p_audit_export.add_argument("--adapter", default=None, help="Adapter name")
+    p_audit_export.add_argument("--shard", default=None, help="Specific shard (default: all)")
+    p_audit_export.add_argument("--agent-id", default="default", help="Agent ID for report")
+    p_audit_export.set_defaults(func=_cmd_audit_export)
+
+    # dsm audit-verify (P8)
+    p_audit_verify = subparsers.add_parser("audit-verify", help="Verify audit report integrity")
+    p_audit_verify.add_argument("report_path", help="Path to audit report JSON")
+    p_audit_verify.set_defaults(func=_cmd_audit_verify)
 
     # dsm anchor-verify
     p_anchor = subparsers.add_parser("anchor-verify", help="Verify pre/post commitment pairs")
