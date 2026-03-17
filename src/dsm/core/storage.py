@@ -19,7 +19,6 @@ Append/Read/List with JSONL format (append-only) - Monolithic Mode
 """
 
 import contextlib
-import fcntl
 import hashlib
 import json
 import os
@@ -28,6 +27,7 @@ from pathlib import Path
 from typing import List, Optional
 from datetime import datetime, timezone
 
+from ._compat import portable_lock
 from .models import Entry, ShardMeta
 
 # Import du gestionnaire de segmentation
@@ -66,20 +66,16 @@ class Storage:
     @contextlib.contextmanager
     def _shard_lock(self, shard_id: str):
         """
-        Acquire an exclusive POSIX lock for the entire shard operation.
+        Acquire an exclusive portable lock for the entire shard operation.
 
         Uses a dedicated lockfile (integrity/{shard_id}.lock) to serialize
         all append operations on this shard — including metadata updates.
         This is the fix for K-2 (crash window) and K-3 (metadata race).
+        Cross-platform: works on Windows and POSIX (W-7 fix).
         """
         lock_path = self.integrity_dir / f"{shard_id}.lock"
-        lock_fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR)
-        try:
-            fcntl.flock(lock_fd, fcntl.LOCK_EX)
+        with portable_lock(lock_path):
             yield
-        finally:
-            fcntl.flock(lock_fd, fcntl.LOCK_UN)
-            os.close(lock_fd)
 
     def append(self, entry: Entry) -> Entry:
         """

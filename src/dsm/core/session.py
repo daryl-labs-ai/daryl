@@ -5,7 +5,6 @@ DSM v2 - Session Tracking
 session_id, provenance, heartbeat tracking
 """
 
-import fcntl
 import json
 import os
 import uuid
@@ -13,6 +12,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional, List
 from dataclasses import dataclass, field
+
+from ._compat import portable_lock_fd
 
 @dataclass
 class Session:
@@ -41,27 +42,21 @@ class SessionTracker:
         self.state = self._load_state()
 
     def _load_state(self) -> dict:
-        """Charge l'état des sessions (with shared lock)."""
+        """Charge l'état des sessions (with portable lock — W-7 fix)."""
         if not self.state_file.exists():
             return {"sessions": [], "current_session": None}
         with open(self.state_file, "r", encoding="utf-8") as f:
-            fcntl.flock(f.fileno(), fcntl.LOCK_SH)
-            try:
+            with portable_lock_fd(f):
                 return json.load(f)
-            finally:
-                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
 
     def _save_state(self):
-        """Sauvegarde l'état (with exclusive lock)."""
+        """Sauvegarde l'état (with portable lock — W-7 fix)."""
         self.state_file.parent.mkdir(parents=True, exist_ok=True)
         with open(self.state_file, "w", encoding="utf-8") as f:
-            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
-            try:
+            with portable_lock_fd(f):
                 json.dump(self.state, f, indent=2)
                 f.flush()
                 os.fsync(f.fileno())
-            finally:
-                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
 
     def start_session(self) -> Session:
         """

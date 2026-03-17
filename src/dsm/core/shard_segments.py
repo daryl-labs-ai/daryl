@@ -19,12 +19,13 @@ Gestionnaire de segmentation des shards DSM pour éviter les fichiers trop volum
 Uses segment_meta.json per shard family for O(1) active segment resolution (no line counting).
 """
 
-import fcntl
 import json
 import logging
 import os
 from pathlib import Path
 from typing import Any, Dict, Generator, List, Optional
+
+from ._compat import portable_lock_fd
 
 logger = logging.getLogger(__name__)
 
@@ -110,33 +111,27 @@ class ShardSegmentManager:
         return family_dir / SEGMENT_META_FILENAME
 
     def _read_segment_meta(self, family_dir: Path) -> Optional[Dict[str, Any]]:
-        """Read segment_meta.json with shared lock."""
+        """Read segment_meta.json with portable lock (W-7 fix)."""
         meta_path = self._segment_meta_path(family_dir)
         if not meta_path.exists():
             return None
         try:
             with open(meta_path, "r", encoding="utf-8") as f:
-                fcntl.flock(f.fileno(), fcntl.LOCK_SH)
-                try:
+                with portable_lock_fd(f):
                     return json.load(f)
-                finally:
-                    fcntl.flock(f.fileno(), fcntl.LOCK_UN)
         except Exception as e:
             logger.debug("segment meta read failed: %s", e)
             return None
 
     def _write_segment_meta_atomic(self, family_dir: Path, data: Dict[str, Any]) -> None:
-        """Write segment_meta.json atomically with exclusive lock."""
+        """Write segment_meta.json atomically with portable lock (W-7 fix)."""
         meta_path = self._segment_meta_path(family_dir)
         tmp_path = meta_path.with_suffix(".json.tmp")
         with open(tmp_path, "w", encoding="utf-8") as f:
-            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
-            try:
+            with portable_lock_fd(f):
                 json.dump(data, f, indent=2, ensure_ascii=False)
                 f.flush()
                 os.fsync(f.fileno())
-            finally:
-                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
         os.replace(tmp_path, meta_path)
 
     def _get_active_segment_path(self, family_dir: Path) -> Path:
