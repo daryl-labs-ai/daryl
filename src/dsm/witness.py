@@ -17,6 +17,7 @@ an external key).
 import hashlib
 import json
 import logging
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
@@ -60,8 +61,23 @@ class ShardWitness:
     def _compute_witness_hash(
         self, shard_id: str, timestamp: str, entry_count: int, tip_hash: str
     ) -> str:
-        """Compute SHA-256 witness hash including the witness key."""
-        payload = f"{shard_id}:{timestamp}:{entry_count}:{tip_hash}:{self.witness_key}"
+        """Compute SHA-256 witness hash including the witness key.
+
+        Uses canonical JSON serialization (sorted keys, compact separators)
+        to prevent field-boundary collisions. Aligned with seal.py, exchange.py,
+        and anchor.py hashing patterns.
+        """
+        payload = json.dumps(
+            {
+                "shard_id": shard_id,
+                "timestamp": timestamp,
+                "entry_count": entry_count,
+                "tip_hash": tip_hash,
+                "witness_key": self.witness_key,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
     def capture(self, storage, shard_id: str) -> dict:
@@ -86,7 +102,7 @@ class ShardWitness:
 
         tip_hash = all_entries[0].hash if all_entries[0].hash else "no_hash"
 
-        timestamp = datetime.now(timezone.utc).isoformat() + "Z"
+        timestamp = datetime.now(timezone.utc).isoformat()
         witness_id = str(uuid4())
 
         witness_hash = self._compute_witness_hash(
@@ -104,7 +120,11 @@ class ShardWitness:
         }
 
         with open(self.log_file, "a", encoding="utf-8") as f:
-            f.write(json.dumps(record) + "\n")
+            f.write(
+                json.dumps(record, sort_keys=True, ensure_ascii=False) + "\n"
+            )
+            f.flush()
+            os.fsync(f.fileno())
 
         logger.info(
             "Witness captured: shard=%s entries=%d tip=%s",
