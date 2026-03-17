@@ -16,7 +16,7 @@ Created by <strong>Mohamed Azizi</strong> · <a href="https://www.daryl.md">dary
 <img src="https://github.com/daryl-labs-ai/daryl/actions/workflows/ci.yml/badge.svg">
 <img src="https://img.shields.io/badge/python-3.10%2B-blue">
 <img src="https://img.shields.io/badge/license-MIT-green">
-<img src="https://img.shields.io/badge/tests-281%20passing-brightgreen">
+<img src="https://img.shields.io/badge/tests-376%20passing-brightgreen">
 <img src="https://img.shields.io/badge/kernel-frozen%20%C2%B7%20stable-blueviolet">
 </p>
 
@@ -128,7 +128,7 @@ RR (Read Relay)       ← query: recent entries, summaries, filters
 DSM Core              ← storage: append-only, hash-chained, frozen
 ```
 
-The kernel (`src/dsm/core/`) is **frozen since March 2026** — battle-tested, no modifications. Everything above it (P3–P10: SDK facade, pre-commitment, shard sealing, cross-agent receipts, session index, policy adapters, Ed25519 signing, artifact store, causal ordering) uses the public API without touching the internals.
+The kernel (`src/dsm/core/`) is **frozen since March 2026** — battle-tested, minimal modifications (K-1/K-2/K-3 crash safety, W-7 portable locking). Everything above it (P3–P11: SDK facade, pre-commitment, shard sealing, cross-agent receipts, session index, policy adapters, Ed25519 signing, artifact store, causal ordering, compute attestation) uses the public API without touching the internals. Security audit fixes (S-1 through S-5) harden encryption, key management, and startup verification.
 
 For the full architecture: [ARCHITECTURE.md](ARCHITECTURE.md)
 
@@ -144,7 +144,7 @@ pip install -e .
 
 ```bash
 pip install -e .[dev]
-python -m pytest tests/ -v   # 270 tests, 0 failures
+python -m pytest tests/ -v   # 376 tests, 0 failures
 ```
 
 ## Read agent memory
@@ -196,7 +196,7 @@ src/dsm/
   attestation.py # Compute attestation — input-output binding (P11)
   status.py     # Status enums (VerifyStatus, ReceiptStatus, etc.)
 
-tests/          # 281 tests — core, session, rr, ans, P3-P11, security, integration
+tests/          # 376 tests — core, session, rr, ans, P3-P11, security, integration
 docs/           # Architecture, known issues, roadmap
 ```
 
@@ -205,8 +205,8 @@ docs/           # Architecture, known issues, roadmap
 DSM is an **event log**, not a database.
 
 - **No semantic search** — it stores and verifies, it doesn't understand. Use a vector DB alongside it for retrieval.
-- **Single writer per shard** — concurrent writes to the same shard from multiple threads can corrupt metadata ([K-1](docs/KNOWN_ISSUES.md)). Use one writer per shard, or serialize at the application level.
-- **Linux/macOS only** — the kernel uses `fcntl` for file locking, which is not available on Windows.
+- **Single writer per shard** — concurrent writes are serialized per shard via lockfile (fixed in v0.7.0, see [K-1](docs/KNOWN_ISSUES.md)). Multi-process writes to the same shard are safe; multi-shard parallelism is native.
+- **Cross-platform** — v0.7.0 uses `filelock` for portable locking (Linux, macOS, Windows).
 
 These are architectural choices, not bugs. DSM does one thing — provable, replayable agent memory — and does it correctly.
 
