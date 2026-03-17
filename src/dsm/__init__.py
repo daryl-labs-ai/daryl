@@ -22,7 +22,10 @@ from .attestation import (
     sign_attestation,
 )
 
+__version__ = "0.7.0"
+
 __all__ = [
+    "__version__",
     "Storage",
     "Entry",
     "ShardMeta",

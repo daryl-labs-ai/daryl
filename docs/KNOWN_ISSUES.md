@@ -1,5 +1,9 @@
 # Known Issues
 
+> **Note (v0.7.0):** Issues K-1, K-2, and K-3 have been resolved. See commits for details.
+> S-1 (seed encryption), S-2 (key rotation), S-3 (witness hash), S-5 (startup check),
+> and W-7 (Windows compatibility) have also been fixed.
+
 ## K-1: Storage.append() is not fully thread-safe
 
 **Status**: Fixed in v0.6.1  
