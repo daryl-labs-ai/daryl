@@ -423,6 +423,24 @@ class DarylAgent:
             raise ValueError("Signing is disabled")
         return import_public_key(str(self.data_dir / "keys"), agent_id, public_key_hex)
 
+    def rotate_key(self, reason: str = "routine rotation") -> dict:
+        """Rotate this agent's Ed25519 keypair. Old key is retired, new key generated."""
+        if self._signing is None:
+            raise ValueError("Signing is disabled")
+        return self._signing.rotate_key(reason=reason)
+
+    def revoke_key(self, public_key: str, reason: str = "compromised") -> bool:
+        """Revoke a public key (own or imported). Returns True if found."""
+        if self._signing is None:
+            raise ValueError("Signing is disabled")
+        return self._signing.revoke_key(public_key, reason=reason)
+
+    def key_history(self) -> list:
+        """Return the key rotation history for this agent."""
+        if self._signing is None:
+            return []
+        return self._signing.key_history
+
     def store_artifact(
         self,
         raw_data: Union[str, bytes, dict],

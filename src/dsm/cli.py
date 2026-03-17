@@ -451,6 +451,84 @@ def _cmd_pubkey(args) -> int:
     return 0
 
 
+def _cmd_rotate_key(args) -> int:
+    """dsm rotate-key: rotate ed25519 keypair for an agent."""
+    from .signing import AgentSigning
+    data_dir = getattr(args, "data_dir", None) or "data"
+    keys_dir = getattr(args, "keys_dir", None) or str(Path(data_dir) / "keys")
+    agent_id = getattr(args, "agent_id", None) or "cli"
+    reason = getattr(args, "reason", None) or "routine rotation"
+    try:
+        sign = AgentSigning(keys_dir, agent_id)
+        if not sign.has_keypair():
+            print(f"No keypair for {agent_id}. Run 'dsm keygen --agent-id {agent_id}' first.", file=sys.stderr)
+            return 1
+        result = sign.rotate_key(reason=reason)
+        old = result["old_public_key"][:16] if result["old_public_key"] else "none"
+        new = result["new_public_key"][:16]
+        print(f"✓ Rotated key for {agent_id}. Old: {old}... → New: {new}...")
+        return 0
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+
+def _cmd_revoke_key(args) -> int:
+    """dsm revoke-key: revoke a compromised public key."""
+    from .signing import AgentSigning
+    data_dir = getattr(args, "data_dir", None) or "data"
+    keys_dir = getattr(args, "keys_dir", None) or str(Path(data_dir) / "keys")
+    agent_id = getattr(args, "agent_id", None) or "cli"
+    public_key = getattr(args, "public_key", None)
+    reason = getattr(args, "reason", None) or "compromised"
+    if not public_key:
+        print("Error: --public-key is required", file=sys.stderr)
+        return 1
+    try:
+        sign = AgentSigning(keys_dir, agent_id)
+        revoked = sign.revoke_key(public_key, reason=reason)
+        if revoked:
+            print(f"✓ Revoked key {public_key[:16]}... for {agent_id}. Reason: {reason}")
+            current = sign.get_public_key()
+            if current is None or current == public_key:
+                print(f"⚠ This was the active key. Run 'dsm keygen --agent-id {agent_id} --force' to generate a new one.", file=sys.stderr)
+        else:
+            print(f"Key {public_key[:16]}... not found in history for {agent_id}.", file=sys.stderr)
+            return 1
+        return 0
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+
+def _cmd_key_history(args) -> int:
+    """dsm key-history: show key rotation history for an agent."""
+    from .signing import AgentSigning
+    data_dir = getattr(args, "data_dir", None) or "data"
+    keys_dir = getattr(args, "keys_dir", None) or str(Path(data_dir) / "keys")
+    agent_id = getattr(args, "agent_id", None) or "cli"
+    try:
+        sign = AgentSigning(keys_dir, agent_id)
+        history = sign.key_history
+        if not history:
+            print(f"No key history for {agent_id}.")
+            return 0
+        for i, entry in enumerate(history):
+            status = entry.get("status", "unknown")
+            pub = entry["public_key"][:16]
+            created = entry.get("created_at", "?")
+            marker = "→" if status == "active" else " "
+            revoked_marker = " [REVOKED]" if status == "revoked" else ""
+            retired_marker = " [retired]" if status == "retired" else ""
+            print(f"  {marker} {pub}... ({status}) created={created}{revoked_marker}{retired_marker}")
+            if entry.get("reason"):
+                print(f"    reason: {entry['reason']}")
+        return 0
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+
 def _cmd_artifact_store(args) -> int:
     """dsm artifact-store: store artifact from stdin or file."""
     from .artifacts import ArtifactStore
@@ -973,6 +1051,30 @@ def main_dsm() -> None:
     p_pubkey.add_argument("--data-dir", default=None, help="DSM data directory (default: data)")
     p_pubkey.add_argument("--keys-dir", default=None, help="Keys directory (default: data-dir/keys)")
     p_pubkey.set_defaults(func=_cmd_pubkey)
+
+    # dsm rotate-key (S-2)
+    p_rotate = subparsers.add_parser("rotate-key", help="Rotate ed25519 keypair (retire old, generate new)")
+    p_rotate.add_argument("--agent-id", default="cli", help="Agent ID")
+    p_rotate.add_argument("--data-dir", default=None, help="DSM data directory (default: data)")
+    p_rotate.add_argument("--keys-dir", default=None, help="Keys directory (default: data-dir/keys)")
+    p_rotate.add_argument("--reason", default="routine rotation", help="Reason for rotation")
+    p_rotate.set_defaults(func=_cmd_rotate_key)
+
+    # dsm revoke-key (S-2)
+    p_revoke = subparsers.add_parser("revoke-key", help="Revoke a compromised public key")
+    p_revoke.add_argument("--agent-id", default="cli", help="Agent ID")
+    p_revoke.add_argument("--public-key", required=True, help="Hex public key to revoke")
+    p_revoke.add_argument("--data-dir", default=None, help="DSM data directory (default: data)")
+    p_revoke.add_argument("--keys-dir", default=None, help="Keys directory (default: data-dir/keys)")
+    p_revoke.add_argument("--reason", default="compromised", help="Reason for revocation")
+    p_revoke.set_defaults(func=_cmd_revoke_key)
+
+    # dsm key-history (S-2)
+    p_keyhistory = subparsers.add_parser("key-history", help="Show key rotation history")
+    p_keyhistory.add_argument("--agent-id", default="cli", help="Agent ID")
+    p_keyhistory.add_argument("--data-dir", default=None, help="DSM data directory (default: data)")
+    p_keyhistory.add_argument("--keys-dir", default=None, help="Keys directory (default: data-dir/keys)")
+    p_keyhistory.set_defaults(func=_cmd_key_history)
 
     # dsm artifact-store (P9)
     p_artifact_store = subparsers.add_parser("artifact-store", help="Store an artifact from stdin or file")

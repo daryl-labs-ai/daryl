@@ -6,8 +6,11 @@ a valid signature for an entry hash or receipt hash.
 Composes with hash chain (integrity) and P4 (intent).
 """
 
+import hashlib as _hashlib
+import json
 import logging
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -29,6 +32,216 @@ except ImportError:
 # S-1: 2026 comfort-level iterations; legacy KDF uses 100_000 for migration
 PBKDF2_ITERATIONS = 300_000
 
+_VALID_STATUSES = {"active", "retired", "revoked"}
+
+
+def _entry_hash(
+    public_key: str, created_at: str, status: str, prev_hash: Optional[str]
+) -> str:
+    """Compute SHA-256 hash for a key history entry (chain link).
+
+    Uses the initial status ('active') for hashing — status transitions
+    (retired, revoked) do NOT rehash, so the chain verifies creation order.
+    """
+    payload = f"{public_key}:{created_at}:{status}:{prev_hash}"
+    return _hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _is_valid_entry(entry: object) -> bool:
+    """Validate that a key history entry has the required fields and types."""
+    if not isinstance(entry, dict):
+        return False
+    if not isinstance(entry.get("public_key"), str):
+        return False
+    if entry.get("status") not in _VALID_STATUSES:
+        return False
+    if not isinstance(entry.get("created_at"), str):
+        return False
+    return True
+
+
+class KeyHistory:
+    """Manages the history of Ed25519 keys for an agent.
+
+    S-2 fix: tracks key rotation and revocation. Each agent can have
+    multiple keys over time. The history records which keys were active
+    when, and whether they were retired (replaced) or revoked (compromised).
+
+    The history is a hash-chained JSON array — each entry contains a hash
+    and prev_hash, making the creation sequence tamper-evident (same
+    principle as the DSM append-only log).
+    """
+
+    def __init__(self, keys_dir: Path, agent_id: str):
+        self._path = keys_dir / f"{agent_id}.keyhistory.json"
+        self._entries: list = []
+        self._load()
+
+    def _load(self) -> None:
+        """Load key history from disk, validating each entry's schema."""
+        if self._path.exists():
+            try:
+                data = json.loads(self._path.read_text(encoding="utf-8"))
+                if isinstance(data, list):
+                    valid = []
+                    for entry in data:
+                        if _is_valid_entry(entry):
+                            valid.append(entry)
+                        else:
+                            logger.warning(
+                                "Skipping invalid key history entry: %s",
+                                repr(entry)[:120],
+                            )
+                    self._entries = valid
+                else:
+                    logger.warning(
+                        "Key history at %s is not a list, starting fresh", self._path
+                    )
+                    self._entries = []
+            except (json.JSONDecodeError, OSError):
+                logger.warning(
+                    "Corrupted key history at %s, starting fresh", self._path
+                )
+                self._entries = []
+
+    def _save(self) -> None:
+        """Persist key history to disk (atomic write + chmod 0o600)."""
+        tmp = self._path.with_suffix(".json.tmp")
+        tmp.write_text(
+            json.dumps(self._entries, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        os.replace(tmp, self._path)
+        try:
+            os.chmod(self._path, 0o600)
+        except OSError:
+            pass
+
+    @property
+    def entries(self) -> list:
+        """Return a copy of all history entries."""
+        return list(self._entries)
+
+    def _last_hash(self) -> Optional[str]:
+        """Return the hash of the last entry, or None if empty."""
+        if self._entries:
+            return self._entries[-1].get("hash")
+        return None
+
+    def active_key(self) -> Optional[str]:
+        """Return the public_key hex of the current active key, or None."""
+        for entry in reversed(self._entries):
+            if entry.get("status") == "active":
+                return entry["public_key"]
+        return None
+
+    def record_key(
+        self, public_key: str, retire_reason: Optional[str] = None
+    ) -> None:
+        """Record a new active key. If another key was active, retire it.
+
+        Called by generate_keypair() and rotate_key().
+        Does NOT record if this public_key is already the active key.
+
+        Args:
+            public_key: Hex-encoded Ed25519 public key.
+            retire_reason: Reason for retiring the previous active key.
+                Defaults to "replaced by rotation".
+        """
+        if self.active_key() == public_key:
+            return
+        now = datetime.now(timezone.utc).isoformat()
+        for entry in self._entries:
+            if entry.get("status") == "active":
+                entry["status"] = "retired"
+                entry["retired_at"] = now
+                entry["reason"] = retire_reason or "replaced by rotation"
+        prev = self._last_hash()
+        h = _entry_hash(public_key, now, "active", prev)
+        self._entries.append({
+            "public_key": public_key,
+            "created_at": now,
+            "status": "active",
+            "retired_at": None,
+            "reason": None,
+            "prev_hash": prev,
+            "hash": h,
+        })
+        self._save()
+
+    def revoke_key(self, public_key: str, reason: str = "compromised") -> bool:
+        """Mark a key as revoked. Returns True if key was found."""
+        found = False
+        now = datetime.now(timezone.utc).isoformat()
+        for entry in self._entries:
+            if entry["public_key"] == public_key:
+                entry["status"] = "revoked"
+                entry["retired_at"] = now
+                entry["reason"] = reason
+                found = True
+        if found:
+            self._save()
+        return found
+
+    def is_revoked(self, public_key: str) -> bool:
+        """Check if a public key has been revoked."""
+        for entry in self._entries:
+            if (
+                entry["public_key"] == public_key
+                and entry.get("status") == "revoked"
+            ):
+                return True
+        return False
+
+    def all_valid_keys(self) -> list:
+        """Return public_key hex of all non-revoked keys (active + retired)."""
+        return [
+            e["public_key"]
+            for e in self._entries
+            if e.get("status") in ("active", "retired")
+        ]
+
+    def verify_chain(self) -> dict:
+        """Verify the hash chain integrity of the key history.
+
+        Returns:
+            {"valid": bool, "entries_checked": int, "error": str|None}
+        """
+        prev = None
+        for i, entry in enumerate(self._entries):
+            expected_hash = _entry_hash(
+                entry["public_key"],
+                entry["created_at"],
+                "active",
+                prev,
+            )
+            stored_hash = entry.get("hash")
+            if stored_hash is None:
+                prev = None
+                continue
+            if stored_hash != expected_hash:
+                return {
+                    "valid": False,
+                    "entries_checked": i + 1,
+                    "error": (
+                        f"Hash mismatch at entry {i}: expected "
+                        f"{expected_hash[:16]}..., got {stored_hash[:16]}..."
+                    ),
+                }
+            stored_prev = entry.get("prev_hash")
+            if stored_prev != prev:
+                return {
+                    "valid": False,
+                    "entries_checked": i + 1,
+                    "error": f"prev_hash mismatch at entry {i}",
+                }
+            prev = stored_hash
+        return {
+            "valid": True,
+            "entries_checked": len(self._entries),
+            "error": None,
+        }
+
 
 class AgentSigning:
     """Ed25519 signing for DSM entries and receipts.
@@ -46,6 +259,7 @@ class AgentSigning:
         self._pub_path = self.keys_dir / f"{agent_id}.pub"
         self._signing_key = None
         self._verify_key = None
+        self._key_history = KeyHistory(self.keys_dir, agent_id)
 
     def _get_or_create_salt(self) -> bytes:
         """Read or create the persistent random salt for this agent's seed encryption.
@@ -134,9 +348,14 @@ class AgentSigning:
             raise RuntimeError("PyNaCl is required for signing. Install with: pip install PyNaCl")
         if self._seed_path.exists() and self._pub_path.exists() and not force:
             self._load_keypair()
+            pub = self.get_public_key()
+            if pub:
+                self._key_history.record_key(
+                    pub, retire_reason=getattr(self, "_rotate_reason", None)
+                )
             return {
                 "agent_id": self.agent_id,
-                "public_key": self.get_public_key(),
+                "public_key": pub,
                 "created": False,
             }
         key = nacl.signing.SigningKey.generate()
@@ -159,9 +378,13 @@ class AgentSigning:
             logger.debug("keypair file not found: %s", e)
         self._signing_key = key
         self._verify_key = key.verify_key
+        pub_hex = pub.hex()
+        self._key_history.record_key(
+            pub_hex, retire_reason=getattr(self, "_rotate_reason", None)
+        )
         return {
             "agent_id": self.agent_id,
-            "public_key": pub.hex(),
+            "public_key": pub_hex,
             "created": True,
         }
 
@@ -253,6 +476,11 @@ class AgentSigning:
             self._load_keypair()
         if self._signing_key is None:
             raise ValueError("Failed to load keypair")
+        current_pub = (
+            bytes(self._verify_key).hex() if self._verify_key else None
+        )
+        if current_pub and self._key_history.is_revoked(current_pub):
+            raise ValueError("Active key is revoked; generate a new keypair")
         msg = entry_hash.encode("utf-8")
         sig = self._signing_key.sign(msg)
         return sig.signature.hex()
@@ -280,6 +508,91 @@ class AgentSigning:
             return {"valid": True, "public_key": public_key, "data_hash": data_hash}
         except Exception:
             return {"valid": False, "public_key": public_key, "data_hash": data_hash}
+
+    def rotate_key(self, reason: str = "routine rotation") -> dict:
+        """Generate a new keypair, retiring the old one.
+
+        S-2 fix: the old key is recorded as 'retired' in the key history.
+        Old signatures remain verifiable via verify_with_history().
+        The old seed is securely overwritten.
+
+        Args:
+            reason: Human-readable reason for rotation (stored in history).
+
+        Returns:
+            Dict with agent_id, old_public_key, new_public_key.
+        """
+        if not NACL_AVAILABLE:
+            raise RuntimeError("PyNaCl is required for signing")
+        old_pub = self.get_public_key()
+        self._rotate_reason = reason
+        result = self.generate_keypair(force=True)
+        self._rotate_reason = None
+        return {
+            "agent_id": self.agent_id,
+            "old_public_key": old_pub,
+            "new_public_key": result["public_key"],
+            "reason": reason,
+        }
+
+    def revoke_key(self, public_key: str, reason: str = "compromised") -> bool:
+        """Revoke a public key. Signatures with this key should no longer be trusted.
+
+        S-2 fix: marks the key as 'revoked' in the key history.
+        If the revoked key is the current active key, a new key must be generated
+        afterwards (this method does NOT auto-generate a replacement).
+
+        Returns:
+            True if the key was found and revoked, False if not found.
+        """
+        revoked = self._key_history.revoke_key(public_key, reason)
+        if revoked:
+            if (
+                self._verify_key is not None
+                and bytes(self._verify_key).hex() == public_key
+            ):
+                self._signing_key = None
+                self._verify_key = None
+            logger.info(
+                "Revoked key %s... for agent '%s': %s",
+                public_key[:16],
+                self.agent_id,
+                reason,
+            )
+        return revoked
+
+    def verify_with_history(
+        self, data_hash: str, signature: str, public_key: str
+    ) -> dict:
+        """Verify a signature, checking revocation status from key history.
+
+        Returns:
+            valid (crypto and not revoked), crypto_valid, revoked, key_status, ...
+        """
+        crypto_result = self.verify_signature(data_hash, signature, public_key)
+        revoked = self._key_history.is_revoked(public_key)
+        key_status = None
+        for entry in self._key_history.entries:
+            if entry["public_key"] == public_key:
+                key_status = entry.get("status")
+                break
+        return {
+            "valid": crypto_result["valid"] and not revoked,
+            "crypto_valid": crypto_result["valid"],
+            "revoked": revoked,
+            "key_status": key_status,
+            "public_key": public_key,
+            "data_hash": data_hash,
+        }
+
+    @property
+    def key_history(self) -> list:
+        """Return the key history entries (read-only copy)."""
+        return self._key_history.entries
+
+    def verify_key_history_chain(self) -> dict:
+        """Verify the hash chain integrity of this agent's key history."""
+        return self._key_history.verify_chain()
 
 
 def load_public_key(keys_dir: str, agent_id: str) -> Optional[str]:
