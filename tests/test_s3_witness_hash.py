@@ -130,7 +130,7 @@ class TestFsync:
         assert log_path.exists()
 
         content = log_path.read_text()
-        lines = [l for l in content.strip().split("\n") if l.strip()]
+        lines = [line for line in content.strip().split("\n") if line.strip()]
         assert len(lines) == 1
 
         record = json.loads(lines[0])
