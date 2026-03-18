@@ -40,6 +40,7 @@ from .verify import verify_all, verify_shard
 from .witness import ShardWitness
 from .signing import AgentSigning, import_public_key
 from .artifacts import ArtifactStore
+from .identity import IdentityGuard, IdentityManager, IdentityState, replay_identity
 
 logger = logging.getLogger("dsm.agent")
 
@@ -118,6 +119,12 @@ class DarylAgent:
         if artifact_dir is not False:
             path = artifact_dir if isinstance(artifact_dir, str) else str(self.data_dir / "artifacts")
             self._artifact_store = ArtifactStore(path)
+
+        _sid = self._graph.get_session_id() or "identity"
+        self._identity_manager = IdentityManager(
+            self._storage, self.agent_id, session_id=_sid
+        )
+        self._identity_guard = IdentityGuard(self._storage, self.agent_id)
 
     @property
     def storage(self):
@@ -440,6 +447,39 @@ class DarylAgent:
         if self._signing is None:
             return []
         return self._signing.key_history
+
+    def identity_genesis(
+        self,
+        purpose: str,
+        capabilities: Optional[List[str]] = None,
+        constraints: Optional[List[str]] = None,
+        created_by: str = "",
+        **extra: Any,
+    ) -> Entry:
+        """Create the genesis identity event for this agent."""
+        return self._identity_manager.create_genesis(
+            purpose=purpose,
+            capabilities=capabilities or [],
+            constraints=constraints or [],
+            created_by=created_by,
+            **extra,
+        )
+
+    def identity_event(
+        self, event_type: str, payload: dict, reason: Optional[str] = None
+    ) -> Entry:
+        """Append an identity evolution event."""
+        return self._identity_manager.append_event(
+            event_type, payload, reason=reason
+        )
+
+    def identity_replay(self, up_to: Optional[datetime] = None) -> IdentityState:
+        """Reconstruct this agent's identity from replay."""
+        return replay_identity(self.storage, self.agent_id, up_to=up_to)
+
+    def identity_check(self) -> dict:
+        """Run identity guard heuristic check."""
+        return self._identity_guard.check_continuity()
 
     def store_artifact(
         self,
