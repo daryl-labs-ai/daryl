@@ -164,7 +164,7 @@ class ANSEngine:
         notes = self._generate_insights()
 
         report = ANSReport(
-            generated_at=datetime.now(timezone.utc).isoformat() + "Z",
+            generated_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             top_skills=top_skills,
             weakest_skills=weakest_skills,
             transition_rankings=transition_rankings,
@@ -219,7 +219,7 @@ class ANSEngine:
 
         # Create extended report
         report = ANSReport(
-            generated_at=datetime.now(timezone.utc).isoformat() + "Z",
+            generated_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             top_skills=self.rank_top_skills(limit=5),
             weakest_skills=self.rank_weakest_skills(limit=5),
             transition_rankings=self.rank_transitions(limit=10),

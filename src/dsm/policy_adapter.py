@@ -360,7 +360,7 @@ def generate_audit_report(
         shard_results = audit_all(storage, policy)
 
     report_id = str(uuid4())
-    timestamp = datetime.now(timezone.utc).isoformat() + "Z"
+    timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
     payload = {
         "report_id": report_id,

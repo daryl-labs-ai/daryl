@@ -144,7 +144,7 @@ def issue_receipt(
     tip_entries = storage.read(shard_id, limit=1)
     shard_tip_hash = tip_entries[0].hash if tip_entries else ""
     shard_entry_count = len(entries)
-    timestamp = datetime.now(timezone.utc).isoformat() + "Z"
+    timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     receipt_id = str(uuid4())
     payload = {
         "receipt_id": receipt_id,

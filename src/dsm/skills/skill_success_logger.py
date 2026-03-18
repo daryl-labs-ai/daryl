@@ -73,7 +73,7 @@ class SkillSuccessLogger:
         """
         # Create success event
         event = {
-            "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
+            "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "event_type": "skill_success",
             "task_description": task_description,
             "skill_id": skill_id,

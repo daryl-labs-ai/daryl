@@ -113,7 +113,7 @@ class SessionIndex:
             "shard_id": self.shard_id,
             "entries_indexed": len(entries),
             "sessions_found": len(sessions),
-            "built_at": datetime.now(timezone.utc).isoformat() + "Z",
+            "built_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         }
         with open(self.index_dir / "meta.json", "w", encoding="utf-8") as f:
             json.dump(self._meta, f, ensure_ascii=False)
