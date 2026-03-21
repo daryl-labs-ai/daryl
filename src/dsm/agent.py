@@ -813,6 +813,23 @@ class DarylAgent:
         """Get recent entries from collective."""
         return self._collective.recent(limit=limit)
 
+    def collective_at_tier(
+        self, tier: int = 2, limit: int = 50,
+        max_tokens: Optional[int] = None,
+    ) -> List[dict]:
+        """Get recent collective entries at a specific resolution tier.
+
+        Tier 0 (~30 tokens/entry): hash, agent_id, timestamp
+        Tier 1 (~80 tokens/entry): + summary, action_type
+        Tier 2 (~300 tokens/entry): + detail, key_findings
+        Tier 3 (~500 tokens/entry): all fields
+
+        Auto-downgrades tier if max_tokens budget would be exceeded.
+        """
+        return self._collective.recent_at_tier(
+            tier=tier, limit=limit, max_tokens=max_tokens,
+        )
+
     def read_with_digests(self, since: datetime, max_tokens: int = 8000) -> Any:
         """Budget-aware context loading with rolling digests."""
         return self._digester.read_with_digests(since=since, max_tokens=max_tokens)

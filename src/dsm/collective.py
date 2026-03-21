@@ -52,6 +52,57 @@ class CollectiveEntry:
     agent_prev_hash: str       # per-agent chain in collective
     contributed_at: datetime
 
+    def at_tier(self, tier: int) -> dict:
+        """Return entry data at the requested resolution tier.
+
+        Tier 0 (~30 tokens):  hash, agent_id, timestamp only
+        Tier 1 (~80 tokens):  + summary, action_type
+        Tier 2 (~300 tokens): + detail, key_findings (full projection)
+        Tier 3 (full):        all fields including source/content hashes
+        """
+        if tier <= 0:
+            return {
+                "hash": self.hash,
+                "agent_id": self.agent_id,
+                "contributed_at": self.contributed_at.isoformat(),
+            }
+        if tier == 1:
+            return {
+                "hash": self.hash,
+                "agent_id": self.agent_id,
+                "contributed_at": self.contributed_at.isoformat(),
+                "summary": self.summary,
+                "action_type": self.action_type,
+            }
+        if tier == 2:
+            return {
+                "hash": self.hash,
+                "agent_id": self.agent_id,
+                "contributed_at": self.contributed_at.isoformat(),
+                "summary": self.summary,
+                "action_type": self.action_type,
+                "detail": self.detail,
+                "key_findings": list(self.key_findings),
+            }
+        # Tier 3+: everything
+        return {
+            "hash": self.hash,
+            "agent_id": self.agent_id,
+            "source_hash": self.source_hash,
+            "content_hash": self.content_hash,
+            "summary": self.summary,
+            "detail": self.detail,
+            "key_findings": list(self.key_findings),
+            "action_type": self.action_type,
+            "agent_prev_hash": self.agent_prev_hash,
+            "contributed_at": self.contributed_at.isoformat(),
+        }
+
+    @staticmethod
+    def tier_token_estimate(tier: int) -> int:
+        """Estimated token cost for a given tier."""
+        return {0: 30, 1: 80, 2: 300, 3: 500}.get(tier, 500)
+
 
 @dataclass(frozen=True)
 class DigestEntry:
@@ -163,6 +214,40 @@ class CollectiveShard:
         if entry_type:
             entries = [e for e in entries if e.action_type == entry_type]
         return entries[:limit]
+
+    def recent_at_tier(self, tier: int = 2, limit: int = 50,
+                       max_tokens: Optional[int] = None,
+                       agent_id: Optional[str] = None) -> List[dict]:
+        """Get recent entries at a specific resolution tier.
+
+        Automatically downgrades tier if budget is exceeded.
+
+        Args:
+            tier: Resolution level (0-3). Default 2 (detail + findings).
+            limit: Max entries to return.
+            max_tokens: Optional token budget. If set, auto-downgrades tier.
+            agent_id: Optional filter by agent.
+
+        Returns:
+            List of dicts at the requested (or auto-downgraded) tier.
+        """
+        entries = self.recent(limit=limit, agent_id=agent_id)
+        if not entries:
+            return []
+
+        # Auto-downgrade: if budget provided and would overflow, reduce tier
+        effective_tier = tier
+        if max_tokens is not None:
+            cost = len(entries) * CollectiveEntry.tier_token_estimate(tier)
+            while cost > max_tokens and effective_tier > 0:
+                effective_tier -= 1
+                cost = len(entries) * CollectiveEntry.tier_token_estimate(effective_tier)
+            # If still over budget at Tier 0, truncate entries
+            if cost > max_tokens:
+                per_entry = CollectiveEntry.tier_token_estimate(0)
+                entries = entries[:max(1, max_tokens // per_entry)]
+
+        return [e.at_tier(effective_tier) for e in entries]
 
     def since(self, entry_hash: str) -> List[CollectiveEntry]:
         """Get entries after a given hash (for incremental sync)."""
