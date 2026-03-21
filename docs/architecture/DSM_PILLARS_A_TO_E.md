@@ -951,53 +951,37 @@ This proposal was cross-checked against the actual repo contents (commit at time
 
 ---
 
-## Questions for Mohamed
+## Design Decisions (resolved)
 
 ### 1. IdentityRegistry placement
+**Decision:** Separate file `identity/identity_registry.py`.
+Single-agent identity (IdentityManager) and multi-agent governance (IdentityRegistry) are cleanly separated. Existing 20 tests untouched, 22 new tests added.
 
-`identity/` already exists with `IdentityManager`, `IdentityGuard`, `IdentityState`. This proposal adds `identity/identity_registry.py` inside the existing module. The alternative is extending `IdentityManager` directly with the new methods (register, resolve, revoke, trust_score).
-
-Do you prefer a new file in the module, or extending `IdentityManager`? New file keeps single-agent evolution and multi-agent governance cleanly separated. Extending `IdentityManager` keeps fewer files but mixes two scopes.
-
-### 2. Default RuleSet — frozen or configurable?
-
-`RuleSet.default()` ships with 5 rules (valid signature, min trust 0.75, rate limit 100/h, no chain breaks, no self-reference). These are reasonable defaults but opinionated.
-
-Should the default `RuleSet` be frozen (like the kernel), or should it be owner-configurable via Sovereignty? Frozen is simpler and safer. Configurable is more flexible but adds surface area.
+### 2. Default RuleSet — configurable
+**Decision:** `RuleSet.default()` provides sensible defaults; owners can build custom `RuleSet(rules=[...])`.
+Sovereignty policy controls fine-grained parameters (min_trust, allowed_types). Defaults are not frozen.
 
 ### 3. Dual hash chain in the collective
-
-Collective entries carry two chains: `prev_hash` (global, kernel-managed) + `agent_prev_hash` (per-agent, in metadata). This lets you verify the global collective integrity AND each agent's contribution chain independently.
-
-Are you comfortable with this dual-chain approach? The alternative is a single global chain (simpler but loses per-agent verifiability) or a Merkle tree (more powerful but significantly more complex).
+**Decision:** Dual chain — `prev_hash` (global, kernel) + `agent_prev_hash` (per-agent, metadata).
+Enables both global collective integrity verification and per-agent contribution chain audit independently.
 
 ### 4. Shard growth strategy
-
-The distiller compresses old entries into verifiable digests, and the lifecycle triggers auto-seal on configurable thresholds. But long-term, a very active collective could still accumulate significant data.
-
-What's your long-term vision for shard growth? Options: segment rotation at collective level (extend kernel concept), TTL-based expiry (new), external archival to S3/cold storage (new infra), or the current distill+seal is sufficient.
+**Decision:** Three complementary mechanisms.
+1. **Distiller** — compresses old entries into verifiable digests
+2. **Lifecycle** — automatic drain/seal/archive via configurable triggers (`FAMILY_RETENTION`)
+3. **Cold Storage** — `ColdStorage.export()` archives to filesystem with pluggable backends (S3-ready)
 
 ### 5. PR granularity
+**Decision:** Single coherent merge, atomic commits.
+Each commit in git history is independent and bisectable (A, B, C, D, E, integration, tests, docs).
 
-This can be implemented as:
+### 6. Tiered Resolution — Tier 2 optional
+**Decision:** Optional. Entries without `detail`/`key_findings` are admitted with empty defaults.
+The `Summarizer` (structural backend) can auto-generate missing fields. Lowers adoption barrier, quality improves progressively.
 
-- **5 PRs** — one per module (A, B, C, D, E), each mergeable independently
-- **2 PRs** — foundations (A+B) then features (C+D+E)
-- **1 PR** — everything at once
-
-What granularity do you prefer? 5 PRs gives the cleanest review and bisect history. 1 PR gives a single coherent snapshot.
-
-### 6. Tiered Resolution — Tier 2 content contract
-
-`push()` now accepts optional `detail` (~1000 chars) and `key_findings` (structured list). These are computed by the agent at push time. If not provided, they default to empty — backward compatible.
-
-Should Tier 2 fields be **required** for collective admission (the orchestrator rejects push without detail), or **optional** (projections without Tier 2 are admitted but produce lower-quality digests)? Optional is safer for adoption. Required produces richer digests but raises the bar for all agents.
-
-### 7. `end_session()` hook mechanism
-
-`end_session()` currently takes no parameters. This proposal adds two optional hooks (`sync_engine=None`, `lifecycle=None`). All existing callers keep working, but the signature changes.
-
-Is this acceptable, or should we use a different hook mechanism (e.g. event listeners, a separate `on_session_end()` method)? With only 2 hooks, optional parameters are simpler. If a 3rd hook appears later, we can refactor to an event system then.
+### 7. `end_session()` hooks — optional parameters
+**Decision:** `end_session(sync_engine=None, lifecycle=None)` — fully backward compatible.
+All existing callers keep working. If a 3rd hook is needed, refactor to an event system then.
 
 ---
 
