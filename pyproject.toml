@@ -35,3 +35,40 @@ lint.ignore = [
     "F841",   # unused variable
     "E402",   # module import not at top
 ]
+
+[tool.coverage.run]
+source = ["src/dsm"]
+omit = [
+    "src/dsm/cli.py",
+    "src/dsm/__main__.py",
+    "src/dsm/core/runtime.py",
+    "src/dsm/core/session.py",
+    "src/dsm/core/signing.py",
+    "src/dsm/core/tracing.py",
+    "src/dsm/core/drift_metrics.py",
+    "src/dsm/security.py",
+    "src/dsm/skills/cli.py",
+    "src/dsm/skills/skill_graph.py",
+    "src/dsm/skills/skill_success_logger.py",
+    "src/dsm/skills/skill_usage_logger.py",
+    "src/dsm/skills/success_analyzer.py",
+    "src/dsm/skills/ingestor.py",
+    "src/dsm/skills/anthropic_parser.py",
+    "src/dsm/ans/ans_test.py",
+    "src/dsm/ans/cli.py",
+    "src/dsm/block_layer/benchmark.py",
+    "src/dsm/moltbook_home_client.py",
+    "src/dsm/moltbook_home_normalizer.py",
+    "src/dsm/moltbook/__init__.py",
+    "src/dsm/storage/__init__.py",
+    "src/dsm/rr/context/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__",
+    "raise NotImplementedError",
+]
+show_missing = true
+fail_under = 80
