@@ -33,6 +33,8 @@ from .collective import (
 )
 from .lifecycle import ShardLifecycle, ShardState, LifecycleResult, VerifyResult as LifecycleVerifyResult
 from .shard_families import ShardFamily, classify_shard
+from .cold_storage import ColdStorage, LocalBackend, ArchiveResult
+from .summarizer import Summarizer, StructuralSummarizer, SummaryResult
 
 __version__ = "0.8.0"
 
@@ -76,4 +78,12 @@ __all__ = [
     # Cross-cutting
     "ShardFamily",
     "classify_shard",
+    # Cold Storage
+    "ColdStorage",
+    "LocalBackend",
+    "ArchiveResult",
+    # Summarizer
+    "Summarizer",
+    "StructuralSummarizer",
+    "SummaryResult",
 ]
