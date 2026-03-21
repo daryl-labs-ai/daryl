@@ -1,6 +1,6 @@
 # Daryl Architecture
 
-> **Version:** 0.8.0 · **Kernel:** frozen since March 2026 · **Tests:** 739 passing
+> **Version:** 0.8.0 · **Kernel:** frozen since March 2026 · **Tests:** 769 passing
 
 This document describes the architecture of Daryl (DSM). The **kernel is frozen** — see [docs/architecture/DSM_KERNEL_FREEZE_2026_03.md](docs/architecture/DSM_KERNEL_FREEZE_2026_03.md). All v0.8.0 additions (pillars A→E) are above the freeze line.
 
@@ -23,6 +23,9 @@ DarylAgent facade           ← SDK: 15 facade methods + 7 direct-access propert
 │     ShardSyncEngine     collective.py                   │
 │     RollingDigester     collective.py                   │
 │  E  ShardLifecycle      lifecycle.py                    │
+│                                                         │
+│  Parallel Lanes:                                        │
+│     LaneGroup           lanes.py                        │
 │                                                         │
 │  Cross-cutting:                                         │
 │     ShardFamilies       shard_families.py               │
@@ -142,9 +145,21 @@ State machine: `active → draining → sealed → archived`. Auto-drain/seal on
 - **Spot-check:** O(1) verify (first + last hash). Full replay on explicit audit.
 - **Tests:** 25
 
+### Parallel Lanes (`lanes.py`)
+
+Scalable multi-agent writes: each agent writes to its own lane shard (`collective_lane_{agent_id}`), eliminating FileLock contention. Cross-lane reads merge all lanes into a unified view sorted by time.
+
+- **Shards:** `collective_lane_{agent_id}`, `collective_merges`
+- **Key classes:** `LaneGroup`, `LaneTip`, `MergeEntry`, `LaneWriteResult`
+- **Write path:** per-agent lane → zero contention (N agents = N independent locks)
+- **Read path:** cross-lane merge → sorted by timestamp → tiered resolution + budget
+- **Merge entries:** periodic snapshots referencing all lane tips with SHA-256 merge hash
+- **Scaling:** 2.5x at 3 agents → 8.4x at 10 → 42x at 50 → 84x at 100
+- **Tests:** 30
+
 ### Integration (`agent.py`)
 
-`DarylAgent` exposes A→E through 15 facade methods and 7 direct-access properties. `end(sync=True)` triggers auto-sync + lifecycle triggers on session end.
+`DarylAgent` exposes A→E + lanes through 21 facade methods and 8 direct-access properties. `end(sync=True)` triggers auto-sync + lifecycle triggers on session end.
 
 - **Tests:** 31 (facade + direct access + end-to-end)
 
@@ -193,6 +208,7 @@ src/dsm/
   sovereignty.py         # B — pre-execution access control
   orchestrator.py        # C — rule-based admission
   collective.py          # D — collective memory + sync + digests
+  lanes.py               # Parallel shard lanes — scalable multi-agent writes
   lifecycle.py           # E — shard lifecycle state machine
   shard_families.py      # Cross-cutting shard classification
   exceptions.py          # A→E shared exceptions
@@ -207,7 +223,7 @@ src/dsm/
   policy_adapter.py      # OPA/Inkog adapters
   status.py              # Status enums (including A→E)
 
-tests/                   # 739 tests — 0 failures
+tests/                   # 769 tests — 0 failures
 docs/architecture/       # DSM_PILLARS_A_TO_E.md, kernel freeze doc
 ```
 

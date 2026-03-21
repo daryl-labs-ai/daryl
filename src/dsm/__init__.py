@@ -33,6 +33,7 @@ from .collective import (
 )
 from .lifecycle import ShardLifecycle, ShardState, LifecycleResult, VerifyResult as LifecycleVerifyResult
 from .shard_families import ShardFamily, classify_shard
+from .lanes import LaneGroup, LaneTip, MergeEntry, LaneWriteResult
 from .cold_storage import ColdStorage, LocalBackend, ArchiveResult
 from .summarizer import Summarizer, StructuralSummarizer, SummaryResult
 
@@ -78,6 +79,11 @@ __all__ = [
     # Cross-cutting
     "ShardFamily",
     "classify_shard",
+    # Parallel Lanes
+    "LaneGroup",
+    "LaneTip",
+    "MergeEntry",
+    "LaneWriteResult",
     # Cold Storage
     "ColdStorage",
     "LocalBackend",

@@ -35,6 +35,7 @@ _FAMILY_MAP = {
 }
 
 _COLLECTIVE_PREFIX = "collective_"
+_LANE_PREFIX = "collective_lane_"
 
 
 def classify_shard(shard_id: str) -> str:
@@ -45,6 +46,8 @@ def classify_shard(shard_id: str) -> str:
     """
     if shard_id in _FAMILY_MAP:
         return _FAMILY_MAP[shard_id]
+    if shard_id.startswith(_LANE_PREFIX):
+        return ShardFamily.COLLECTIVE
     if shard_id.startswith(_COLLECTIVE_PREFIX):
         return ShardFamily.COLLECTIVE
     return ShardFamily.AGENT

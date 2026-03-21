@@ -17,7 +17,7 @@ Created by <strong>Mohamed Azizi</strong> · <a href="https://www.daryl.md">dary
 <img src="https://img.shields.io/badge/python-3.10%2B-blue">
 <img src="https://img.shields.io/badge/license-MIT-green">
 <img src="https://img.shields.io/badge/coverage-78%25-yellow">
-<img src="https://img.shields.io/badge/tests-739%20passing-brightgreen">
+<img src="https://img.shields.io/badge/tests-769%20passing-brightgreen">
 <img src="https://img.shields.io/badge/kernel-frozen%20%C2%B7%20stable-blueviolet">
 </p>
 
@@ -35,6 +35,7 @@ When they don't, you can't verify what they remember.
 - **One-command verification** — `dsm verify --shard sessions` checks the entire history in milliseconds.
 - **Structured sessions** — start, act, observe, end. The agent's lifecycle is a first-class concept, not an afterthought.
 - **Multi-agent collective memory** — N agents share a verifiable shard with projections, not copies. Single writer guaranteed. *(v0.8.0)*
+- **Parallel shard lanes** — each agent writes to its own lane (zero contention), reads merge across all lanes. 2.5x→84x write throughput scaling. *(v0.8.0)*
 - **Multi-AI native** — Claude, GPT, Gemini, open source — same protocol. Identity is a key, not a model. *(v0.8.0)*
 - **Human sovereignty** — the owner sets who can contribute, with what trust level, and which entry types are allowed. *(v0.8.0)*
 - **Budget-aware context** — `read_with_digests(max_tokens=8000)` loads the best combination of recent entries and temporal digests within a token budget. *(v0.8.0)*
@@ -160,7 +161,7 @@ pip install -e .
 
 ```bash
 pip install -e .[dev]
-python -m pytest tests/ -v   # 739 tests, 0 failures
+python -m pytest tests/ -v   # 769 tests, 0 failures
 ```
 
 ## Read agent memory
@@ -207,6 +208,7 @@ src/dsm/
   sovereignty.py       # Human sovereignty — pre-execution access control (B)
   orchestrator.py      # Neutral orchestration — rule-based admission (C)
   collective.py        # Collective memory — sync engine, digester (D)
+  lanes.py             # Parallel shard lanes — zero-contention multi-agent writes
   lifecycle.py         # Shard lifecycle — drain/seal/archive state machine (E)
   shard_families.py    # Shard classification by family (cross-cutting)
   exceptions.py        # A→E shared exceptions
@@ -219,7 +221,7 @@ src/dsm/
   attestation.py       # Compute attestation — input-output binding
   status.py            # Status enums (including A→E enums)
 
-tests/                 # 739 tests — core, session, rr, ans, A→E, security, integration
+tests/                 # 769 tests — core, session, rr, ans, A→E, lanes, security, integration
 docs/architecture/     # DSM_PILLARS_A_TO_E.md — full design + quantitative impact
 ```
 
@@ -254,6 +256,33 @@ agent.drain_shard("old_shard", "owner", "sig")
 agent.seal_shard("old_shard", "owner", "sig")
 agent.end()
 ```
+
+## Parallel lanes — zero contention (v0.8.0)
+
+```python
+from dsm.agent import DarylAgent
+
+agent = DarylAgent(data_dir="memory")
+
+# Register parallel lanes (each agent gets its own shard)
+agent.register_lane("claude_1")
+agent.register_lane("gpt_1")
+agent.register_lane("gemini_1")
+
+# Each agent writes to its own lane — zero FileLock contention
+agent.push_to_lane("claude_1", entries, summary_fn=lambda e: e.content[:100])
+agent.push_to_lane("gpt_1", entries, summary_fn=lambda e: e.content[:100])
+
+# Unified read across all lanes, sorted by time
+recent = agent.lane_recent(limit=50)
+tiered = agent.lane_recent_at_tier(tier=2, max_tokens=8000)
+
+# Merge snapshot — verifiable reference across all lanes
+merge = agent.create_lane_merge()
+print(merge.merge_hash)  # SHA-256 of all lane tips
+```
+
+3 agents, 3 independent shards, one merge view. 2.5x→84x write throughput vs single shard.
 
 Two agents, two AI models, one verifiable collective. For the full design: [DSM_PILLARS_A_TO_E.md](docs/architecture/DSM_PILLARS_A_TO_E.md)
 

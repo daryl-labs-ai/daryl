@@ -52,6 +52,7 @@ from .collective import (
     ShardSyncEngine,
 )
 from .lifecycle import ShardLifecycle, ShardState, LifecycleResult, VerifyResult
+from .lanes import LaneGroup, LaneTip, MergeEntry, LaneWriteResult
 from .shard_families import ShardFamily, classify_shard, list_shards_by_family
 
 logger = logging.getLogger("dsm.agent")
@@ -163,6 +164,13 @@ class DarylAgent:
         self._digester = RollingDigester(self._collective, self._storage)
         # E — Lifecycle
         self._lifecycle = ShardLifecycle(self._storage, distiller=self._distiller)
+        # Parallel Lanes
+        self._lanes = LaneGroup(
+            self._storage,
+            identity=self._registry,
+            policy=self._sovereignty,
+            orchestrator=self._orchestrator,
+        )
 
     # ------------------------------------------------------------------
     # Core properties (existing)
@@ -218,6 +226,11 @@ class DarylAgent:
     def digester(self) -> RollingDigester:
         """D — Rolling Digester for context loading (direct access)."""
         return self._digester
+
+    @property
+    def lanes(self) -> LaneGroup:
+        """Parallel shard lanes (direct access)."""
+        return self._lanes
 
     @property
     def lifecycle(self) -> ShardLifecycle:
@@ -848,6 +861,56 @@ class DarylAgent:
             List of DigestEntry objects created.
         """
         return self._digester.roll(levels=levels)
+
+    # --- Parallel Lanes ---
+
+    def register_lane(self, agent_id: str) -> str:
+        """Register a parallel lane for an agent. Returns lane shard name."""
+        return self._lanes.register_lane(agent_id)
+
+    def push_to_lane(
+        self,
+        agent_id: str,
+        entries: List[Entry],
+        summary_fn=None,
+        detail_fn=None,
+    ) -> LaneWriteResult:
+        """Push entries to an agent's lane (zero contention with other agents)."""
+        return self._lanes.push(
+            agent_id=agent_id,
+            owner_id=self.agent_id,
+            entries=entries,
+            summary_fn=summary_fn,
+            detail_fn=detail_fn,
+        )
+
+    def lane_recent(
+        self,
+        limit: int = 50,
+        agent_id: Optional[str] = None,
+    ) -> list:
+        """Read recent entries across all lanes, merged by time."""
+        return self._lanes.recent(limit=limit, agent_id=agent_id)
+
+    def lane_recent_at_tier(
+        self,
+        tier: int = 2,
+        limit: int = 50,
+        max_tokens: Optional[int] = None,
+        agent_id: Optional[str] = None,
+    ) -> List[dict]:
+        """Read across lanes at a specific resolution tier with budget control."""
+        return self._lanes.recent_at_tier(
+            tier=tier, limit=limit, max_tokens=max_tokens, agent_id=agent_id,
+        )
+
+    def create_lane_merge(self) -> MergeEntry:
+        """Create a merge entry referencing all current lane tips."""
+        return self._lanes.create_merge()
+
+    def lane_stats(self) -> dict:
+        """Get statistics across all parallel lanes."""
+        return self._lanes.stats()
 
     # --- E: Lifecycle ---
 
