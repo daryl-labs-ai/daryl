@@ -139,14 +139,24 @@ class TestLifecycleEdgeCases:
     def test_verify_deep_chain_break(self, tmp_storage):
         """Lines 321-327: chain break detection in deep verify."""
         lc = ShardLifecycle(tmp_storage)
-        # Write two entries with broken chain
+        # Mock storage.read to return entries with broken chain
         e1 = _make_entry(shard="broken", hash="hash1", prev_hash=None, id="e1")
-        tmp_storage.append(e1)
         e2 = _make_entry(shard="broken", hash="hash2", prev_hash="WRONG", id="e2")
-        tmp_storage.append(e2)
-        result = lc.verify("broken", deep=True)
+        # read() returns newest first
+        with patch.object(tmp_storage, "read", return_value=[e2, e1]):
+            result = lc.verify("broken", deep=True)
         assert not result.passed
         assert "chain break" in result.reason
+
+    def test_verify_deep_valid_chain(self, tmp_storage):
+        """Lines 329-333: valid chain passes deep verify."""
+        lc = ShardLifecycle(tmp_storage)
+        e1 = _make_entry(shard="ok", hash="hash1", prev_hash=None, id="e1")
+        e2 = _make_entry(shard="ok", hash="hash2", prev_hash="hash1", id="e2")
+        with patch.object(tmp_storage, "read", return_value=[e2, e1]):
+            result = lc.verify("ok", deep=True)
+        assert result.passed
+        assert result.summary["entry_count"] == 2
 
     def test_verify_empty_shard(self, tmp_storage):
         """Lines 302-304: verify on empty shard."""
@@ -158,11 +168,21 @@ class TestLifecycleEdgeCases:
     def test_verify_spot_check_missing_hash(self, tmp_storage):
         """Lines 310-311: spot check with missing hash on tip."""
         lc = ShardLifecycle(tmp_storage)
+        # Mock to return entry with empty hash
         entry = _make_entry(shard="no_hash", hash="", id="e1")
-        tmp_storage.append(entry)
-        result = lc.verify("no_hash", deep=False)
+        with patch.object(tmp_storage, "read", return_value=[entry]):
+            result = lc.verify("no_hash", deep=False)
         assert not result.passed
         assert "missing hash" in result.reason
+
+    def test_verify_spot_check_valid_hash(self, tmp_storage):
+        """Lines 309-313: spot check with valid hash passes."""
+        lc = ShardLifecycle(tmp_storage)
+        entry = _make_entry(shard="ok", hash="abc123", id="e1")
+        with patch.object(tmp_storage, "read", return_value=[entry]):
+            result = lc.verify("ok", deep=False)
+        assert result.passed
+        assert result.last_hash == "abc123"
 
     def test_check_triggers_not_active(self, tmp_storage):
         """Lines 347-348: triggers on non-active shard."""
@@ -197,7 +217,8 @@ class TestCollectiveFilters:
     def test_recent_filter_by_agent(self, tmp_storage):
         """Lines 161-162: agent_id filter."""
         cs = CollectiveShard(tmp_storage, "coll_test")
-        # Write entries from different agents
+        # Build mock entries that storage.read would return (newest first)
+        entries = []
         for i, agent in enumerate(["alice", "bob", "alice"]):
             data = json.dumps({
                 "agent_id": agent,
@@ -205,10 +226,10 @@ class TestCollectiveFilters:
                 "content_hash": f"ch{i}",
                 "summary": f"sum{i}",
             })
-            entry = _make_entry(shard="coll_test", content=data, id=f"e{i}", hash=f"hash{i}")
-            tmp_storage.append(entry)
+            entries.append(_make_entry(shard="coll_test", content=data, id=f"e{i}", hash=f"hash{i}"))
 
-        result = cs.recent(agent_id="alice")
+        with patch.object(tmp_storage, "read", return_value=list(reversed(entries))):
+            result = cs.recent(agent_id="alice")
         assert len(result) == 2
         for e in result:
             assert e.agent_id == "alice"
@@ -216,16 +237,17 @@ class TestCollectiveFilters:
     def test_recent_filter_by_type(self, tmp_storage):
         """Lines 163-164: entry_type filter."""
         cs = CollectiveShard(tmp_storage, "coll_type")
+        entries = []
         for i, atype in enumerate(["observation", "decision", "observation"]):
             data = json.dumps({
                 "agent_id": "agent1",
                 "action_type": atype,
                 "summary": f"sum{i}",
             })
-            entry = _make_entry(shard="coll_type", content=data, id=f"e{i}", hash=f"hash{i}")
-            tmp_storage.append(entry)
+            entries.append(_make_entry(shard="coll_type", content=data, id=f"e{i}", hash=f"hash{i}"))
 
-        result = cs.recent(entry_type="observation")
+        with patch.object(tmp_storage, "read", return_value=list(reversed(entries))):
+            result = cs.recent(entry_type="observation")
         assert len(result) == 2
 
 
