@@ -45,3 +45,46 @@ class SealStorageStatus(str, Enum):
     DIVERGED = "DIVERGED"
     SHARD_GONE = "SHARD_GONE"
     NOT_SEALED = "NOT_SEALED"
+
+
+# --- A→E Pillar enums ---
+
+
+class IdentityRegistryStatus(str, Enum):
+    """Status for identity registry operations (Module A)."""
+    REGISTERED = "REGISTERED"
+    REVOKED = "REVOKED"
+    NOT_FOUND = "NOT_FOUND"
+    DUPLICATE = "DUPLICATE"
+
+
+class SovereigntyStatus(str, Enum):
+    """Status for sovereignty enforcement (Module B)."""
+    ALLOWED = "ALLOWED"
+    DENIED = "DENIED"
+    PENDING_APPROVAL = "PENDING_APPROVAL"
+    NO_POLICY = "NO_POLICY"
+
+
+class OrchestratorStatus(str, Enum):
+    """Status for orchestrator admission decisions (Module C)."""
+    ADMITTED = "ADMITTED"
+    REJECTED = "REJECTED"
+    CACHED = "CACHED"
+
+
+class CollectiveStatus(str, Enum):
+    """Status for collective sync operations (Module D)."""
+    PUSHED = "PUSHED"
+    PULLED = "PULLED"
+    RECONCILED = "RECONCILED"
+    REJECTED = "REJECTED"
+
+
+class LifecycleStatus(str, Enum):
+    """Status for shard lifecycle transitions (Module E)."""
+    ACTIVE = "ACTIVE"
+    DRAINING = "DRAINING"
+    SEALED = "SEALED"
+    ARCHIVED = "ARCHIVED"
+    TRANSITION_DENIED = "TRANSITION_DENIED"

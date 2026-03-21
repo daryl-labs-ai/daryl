@@ -41,6 +41,18 @@ from .witness import ShardWitness
 from .signing import AgentSigning, import_public_key
 from .artifacts import ArtifactStore
 from .identity import IdentityGuard, IdentityManager, IdentityState, replay_identity
+from .identity.identity_registry import AgentIdentity, IdentityRegistry
+from .sovereignty import SovereigntyPolicy, PolicySnapshot, EnforcementResult
+from .orchestrator import NeutralOrchestrator, RuleSet, AdmissionResult
+from .collective import (
+    CollectiveEntry,
+    CollectiveShard,
+    CollectiveMemoryDistiller,
+    RollingDigester,
+    ShardSyncEngine,
+)
+from .lifecycle import ShardLifecycle, ShardState, LifecycleResult, VerifyResult
+from .shard_families import ShardFamily, classify_shard, list_shards_by_family
 
 logger = logging.getLogger("dsm.agent")
 
@@ -126,6 +138,36 @@ class DarylAgent:
         )
         self._identity_guard = IdentityGuard(self._storage, self.agent_id)
 
+        # --- A→E Pillars ---
+        # A — Identity Registry
+        self._registry = IdentityRegistry(self._storage)
+        # B — Sovereignty Policy
+        self._sovereignty = SovereigntyPolicy(self._storage)
+        # C — Neutral Orchestrator
+        self._orchestrator = NeutralOrchestrator(
+            self._storage,
+            rules=RuleSet.default(),
+            identity=self._registry,
+            policy=self._sovereignty,
+        )
+        # D — Collective (default collective shard)
+        self._collective = CollectiveShard(self._storage, "collective_main")
+        self._sync_engine = ShardSyncEngine(
+            self._storage,
+            collective=self._collective,
+            identity=self._registry,
+            policy=self._sovereignty,
+            orchestrator=self._orchestrator,
+        )
+        self._distiller = CollectiveMemoryDistiller()
+        self._digester = RollingDigester(self._collective, self._storage)
+        # E — Lifecycle
+        self._lifecycle = ShardLifecycle(self._storage, distiller=self._distiller)
+
+    # ------------------------------------------------------------------
+    # Core properties (existing)
+    # ------------------------------------------------------------------
+
     @property
     def storage(self):
         return self._storage
@@ -133,6 +175,54 @@ class DarylAgent:
     @property
     def graph(self):
         return self._graph
+
+    # ------------------------------------------------------------------
+    # A→E module access (direct bypass of facade for advanced users)
+    #
+    # Usage:
+    #   agent.registry.register(...)       # direct A
+    #   agent.sovereignty.allows(...)      # direct B
+    #   agent.orchestrator.admit(...)      # direct C
+    #   agent.collective.recent(...)       # direct D read
+    #   agent.sync_engine.push(...)        # direct D write
+    #   agent.digester.read_with_digests(...)  # direct D context
+    #   agent.lifecycle.drain(...)         # direct E
+    # ------------------------------------------------------------------
+
+    @property
+    def registry(self) -> IdentityRegistry:
+        """A — Identity Registry (direct access)."""
+        return self._registry
+
+    @property
+    def sovereignty(self) -> SovereigntyPolicy:
+        """B — Sovereignty Policy (direct access)."""
+        return self._sovereignty
+
+    @property
+    def orchestrator(self) -> NeutralOrchestrator:
+        """C — Neutral Orchestrator (direct access)."""
+        return self._orchestrator
+
+    @property
+    def collective(self) -> CollectiveShard:
+        """D — Collective Shard read-side (direct access)."""
+        return self._collective
+
+    @property
+    def sync_engine(self) -> ShardSyncEngine:
+        """D — Sync Engine write-side (direct access)."""
+        return self._sync_engine
+
+    @property
+    def digester(self) -> RollingDigester:
+        """D — Rolling Digester for context loading (direct access)."""
+        return self._digester
+
+    @property
+    def lifecycle(self) -> ShardLifecycle:
+        """E — Shard Lifecycle (direct access)."""
+        return self._lifecycle
 
     @property
     def startup_report(self) -> Optional[dict]:
@@ -151,9 +241,18 @@ class DarylAgent:
             logger.error("start failed: %s", e)
             return None
 
-    def end(self) -> Optional[Any]:
+    def end(self, sync: bool = True) -> Optional[Any]:
+        """End the current session.
+
+        Args:
+            sync: If True (default), triggers auto-sync and lifecycle checks
+                  via the A→E hooks on session end.
+        """
         try:
-            return self._graph.end_session()
+            return self._graph.end_session(
+                sync_engine=self._sync_engine if sync else None,
+                lifecycle=self._lifecycle if sync else None,
+            )
         except OSError as e:
             logger.error("end failed: %s", e)
             return None
@@ -570,3 +669,172 @@ class DarylAgent:
     def verify_commitments(self) -> dict:
         """Verify all pre/post commitment pairs."""
         return verify_all_commitments(self._anchor_log)
+
+    # ==================================================================
+    # A→E Pillar facade methods
+    # ==================================================================
+
+    # --- A: Identity Registry ---
+
+    def register_agent(
+        self,
+        agent_id: str,
+        public_key: str,
+        model: Optional[str] = None,
+        metadata: Optional[dict] = None,
+    ) -> Entry:
+        """Register an agent in the identity registry. Returns the DSM entry."""
+        return self._registry.register(
+            agent_id=agent_id,
+            public_key=public_key,
+            owner_id=self.agent_id,
+            owner_signature="facade",
+            model=model,
+            metadata=metadata,
+        )
+
+    def resolve_agent(self, agent_id: str) -> Optional[AgentIdentity]:
+        """Resolve an agent identity. O(1) via cached index."""
+        return self._registry.resolve(agent_id)
+
+    def revoke_agent(self, agent_id: str, reason: str = "revoked") -> Entry:
+        """Revoke an agent from the registry. Returns the DSM entry."""
+        return self._registry.revoke(
+            agent_id, self.agent_id, owner_signature="facade", reason=reason,
+        )
+
+    def agent_trust(self, agent_id: str, deep: bool = False) -> float:
+        """Get trust score for an agent. O(1) fast, O(N) deep."""
+        if deep:
+            return self._registry.deep_trust_score(agent_id)
+        return self._registry.trust_score(agent_id)
+
+    def list_registered_agents(self) -> List[AgentIdentity]:
+        """List all registered agents."""
+        return self._registry.list_agents()
+
+    # --- B: Sovereignty Policy ---
+
+    def set_policy(
+        self,
+        agents: List[str],
+        min_trust_score: float = 0.5,
+        allowed_types: Optional[List[str]] = None,
+        approval_required: Optional[List[str]] = None,
+        cross_ai: bool = False,
+    ) -> Entry:
+        """Set sovereignty policy for this agent's collective. Returns DSM entry."""
+        return self._sovereignty.set(
+            owner_id=self.agent_id,
+            owner_signature="facade",
+            policy={
+                "agents": agents,
+                "min_trust_score": min_trust_score,
+                "allowed_types": allowed_types or ["observation", "analysis", "decision"],
+                "approval_required": approval_required or [],
+                "cross_ai": cross_ai,
+            },
+        )
+
+    def get_policy(self) -> Optional[PolicySnapshot]:
+        """Get current sovereignty policy."""
+        return self._sovereignty.get(self.agent_id)
+
+    def check_sovereignty(
+        self, agent_id: str, action_type: str
+    ) -> EnforcementResult:
+        """Check if an agent is allowed to perform an action."""
+        return self._sovereignty.allows(
+            self.agent_id, agent_id, action_type, self._registry,
+        )
+
+    # --- C: Orchestrator ---
+
+    def admit_entry(
+        self, entry: Entry, agent_id: str
+    ) -> AdmissionResult:
+        """Run admission control on an entry for the collective."""
+        return self._orchestrator.admit(entry, agent_id, owner_id=self.agent_id)
+
+    # --- D: Collective Memory ---
+
+    def push_to_collective(
+        self,
+        entry: Entry,
+        summary: str,
+        detail: str = "",
+        key_findings: Optional[List[str]] = None,
+    ) -> Any:
+        """Push a projection of an entry to the collective shard.
+
+        Goes through orchestrator admission → sync engine write.
+        Returns PushResult with admitted/rejected hashes.
+        """
+        return self._sync_engine.push(
+            agent_id=self.agent_id,
+            owner_id=self.agent_id,
+            entries=[entry],
+            summary_fn=lambda e: summary,
+            detail_fn=lambda e: (detail, key_findings or []),
+        )
+
+    def pull_collective(self, since_hash: Optional[str] = None) -> Any:
+        """Pull new entries from the collective since a hash.
+
+        Returns PullResult with synced count and last_hash.
+        """
+        return self._sync_engine.pull(self.agent_id, since_hash=since_hash)
+
+    def collective_summary(self) -> dict:
+        """Get summary of the collective shard."""
+        return self._collective.summary()
+
+    def collective_recent(self, limit: int = 50) -> List[CollectiveEntry]:
+        """Get recent entries from collective."""
+        return self._collective.recent(limit=limit)
+
+    def read_with_digests(self, since: datetime, max_tokens: int = 8000) -> Any:
+        """Budget-aware context loading with rolling digests."""
+        return self._digester.read_with_digests(since=since, max_tokens=max_tokens)
+
+    # --- E: Lifecycle ---
+
+    def lifecycle_state(self, shard_id: str) -> str:
+        """Get lifecycle state of a shard (active/draining/sealed/archived)."""
+        return self._lifecycle.state(shard_id)
+
+    def drain(self, shard_id: str) -> LifecycleResult:
+        """Drain a shard (trigger distillation, block further writes)."""
+        return self._lifecycle.drain(
+            shard_id, self.agent_id, "facade",
+            collective=self._collective,
+        )
+
+    def lifecycle_seal(self, shard_id: str, reason: Optional[str] = None) -> LifecycleResult:
+        """Seal a shard permanently. Auto-drains if active."""
+        return self._lifecycle.seal(
+            shard_id, self.agent_id, "facade",
+            reason=reason, collective=self._collective,
+        )
+
+    def archive(self, shard_id: str) -> LifecycleResult:
+        """Archive a sealed shard. Terminal state."""
+        return self._lifecycle.archive(shard_id, self.agent_id, "facade")
+
+    def lifecycle_verify(self, shard_id: str, deep: bool = False) -> VerifyResult:
+        """Verify shard integrity. O(1) spot-check or full replay."""
+        return self._lifecycle.verify(shard_id, deep=deep)
+
+    def lifecycle_triggers(self, shard_id: str) -> Any:
+        """Check automatic lifecycle triggers for a shard."""
+        return self._lifecycle.check_triggers(shard_id, self.agent_id, "facade")
+
+    # --- Cross-cutting: Shard Families ---
+
+    def shard_family(self, shard_id: str) -> str:
+        """Classify a shard by family (agent/registry/audit/collective/infra)."""
+        return classify_shard(shard_id)
+
+    def shards_by_family(self, family: str) -> List[str]:
+        """List all known shards for a family."""
+        return list_shards_by_family(self._storage, family)

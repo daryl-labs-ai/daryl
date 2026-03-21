@@ -21,8 +21,20 @@ from .attestation import (
     verify_attestation_against_data,
     sign_attestation,
 )
+from .identity.identity_registry import AgentIdentity, IdentityRegistry
+from .sovereignty import SovereigntyPolicy, PolicySnapshot, EnforcementResult
+from .orchestrator import NeutralOrchestrator, RuleSet, AdmissionResult
+from .collective import (
+    CollectiveEntry,
+    CollectiveShard,
+    CollectiveMemoryDistiller,
+    RollingDigester,
+    ShardSyncEngine,
+)
+from .lifecycle import ShardLifecycle, ShardState, LifecycleResult, VerifyResult as LifecycleVerifyResult
+from .shard_families import ShardFamily, classify_shard
 
-__version__ = "0.7.0"
+__version__ = "0.8.0"
 
 __all__ = [
     "__version__",
@@ -39,4 +51,29 @@ __all__ = [
     "verify_attestation",
     "verify_attestation_against_data",
     "sign_attestation",
+    # A — Identity Registry
+    "IdentityRegistry",
+    "AgentIdentity",
+    # B — Sovereignty
+    "SovereigntyPolicy",
+    "PolicySnapshot",
+    "EnforcementResult",
+    # C — Orchestrator
+    "NeutralOrchestrator",
+    "RuleSet",
+    "AdmissionResult",
+    # D — Collective
+    "CollectiveEntry",
+    "CollectiveShard",
+    "CollectiveMemoryDistiller",
+    "RollingDigester",
+    "ShardSyncEngine",
+    # E — Lifecycle
+    "ShardLifecycle",
+    "ShardState",
+    "LifecycleResult",
+    "LifecycleVerifyResult",
+    # Cross-cutting
+    "ShardFamily",
+    "classify_shard",
 ]

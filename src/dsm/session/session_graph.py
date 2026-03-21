@@ -317,10 +317,18 @@ class SessionGraph:
         orphaned = [e for iid, e in intents.items() if iid not in results]
         return orphaned
 
-    def end_session(self) -> Optional[Entry]:
+    def end_session(
+        self,
+        sync_engine=None,
+        lifecycle=None,
+    ) -> Optional[Entry]:
         """
-        Termine la session active
-        
+        Termine la session active.
+
+        Optional A→E hooks (backward compatible — both default to None):
+            sync_engine: ShardSyncEngine — if provided, triggers reconcile on session end
+            lifecycle: ShardLifecycle — if provided, checks automatic triggers on session end
+
         Returns:
             Entry: L'événement session_end écrit, ou None si aucune session active
         """
@@ -331,7 +339,7 @@ class SessionGraph:
         # Calculer la durée de session
         session_end_time = datetime.now(timezone.utc)
         session_duration = (session_end_time - self.session_start_time).total_seconds() if self.session_start_time else 0
-        
+
         # Créer l'événement session_end
         content = json.dumps({
             "end_time": session_end_time.isoformat(),
@@ -339,7 +347,7 @@ class SessionGraph:
             "duration_seconds": session_duration,
             "source": self.session_source
         })
-        
+
         entry = Entry(
             id=str(uuid.uuid4()),
             timestamp=session_end_time,
@@ -352,13 +360,38 @@ class SessionGraph:
             metadata={"event_type": "session_end"},
             version="v2.0"
         )
-        
+
         # Écrire l'événement via Storage
         try:
             written_entry = self.storage.append(entry)
         except OSError as e:
             logger.error("Failed to append entry to storage: %s", e)
             return None
+
+        # A→E hook: auto-sync on session end (non-blocking)
+        if sync_engine is not None:
+            try:
+                sync_engine.reconcile(
+                    agent_id=self.session_source or "unknown",
+                    owner_id=self.session_source or "unknown",
+                    entries=[],  # reconcile pulls only, no auto-push
+                )
+                logger.debug("Session end sync completed for %s", self.current_session_id)
+            except Exception as e:
+                logger.debug("Session end sync skipped: %s", e)
+
+        # A→E hook: lifecycle trigger check (lightweight)
+        if lifecycle is not None:
+            try:
+                lifecycle.check_triggers(
+                    "sessions",
+                    owner_id=self.session_source or "unknown",
+                    owner_sig="session_end",
+                )
+                logger.debug("Session end lifecycle check completed")
+            except Exception as e:
+                logger.debug("Session end lifecycle check skipped: %s", e)
+
         # Réinitialiser l'état de session
         session_id = self.current_session_id
         self.current_session_id = None
