@@ -214,6 +214,8 @@ class NeutralOrchestrator:
         self._policy = policy
         # Decision cache: entry_hash -> AdmissionResult
         self._cache: Dict[str, AdmissionResult] = {}
+        # In-memory admission counter: agent_id -> count (reset on new instance)
+        self._admission_counts: Dict[str, int] = {}
 
     @property
     def rules(self) -> RuleSet:
@@ -231,20 +233,17 @@ class NeutralOrchestrator:
     def _build_context(
         self, agent_id: str, owner_id: str, entry_type: str,
     ) -> AdmissionContext:
-        """Pre-compute context for rules. Rules never do I/O."""
+        """Pre-compute context for rules. Rules never do I/O.
+
+        Uses in-memory admission counter instead of scanning the audit shard.
+        Counter is incremented on each successful admission in admit().
+        O(1) — no shard read, no JSON parsing.
+        """
         trust = self._identity.trust_score(agent_id)
         sov_result = self._policy.allows(owner_id, agent_id, entry_type, self._identity)
 
-        # Count recent admissions from audit log
-        recent = 0
-        entries = self._storage.read(ORCHESTRATOR_SHARD, limit=200)
-        for e in entries:
-            try:
-                data = json.loads(e.content)
-            except (json.JSONDecodeError, TypeError):
-                continue
-            if data.get("agent_id") == agent_id and data.get("verdict") == "allow":
-                recent += 1
+        # O(1) — in-memory counter, no shard scan
+        recent = self._admission_counts.get(agent_id, 0)
 
         return AdmissionContext(
             agent_trust=trust,
@@ -299,6 +298,12 @@ class NeutralOrchestrator:
 
         # Log to audit shard (delta only — verdict + reason + hash, never full entry)
         self._log_decision(result)
+
+        # Update in-memory admission counter (O(1) — no shard re-scan)
+        if result.allowed:
+            self._admission_counts[agent_id] = (
+                self._admission_counts.get(agent_id, 0) + 1
+            )
 
         # Cache
         if entry_hash:

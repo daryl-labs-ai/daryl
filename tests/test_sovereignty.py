@@ -229,3 +229,120 @@ class TestIndex:
         ))
         snap = sovereignty.get("owner_1")
         assert snap.trust_baseline == 0.7
+
+
+# ------------------------------------------------------------------
+# Schema validation (fix 3.2 — Manus audit)
+# ------------------------------------------------------------------
+
+
+class TestPolicyValidation:
+    """Validate policy structure and types before accepting."""
+
+    def test_missing_agents_raises(self, sovereignty):
+        with pytest.raises(InvalidPolicyStructure, match="Missing"):
+            sovereignty.set("o", "s", {"min_trust_score": 0.5, "allowed_types": ["x"]})
+
+    def test_missing_min_trust_raises(self, sovereignty):
+        with pytest.raises(InvalidPolicyStructure, match="Missing"):
+            sovereignty.set("o", "s", {"agents": ["a"], "allowed_types": ["x"]})
+
+    def test_missing_allowed_types_raises(self, sovereignty):
+        with pytest.raises(InvalidPolicyStructure, match="Missing"):
+            sovereignty.set("o", "s", {"agents": ["a"], "min_trust_score": 0.5})
+
+    def test_agents_must_be_list(self, sovereignty):
+        with pytest.raises(InvalidPolicyStructure, match="agents.*list"):
+            sovereignty.set("o", "s", {
+                "agents": "not_a_list",
+                "min_trust_score": 0.5,
+                "allowed_types": ["x"],
+            })
+
+    def test_agents_must_not_be_empty(self, sovereignty):
+        with pytest.raises(InvalidPolicyStructure, match="agents.*empty"):
+            sovereignty.set("o", "s", {
+                "agents": [],
+                "min_trust_score": 0.5,
+                "allowed_types": ["x"],
+            })
+
+    def test_min_trust_must_be_number(self, sovereignty):
+        with pytest.raises(InvalidPolicyStructure, match="min_trust_score.*number"):
+            sovereignty.set("o", "s", {
+                "agents": ["a"],
+                "min_trust_score": "high",
+                "allowed_types": ["x"],
+            })
+
+    def test_min_trust_must_be_in_range(self, sovereignty):
+        with pytest.raises(InvalidPolicyStructure, match="min_trust_score.*\\[0.0, 1.0\\]"):
+            sovereignty.set("o", "s", {
+                "agents": ["a"],
+                "min_trust_score": 1.5,
+                "allowed_types": ["x"],
+            })
+
+    def test_min_trust_negative_rejected(self, sovereignty):
+        with pytest.raises(InvalidPolicyStructure, match="min_trust_score.*\\[0.0, 1.0\\]"):
+            sovereignty.set("o", "s", {
+                "agents": ["a"],
+                "min_trust_score": -0.1,
+                "allowed_types": ["x"],
+            })
+
+    def test_allowed_types_must_be_list(self, sovereignty):
+        with pytest.raises(InvalidPolicyStructure, match="allowed_types.*list"):
+            sovereignty.set("o", "s", {
+                "agents": ["a"],
+                "min_trust_score": 0.5,
+                "allowed_types": "not_a_list",
+            })
+
+    def test_allowed_types_must_not_be_empty(self, sovereignty):
+        with pytest.raises(InvalidPolicyStructure, match="allowed_types.*empty"):
+            sovereignty.set("o", "s", {
+                "agents": ["a"],
+                "min_trust_score": 0.5,
+                "allowed_types": [],
+            })
+
+    def test_trust_baseline_must_be_in_range(self, sovereignty):
+        with pytest.raises(InvalidPolicyStructure, match="trust_baseline.*\\[0.0, 1.0\\]"):
+            sovereignty.set("o", "s", {
+                "agents": ["a"],
+                "min_trust_score": 0.5,
+                "allowed_types": ["x"],
+                "trust_baseline": 2.0,
+            })
+
+    def test_cross_ai_must_be_bool(self, sovereignty):
+        with pytest.raises(InvalidPolicyStructure, match="cross_ai.*boolean"):
+            sovereignty.set("o", "s", {
+                "agents": ["a"],
+                "min_trust_score": 0.5,
+                "allowed_types": ["x"],
+                "cross_ai": "yes",
+            })
+
+    def test_valid_policy_passes_all_checks(self, sovereignty):
+        """A well-formed policy should pass validation."""
+        entry = sovereignty.set("o", "s", {
+            "agents": ["a", "b"],
+            "min_trust_score": 0.5,
+            "allowed_types": ["observation", "decision"],
+            "trust_baseline": 0.4,
+            "approval_required": ["decision"],
+            "cross_ai": True,
+        })
+        assert entry is not None
+
+    def test_boundary_values_accepted(self, sovereignty):
+        """Edge values (0.0, 1.0) should be accepted."""
+        entry = sovereignty.set("o", "s", {
+            "agents": ["a"],
+            "min_trust_score": 0.0,
+            "allowed_types": ["x"],
+            "trust_baseline": 1.0,
+        })
+        assert entry is not None

@@ -31,6 +31,80 @@ SOVEREIGNTY_SHARD = "sovereignty_policies"
 # Required keys in a policy dict
 _REQUIRED_POLICY_KEYS = {"agents", "min_trust_score", "allowed_types"}
 
+# Known entry types (extensible — used for validation warnings, not hard block)
+_KNOWN_ENTRY_TYPES = {
+    "observation", "decision", "action", "snapshot", "system",
+    "start_session", "end_session", "execute_action",
+}
+
+
+def _validate_policy(policy: dict) -> List[str]:
+    """Validate policy structure and types. Returns list of errors (empty = valid).
+
+    Checks:
+    - Required keys present
+    - agents: must be a list/tuple of non-empty strings
+    - min_trust_score: must be a number in [0.0, 1.0]
+    - allowed_types: must be a list/tuple of non-empty strings
+    - trust_baseline: if present, must be a number in [0.0, 1.0]
+    - approval_required: if present, must be a list/tuple of strings
+    - cross_ai: if present, must be a boolean
+    """
+    errors = []
+
+    # Required keys
+    missing = _REQUIRED_POLICY_KEYS - set(policy.keys())
+    if missing:
+        errors.append(f"Missing required keys: {sorted(missing)}")
+        return errors  # can't validate further
+
+    # agents
+    agents = policy["agents"]
+    if not isinstance(agents, (list, tuple)):
+        errors.append(f"'agents' must be a list, got {type(agents).__name__}")
+    elif len(agents) == 0:
+        errors.append("'agents' must not be empty")
+    elif not all(isinstance(a, str) and a.strip() for a in agents):
+        errors.append("'agents' must contain non-empty strings")
+
+    # min_trust_score
+    mts = policy["min_trust_score"]
+    if not isinstance(mts, (int, float)):
+        errors.append(f"'min_trust_score' must be a number, got {type(mts).__name__}")
+    elif not (0.0 <= float(mts) <= 1.0):
+        errors.append(f"'min_trust_score' must be in [0.0, 1.0], got {mts}")
+
+    # allowed_types
+    at = policy["allowed_types"]
+    if not isinstance(at, (list, tuple)):
+        errors.append(f"'allowed_types' must be a list, got {type(at).__name__}")
+    elif len(at) == 0:
+        errors.append("'allowed_types' must not be empty")
+    elif not all(isinstance(t, str) and t.strip() for t in at):
+        errors.append("'allowed_types' must contain non-empty strings")
+
+    # trust_baseline (optional)
+    if "trust_baseline" in policy:
+        tb = policy["trust_baseline"]
+        if not isinstance(tb, (int, float)):
+            errors.append(f"'trust_baseline' must be a number, got {type(tb).__name__}")
+        elif not (0.0 <= float(tb) <= 1.0):
+            errors.append(f"'trust_baseline' must be in [0.0, 1.0], got {tb}")
+
+    # approval_required (optional)
+    if "approval_required" in policy:
+        ar = policy["approval_required"]
+        if not isinstance(ar, (list, tuple)):
+            errors.append(f"'approval_required' must be a list, got {type(ar).__name__}")
+
+    # cross_ai (optional)
+    if "cross_ai" in policy:
+        ca = policy["cross_ai"]
+        if not isinstance(ca, bool):
+            errors.append(f"'cross_ai' must be a boolean, got {type(ca).__name__}")
+
+    return errors
+
 
 @dataclass(frozen=True)
 class PolicySnapshot:
@@ -90,6 +164,13 @@ class SovereigntyPolicy:
         self._index = None
 
     def _ensure_index(self) -> Dict[str, dict]:
+        """Build or return cached index. Called once, then O(1) via cache.
+
+        Reads full shard on first call. This is acceptable because:
+        - Sovereignty shard is small (one entry per policy set/revoke)
+        - A system with 10K policy changes is extreme — typically < 100
+        - Index is cached and invalidated only on write (set/revoke)
+        """
         if self._index is not None:
             return self._index
 
@@ -150,10 +231,10 @@ class SovereigntyPolicy:
         Raises:
             InvalidPolicyStructure: If required keys are missing
         """
-        missing = _REQUIRED_POLICY_KEYS - set(policy.keys())
-        if missing:
+        errors = _validate_policy(policy)
+        if errors:
             raise InvalidPolicyStructure(
-                f"Missing required policy keys: {sorted(missing)}"
+                f"Invalid policy: {'; '.join(errors)}"
             )
 
         content = json.dumps({
@@ -244,9 +325,14 @@ class SovereigntyPolicy:
             entry_hash=rec["entry_hash"],
         )
 
-    def history(self, owner_id: str) -> List[Entry]:
-        """Return all policy entries for an owner (chronological)."""
-        entries = self._storage.read(SOVEREIGNTY_SHARD, limit=10**6)
+    def history(self, owner_id: str, limit: int = 1000) -> List[Entry]:
+        """Return all policy entries for an owner (chronological).
+
+        Args:
+            owner_id: Owner to filter by
+            limit: Max entries to scan (default 1000, avoids loading entire shard)
+        """
+        entries = self._storage.read(SOVEREIGNTY_SHARD, limit=limit)
         result = []
         for e in reversed(entries):
             try:

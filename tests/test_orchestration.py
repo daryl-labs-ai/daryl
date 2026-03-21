@@ -230,3 +230,45 @@ class TestRuleSet:
         r2 = orchestrator.admit(entry, "agent_1", "owner_1")
         assert r1.verdict == r2.verdict
         assert r1.reason == r2.reason
+
+
+# ------------------------------------------------------------------
+# Admission counter (fix 1.3 — Manus audit: O(1) instead of shard scan)
+# ------------------------------------------------------------------
+
+
+class TestAdmissionCounter:
+    def test_counter_increments_on_allow(self, orchestrator, registry, sovereignty):
+        _register_and_policy(registry, sovereignty)
+        assert orchestrator._admission_counts.get("agent_1", 0) == 0
+        orchestrator.admit(_make_entry(entry_hash="c1"), "agent_1", "owner_1")
+        assert orchestrator._admission_counts["agent_1"] == 1
+        orchestrator.admit(_make_entry(entry_hash="c2"), "agent_1", "owner_1")
+        assert orchestrator._admission_counts["agent_1"] == 2
+
+    def test_counter_not_incremented_on_deny(self, tmp_storage, registry, sovereignty):
+        _register_and_policy(registry, sovereignty)
+        orch = NeutralOrchestrator(
+            tmp_storage,
+            RuleSet([MinTrustScoreRule(0.99)]),  # will deny
+            registry,
+            sovereignty,
+        )
+        orch.admit(_make_entry(entry_hash="d1"), "agent_1", "owner_1")
+        assert orch._admission_counts.get("agent_1", 0) == 0
+
+    def test_counter_used_for_rate_limit(self, tmp_storage, registry, sovereignty):
+        _register_and_policy(registry, sovereignty)
+        orch = NeutralOrchestrator(
+            tmp_storage,
+            RuleSet([SovereigntyCheckRule(), RateLimitRule(max_per_window=2)]),
+            registry,
+            sovereignty,
+        )
+        r1 = orch.admit(_make_entry(entry_hash="r1"), "agent_1", "owner_1")
+        r2 = orch.admit(_make_entry(entry_hash="r2"), "agent_1", "owner_1")
+        r3 = orch.admit(_make_entry(entry_hash="r3"), "agent_1", "owner_1")
+        assert r1.allowed
+        assert r2.allowed
+        assert not r3.allowed
+        assert "rate limit" in r3.reason
