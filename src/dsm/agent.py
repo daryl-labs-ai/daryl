@@ -671,6 +671,26 @@ class DarylAgent:
         return verify_all_commitments(self._anchor_log)
 
     # ==================================================================
+    # Signing helper
+    # ==================================================================
+
+    def _sign(self, data: str = "") -> str:
+        """Sign data with Ed25519 if keypair available, else 'unsigned'.
+
+        Used by A→E facade methods to provide real cryptographic proof
+        when AgentSigning is configured, graceful fallback otherwise.
+        """
+        if self._signing and self._signing.has_keypair():
+            return self._signing.sign_entry(data or self.agent_id)
+        return "unsigned"
+
+    def _public_key(self) -> Optional[str]:
+        """Get agent's public key if available."""
+        if self._signing and self._signing.has_keypair():
+            return self._signing.get_public_key()
+        return None
+
+    # ==================================================================
     # A→E Pillar facade methods
     # ==================================================================
 
@@ -688,7 +708,7 @@ class DarylAgent:
             agent_id=agent_id,
             public_key=public_key,
             owner_id=self.agent_id,
-            owner_signature="facade",
+            owner_signature=self._sign(),
             model=model,
             metadata=metadata,
         )
@@ -700,7 +720,7 @@ class DarylAgent:
     def revoke_agent(self, agent_id: str, reason: str = "revoked") -> Entry:
         """Revoke an agent from the registry. Returns the DSM entry."""
         return self._registry.revoke(
-            agent_id, self.agent_id, owner_signature="facade", reason=reason,
+            agent_id, self.agent_id, owner_signature=self._sign(), reason=reason,
         )
 
     def agent_trust(self, agent_id: str, deep: bool = False) -> float:
@@ -726,7 +746,7 @@ class DarylAgent:
         """Set sovereignty policy for this agent's collective. Returns DSM entry."""
         return self._sovereignty.set(
             owner_id=self.agent_id,
-            owner_signature="facade",
+            owner_signature=self._sign(),
             policy={
                 "agents": agents,
                 "min_trust_score": min_trust_score,
@@ -806,20 +826,20 @@ class DarylAgent:
     def drain(self, shard_id: str) -> LifecycleResult:
         """Drain a shard (trigger distillation, block further writes)."""
         return self._lifecycle.drain(
-            shard_id, self.agent_id, "facade",
+            shard_id, self.agent_id, self._sign(),
             collective=self._collective,
         )
 
     def lifecycle_seal(self, shard_id: str, reason: Optional[str] = None) -> LifecycleResult:
         """Seal a shard permanently. Auto-drains if active."""
         return self._lifecycle.seal(
-            shard_id, self.agent_id, "facade",
+            shard_id, self.agent_id, self._sign(),
             reason=reason, collective=self._collective,
         )
 
     def archive(self, shard_id: str) -> LifecycleResult:
         """Archive a sealed shard. Terminal state."""
-        return self._lifecycle.archive(shard_id, self.agent_id, "facade")
+        return self._lifecycle.archive(shard_id, self.agent_id, self._sign())
 
     def lifecycle_verify(self, shard_id: str, deep: bool = False) -> VerifyResult:
         """Verify shard integrity. O(1) spot-check or full replay."""
@@ -827,7 +847,7 @@ class DarylAgent:
 
     def lifecycle_triggers(self, shard_id: str) -> Any:
         """Check automatic lifecycle triggers for a shard."""
-        return self._lifecycle.check_triggers(shard_id, self.agent_id, "facade")
+        return self._lifecycle.check_triggers(shard_id, self.agent_id, self._sign())
 
     # --- Cross-cutting: Shard Families ---
 
