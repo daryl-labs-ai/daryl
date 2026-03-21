@@ -6,8 +6,8 @@
 **Breaking changes:** none — all existing public APIs preserved
 **New source files:** 6 (`identity/identity_registry.py`, `sovereignty.py`, `orchestrator.py`, `collective.py`, `lifecycle.py`, `shard_families.py`, `exceptions.py`)
 **New test files:** 7
-**Actual new tests:** 171 (implemented and passing)
-**Status:** ✅ IMPLEMENTED — 572 total tests, 0 failures
+**Actual new tests:** 188 (implemented and passing)
+**Status:** ✅ IMPLEMENTED — 589 total tests, 0 failures
 
 ---
 
