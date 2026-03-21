@@ -615,6 +615,124 @@ class RollingDigester:
 
         return digest
 
+    # ------------------------------------------------------------------
+    # Automatic rolling digest generation
+    # ------------------------------------------------------------------
+
+    # Level definitions: (level, timedelta per window, label)
+    _LEVELS = [
+        (1, timedelta(hours=1), "hourly"),
+        (2, timedelta(days=1), "daily"),
+        (3, timedelta(weeks=1), "weekly"),
+        (4, timedelta(days=30), "monthly"),
+    ]
+
+    def _existing_digest_ids(self) -> set:
+        """Return set of digest_ids already written to the digests shard."""
+        entries = self._storage.read(self._digests_shard, limit=10000)
+        ids = set()
+        for e in reversed(entries):
+            try:
+                data = json.loads(e.content)
+                if data.get("event_type") == "digest":
+                    ids.add(data["digest_id"])
+            except (json.JSONDecodeError, KeyError, TypeError):
+                continue
+        return ids
+
+    def pending_windows(self, now: Optional[datetime] = None) -> List[dict]:
+        """Identify time windows that need digestion.
+
+        Returns list of {level, label, start, end} dicts for windows
+        that contain entries but have no digest yet.
+        """
+        now = now or datetime.now(timezone.utc)
+        index = self._collective._ensure_index()
+        if not index:
+            return []
+
+        existing = self._existing_digest_ids()
+        oldest = index[0].contributed_at
+        pending = []
+
+        for level, delta, label in self._LEVELS:
+            # Walk from oldest entry time to now in steps of delta
+            # Align window starts to round boundaries
+            if delta == timedelta(hours=1):
+                window_start = oldest.replace(minute=0, second=0, microsecond=0)
+            elif delta == timedelta(days=1):
+                window_start = oldest.replace(hour=0, minute=0, second=0, microsecond=0)
+            elif delta == timedelta(weeks=1):
+                # Align to Monday
+                days_since_monday = oldest.weekday()
+                window_start = (oldest - timedelta(days=days_since_monday)).replace(
+                    hour=0, minute=0, second=0, microsecond=0
+                )
+            else:
+                # Monthly: align to 1st of month
+                window_start = oldest.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+            while window_start + delta <= now:
+                window_end = window_start + delta
+                digest_id = f"digest_L{level}_{window_start.strftime('%Y%m%d%H%M')}"
+
+                if digest_id not in existing:
+                    # Check if there are entries in this window
+                    has_entries = any(
+                        window_start <= e.contributed_at < window_end
+                        for e in index
+                    )
+                    if has_entries:
+                        pending.append({
+                            "level": level,
+                            "label": label,
+                            "start": window_start,
+                            "end": window_end,
+                            "digest_id": digest_id,
+                        })
+
+                window_start = window_end
+
+        return pending
+
+    def roll(self, now: Optional[datetime] = None,
+             levels: Optional[List[int]] = None) -> List[DigestEntry]:
+        """Automatically produce digests for all pending time windows.
+
+        Args:
+            now: Reference time (default: utcnow). Useful for testing.
+            levels: Optional filter — only produce digests for these levels.
+                    Default: all levels [1, 2, 3, 4].
+
+        Returns:
+            List of DigestEntry objects created.
+        """
+        pending = self.pending_windows(now=now)
+        if levels:
+            pending = [p for p in pending if p["level"] in levels]
+
+        created = []
+        for window in pending:
+            digest = self.digest_window(
+                start=window["start"],
+                end=window["end"],
+                level=window["level"],
+            )
+            created.append(digest)
+
+        if created:
+            logger.info(
+                "Rolling digester: created %d digests (%s)",
+                len(created),
+                ", ".join(f"L{d.level}" for d in created),
+            )
+
+        return created
+
+    # ------------------------------------------------------------------
+    # Budget-aware context loading
+    # ------------------------------------------------------------------
+
     def read_with_digests(self, since: datetime, max_tokens: int = 8000) -> ContextStack:
         """Budget-aware context loading.
 

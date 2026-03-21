@@ -834,6 +834,21 @@ class DarylAgent:
         """Budget-aware context loading with rolling digests."""
         return self._digester.read_with_digests(since=since, max_tokens=max_tokens)
 
+    def roll_digests(self, levels: Optional[List[int]] = None) -> List[Any]:
+        """Produce rolling temporal digests for all pending time windows.
+
+        Automatically identifies hourly/daily/weekly/monthly windows
+        that contain entries but have no digest yet, then creates them.
+
+        Args:
+            levels: Optional filter — [1]=hourly, [2]=daily, [3]=weekly, [4]=monthly.
+                    Default: all levels.
+
+        Returns:
+            List of DigestEntry objects created.
+        """
+        return self._digester.roll(levels=levels)
+
     # --- E: Lifecycle ---
 
     def lifecycle_state(self, shard_id: str) -> str:
