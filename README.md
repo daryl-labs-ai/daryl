@@ -16,8 +16,8 @@ Created by <strong>Mohamed Azizi</strong> · <a href="https://www.daryl.md">dary
 <img src="https://github.com/daryl-labs-ai/daryl/actions/workflows/ci.yml/badge.svg">
 <img src="https://img.shields.io/badge/python-3.10%2B-blue">
 <img src="https://img.shields.io/badge/license-MIT-green">
-<img src="https://img.shields.io/badge/coverage-77%25-yellow">
-<img src="https://img.shields.io/badge/tests-702%20passing-brightgreen">
+<img src="https://img.shields.io/badge/coverage-78%25-yellow">
+<img src="https://img.shields.io/badge/tests-739%20passing-brightgreen">
 <img src="https://img.shields.io/badge/kernel-frozen%20%C2%B7%20stable-blueviolet">
 </p>
 
@@ -160,7 +160,7 @@ pip install -e .
 
 ```bash
 pip install -e .[dev]
-python -m pytest tests/ -v   # 702 tests, 0 failures
+python -m pytest tests/ -v   # 739 tests, 0 failures
 ```
 
 ## Read agent memory
@@ -219,7 +219,7 @@ src/dsm/
   attestation.py       # Compute attestation — input-output binding
   status.py            # Status enums (including A→E enums)
 
-tests/                 # 702 tests — core, session, rr, ans, A→E, security, integration
+tests/                 # 739 tests — core, session, rr, ans, A→E, security, integration
 docs/architecture/     # DSM_PILLARS_A_TO_E.md — full design + quantitative impact
 ```
 

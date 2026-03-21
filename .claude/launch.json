@@ -1,0 +1,35 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "pytest-all",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "pytest", "tests/", "-v", "--tb=short"],
+      "port": 0
+    },
+    {
+      "name": "pytest-coverage",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "pytest", "tests/", "--cov=src/dsm", "--cov-report=term-missing"],
+      "port": 0
+    },
+    {
+      "name": "benchmarks",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["benchmarks/bench_pillars.py"],
+      "port": 0
+    },
+    {
+      "name": "ruff-lint",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "ruff", "check", "src/", "tests/"],
+      "port": 0
+    },
+    {
+      "name": "bandit-security",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "bandit", "-r", "src/", "-ll"],
+      "port": 0
+    }
+  ]
+}
