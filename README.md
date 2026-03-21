@@ -16,7 +16,7 @@ Created by <strong>Mohamed Azizi</strong> · <a href="https://www.daryl.md">dary
 <img src="https://github.com/daryl-labs-ai/daryl/actions/workflows/ci.yml/badge.svg">
 <img src="https://img.shields.io/badge/python-3.10%2B-blue">
 <img src="https://img.shields.io/badge/license-MIT-green">
-<img src="https://img.shields.io/badge/tests-376%20passing-brightgreen">
+<img src="https://img.shields.io/badge/tests-572%20passing-brightgreen">
 <img src="https://img.shields.io/badge/kernel-frozen%20%C2%B7%20stable-blueviolet">
 </p>
 
@@ -25,7 +25,7 @@ Created by <strong>Mohamed Azizi</strong> · <a href="https://www.daryl.md">dary
 AI agents forget everything between sessions.
 When they don't, you can't verify what they remember.
 
-**DSM (Daryl Sharding Memory)** gives agents a memory they can prove — an append-only event log where every entry is hash-chained, every session is replayable, and every claim is verifiable with one command.
+**DSM (Daryl Sharding Memory)** gives agents a memory they can prove — an append-only event log where every entry is hash-chained, every session is replayable, and every claim is verifiable with one command. With v0.8.0, DSM extends to **multi-agent collective memory**: multiple agents — across multiple AI models — share a verifiable, auditable, tamper-proof reality, governed by human sovereignty.
 
 ## What agents get
 
@@ -33,6 +33,10 @@ When they don't, you can't verify what they remember.
 - **Tamper-proof history** — each entry carries a SHA-256 hash chained to the previous one. Alter one byte, the chain breaks.
 - **One-command verification** — `dsm verify --shard sessions` checks the entire history in milliseconds.
 - **Structured sessions** — start, act, observe, end. The agent's lifecycle is a first-class concept, not an afterthought.
+- **Multi-agent collective memory** — N agents share a verifiable shard with projections, not copies. Single writer guaranteed. *(v0.8.0)*
+- **Multi-AI native** — Claude, GPT, Gemini, open source — same protocol. Identity is a key, not a model. *(v0.8.0)*
+- **Human sovereignty** — the owner sets who can contribute, with what trust level, and which entry types are allowed. *(v0.8.0)*
+- **Budget-aware context** — `read_with_digests(max_tokens=8000)` loads the best combination of recent entries and temporal digests within a token budget. *(v0.8.0)*
 
 ## 10 seconds to memory
 
@@ -119,16 +123,27 @@ The agent's context window is lossy and probabilistic. DSM is neither. When the 
 ## Architecture
 
 ```
-Your Agent
+Your Agent(s)
+    ↓
+DarylAgent facade     ← SDK: register, push, pull, admit, drain, seal
+    ↓
+┌─────────────────────────────────────────────────┐
+│  A→E Pillars (v0.8.0)                          │
+│  A IdentityRegistry   — multi-agent governance  │
+│  B SovereigntyPolicy  — human access control    │
+│  C NeutralOrchestrator — rule-based admission   │
+│  D CollectiveShard     — shared memory + sync   │
+│  E ShardLifecycle      — drain/seal/archive     │
+└─────────────────────────────────────────────────┘
     ↓
 SessionGraph          ← lifecycle: start, snapshot, action, end
     ↓
 RR (Read Relay)       ← query: recent entries, summaries, filters
     ↓
-DSM Core              ← storage: append-only, hash-chained, frozen
+DSM Core (frozen)     ← storage: append-only, hash-chained, stable
 ```
 
-The kernel (`src/dsm/core/`) is **frozen since March 2026** — battle-tested, minimal modifications (K-1/K-2/K-3 crash safety, W-7 portable locking). Everything above it (P3–P11: SDK facade, pre-commitment, shard sealing, cross-agent receipts, session index, policy adapters, Ed25519 signing, artifact store, causal ordering, compute attestation) uses the public API without touching the internals. Security audit fixes (S-1 through S-5) harden encryption, key management, and startup verification.
+The kernel (`src/dsm/core/`) is **frozen since March 2026** — battle-tested, zero modifications since. Everything above it uses the public API without touching the internals. v0.8.0 adds pillar modules A→E (identity, sovereignty, orchestration, collective, lifecycle) entirely above the freeze line — 7 new source files, 171 new tests, zero kernel changes.
 
 For the full architecture: [ARCHITECTURE.md](ARCHITECTURE.md)
 
@@ -144,7 +159,7 @@ pip install -e .
 
 ```bash
 pip install -e .[dev]
-python -m pytest tests/ -v   # 376 tests, 0 failures
+python -m pytest tests/ -v   # 572 tests, 0 failures
 ```
 
 ## Read agent memory
@@ -181,24 +196,65 @@ results = verify_all(storage)
 
 ```
 src/dsm/
-  core/         # frozen kernel — storage, models, hash chain, segments
-  session/      # SessionGraph lifecycle management
-  rr/           # Read Relay — query layer over storage
-  ans/          # Analytics — skill performance, workflow insights
-  skills/       # Skill registry, router, ingestor
-  agent.py      # DarylAgent — SDK facade (P3)
-  anchor.py     # Pre-commitment & environment anchoring (P4)
-  seal.py       # Shard sealing for selective forgetting (P5)
-  exchange.py   # Cross-agent trust receipts (P6)
-  signing.py    # Ed25519 entry signing (P9)
-  artifacts.py  # Content-addressable artifact store (P9)
-  causal.py     # Cross-agent causal binding (P10)
-  attestation.py # Compute attestation — input-output binding (P11)
-  status.py     # Status enums (VerifyStatus, ReceiptStatus, etc.)
+  core/                # frozen kernel — storage, models, hash chain, segments
+  session/             # SessionGraph lifecycle management
+  identity/            # Identity module — IdentityManager + IdentityRegistry (A)
+  rr/                  # Read Relay — query layer over storage
+  ans/                 # Analytics — skill performance, workflow insights
+  skills/              # Skill registry, router, ingestor
+  agent.py             # DarylAgent — SDK facade + A→E integration
+  sovereignty.py       # Human sovereignty — pre-execution access control (B)
+  orchestrator.py      # Neutral orchestration — rule-based admission (C)
+  collective.py        # Collective memory — sync engine, digester (D)
+  lifecycle.py         # Shard lifecycle — drain/seal/archive state machine (E)
+  shard_families.py    # Shard classification by family (cross-cutting)
+  exceptions.py        # A→E shared exceptions
+  anchor.py            # Pre-commitment & environment anchoring
+  seal.py              # Shard sealing for selective forgetting
+  exchange.py          # Cross-agent trust receipts
+  signing.py           # Ed25519 entry signing
+  artifacts.py         # Content-addressable artifact store
+  causal.py            # Cross-agent causal binding
+  attestation.py       # Compute attestation — input-output binding
+  status.py            # Status enums (including A→E enums)
 
-tests/          # 376 tests — core, session, rr, ans, P3-P11, security, integration
-docs/           # Architecture, known issues, roadmap
+tests/                 # 572 tests — core, session, rr, ans, A→E, security, integration
+docs/architecture/     # DSM_PILLARS_A_TO_E.md — full design + quantitative impact
 ```
+
+## Multi-agent in 30 seconds (v0.8.0)
+
+```python
+from dsm.agent import DarylAgent
+
+agent = DarylAgent(data_dir="memory")
+
+# A — Register agents
+agent.register_agent("claude_1", "pk_claude")
+agent.register_agent("gpt_1", "pk_gpt")
+
+# B — Set sovereignty policy
+agent.set_policy({
+    "agents": ["claude_1", "gpt_1"],
+    "min_trust_score": 0.3,
+    "allowed_types": ["observation", "decision"],
+})
+
+# D — Push to collective
+agent.start()
+agent.push("claude_1", "owner", "sessions", "key")
+agent.push("gpt_1", "owner", "sessions", "key")
+
+# D — Read with budget
+context = agent.read_context(hours=24, max_tokens=8000)
+
+# E — Lifecycle
+agent.drain_shard("old_shard", "owner", "sig")
+agent.seal_shard("old_shard", "owner", "sig")
+agent.end()
+```
+
+Two agents, two AI models, one verifiable collective. For the full design: [DSM_PILLARS_A_TO_E.md](docs/architecture/DSM_PILLARS_A_TO_E.md)
 
 ## Known limitations
 
