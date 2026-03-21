@@ -1,6 +1,6 @@
 # Daryl Architecture
 
-> **Version:** 0.8.0 · **Kernel:** frozen since March 2026 · **Tests:** 656 passing
+> **Version:** 0.8.0 · **Kernel:** frozen since March 2026 · **Tests:** 698 passing
 
 This document describes the architecture of Daryl (DSM). The **kernel is frozen** — see [docs/architecture/DSM_KERNEL_FREEZE_2026_03.md](docs/architecture/DSM_KERNEL_FREEZE_2026_03.md). All v0.8.0 additions (pillars A→E) are above the freeze line.
 
@@ -207,7 +207,7 @@ src/dsm/
   policy_adapter.py      # OPA/Inkog adapters
   status.py              # Status enums (including A→E)
 
-tests/                   # 656 tests — 0 failures
+tests/                   # 698 tests — 0 failures
 docs/architecture/       # DSM_PILLARS_A_TO_E.md, kernel freeze doc
 ```
 
