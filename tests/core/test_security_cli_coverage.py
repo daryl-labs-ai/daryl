@@ -35,26 +35,36 @@ def sec(tmp_path):
 # ---------------------------------------------------------------------------
 
 class TestGenerateReportEdgeCases:
-    def test_report_with_anomalies(self, sec, tmp_path):
-        # Create broken chain to trigger anomaly
-        chain_dir = tmp_path / "data" / "integrity"
-        chain_dir.mkdir(parents=True)
-        (chain_dir / "chain.json").write_text(json.dumps({
-            "entries": [
-                {"id": "1", "hash": "aaa", "prev_hash": None},
-                {"id": "2", "hash": "bbb", "prev_hash": "WRONG"},
-            ]
-        }))
-        report = sec.generate_report()
-        assert "ANOMALIES" in report or "BROKEN" in report
+    def _mock_self_check(self, anomalies=None, git_status=None, chain_valid=True):
+        return {
+            "timestamp": "2026-01-01T00:00:00Z",
+            "integrity": {
+                "files": {"src/dsm/core/models.py": None},
+                "has_anomalies": bool(anomalies),
+                "git_status": git_status or {},
+            },
+            "chain_status": {"valid": chain_valid, "entries": 0, "error": "broken" if not chain_valid else None},
+            "cycle_stats": {"api_requests": 0, "file_writes": 0, "external_connections": 0},
+            "anomalies": anomalies or [],
+            "security_status": "WARNING" if anomalies else "OK",
+        }
+
+    def test_report_with_anomalies(self, sec):
+        with patch.object(sec, 'self_check', return_value=self._mock_self_check(
+            anomalies=["Integrity chain broken"], chain_valid=False
+        )):
+            report = sec.generate_report()
+            assert "ANOMALIES" in report
 
     def test_report_with_git_status(self, sec):
-        with patch.object(sec, '_check_git_status', return_value={"file.py": "modified"}):
+        with patch.object(sec, 'self_check', return_value=self._mock_self_check(
+            git_status={"file.py": "modified"}
+        )):
             report = sec.generate_report()
             assert "Git Status" in report
 
     def test_report_clean_git(self, sec):
-        with patch.object(sec, '_check_git_status', return_value={}):
+        with patch.object(sec, 'self_check', return_value=self._mock_self_check()):
             report = sec.generate_report()
             assert "Clean working tree" in report
 
