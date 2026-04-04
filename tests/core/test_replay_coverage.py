@@ -57,7 +57,7 @@ def _make_trace_data(trace_id="t1", session_id="sess1", action_type="action",
 def _write_trace_file(tmp_path, lines):
     """Write JSONL trace file."""
     f = tmp_path / "trace.jsonl"
-    f.write_text("\n".join(json.dumps(l) for l in lines) + "\n")
+    f.write_text("\n".join(json.dumps(line) for line in lines) + "\n")
     return f
 
 
