@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to publish (e.g. 0.9.0)"
+        required: true
+        default: "0.9.0"
 
 permissions:
   contents: read
