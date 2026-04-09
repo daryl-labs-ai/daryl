@@ -26,7 +26,7 @@ Created by <strong>Mohamed Azizi</strong> · <a href="https://www.daryl.md">dary
 AI agents forget everything between sessions.
 When they don't, you can't verify what they remember.
 
-**DSM (Daryl Sharding Memory)** gives agents a memory they can prove — an append-only event log where every entry is hash-chained, every session is replayable, and every claim is verifiable with one command. With v0.8.0, DSM extends to **multi-agent collective memory**: multiple agents — across multiple AI models — share a verifiable, auditable, tamper-proof reality, governed by human sovereignty.
+**DSM (Daryl Sharding Memory)** gives agents a memory they can prove — an append-only event log where every entry is hash-chained, every session is replayable, and every claim is verifiable with one command. With v0.9.0, DSM extends to **multi-agent collective memory**: multiple agents — across multiple AI models — share a verifiable, auditable, tamper-proof reality, governed by human sovereignty.
 
 ## What agents get
 
@@ -150,6 +150,12 @@ The kernel (`src/dsm/core/`) is **frozen since March 2026** — battle-tested, z
 For the full architecture: [ARCHITECTURE.md](ARCHITECTURE.md)
 
 ## Install
+
+```bash
+pip install daryl-dsm
+```
+
+Or from source:
 
 ```bash
 git clone https://github.com/daryl-labs-ai/daryl
@@ -292,10 +298,16 @@ DSM is a standalone memory system. The following integrations provide optional i
 
 ### Goose (MCP)
 
-Provable memory backend for [Goose](https://github.com/block/goose) via MCP.
+Provable memory backend for [Goose](https://github.com/aaif-goose/goose) via MCP.
 
 ```bash
-pip install -e ".[goose]"
+pip install dsm-mcp
+```
+
+Or run directly without installing:
+
+```bash
+uvx dsm-mcp
 ```
 
 Add to `~/.config/goose/extensions.d/dsm-memory.yaml`:
@@ -304,8 +316,8 @@ Add to `~/.config/goose/extensions.d/dsm-memory.yaml`:
 name: dsm-memory
 description: Provable memory for Goose — SHA-256 chained, replayable, verifiable
 type: stdio
-cmd: python3
-args: ["-m", "dsm.integrations.goose"]
+cmd: uvx
+args: ["dsm-mcp"]
 ```
 
 Restart Goose. 11 MCP tools are available: `dsm_status`, `dsm_start_session`, `dsm_end_session`, `dsm_log_action`, `dsm_confirm_action`, `dsm_snapshot`, `dsm_recall`, `dsm_recent`, `dsm_summary`, `dsm_search`, `dsm_verify`.
