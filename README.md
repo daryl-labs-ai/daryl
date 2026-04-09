@@ -17,7 +17,7 @@ Created by <strong>Mohamed Azizi</strong> · <a href="https://www.daryl.md">dary
 <img src="https://img.shields.io/badge/python-3.10%2B-blue">
 <img src="https://img.shields.io/badge/license-MIT-green">
 <img src="https://img.shields.io/badge/coverage-78%25-yellow">
-<img src="https://img.shields.io/badge/tests-769%20passing-brightgreen">
+<img src="https://img.shields.io/badge/tests-797%20passing-brightgreen">
 <img src="https://img.shields.io/badge/kernel-frozen%20%C2%B7%20stable-blueviolet">
 </p>
 
@@ -161,7 +161,7 @@ pip install -e .
 
 ```bash
 pip install -e .[dev]
-python -m pytest tests/ -v   # 769 tests, 0 failures
+python -m pytest tests/ -v   # 797 tests, 0 failures
 ```
 
 ## Read agent memory
@@ -285,6 +285,32 @@ print(merge.merge_hash)  # SHA-256 of all lane tips
 3 agents, 3 independent shards, one merge view. 2.5x→84x write throughput vs single shard.
 
 Two agents, two AI models, one verifiable collective. For the full design: [DSM_PILLARS_A_TO_E.md](docs/architecture/DSM_PILLARS_A_TO_E.md)
+
+## Integrations
+
+DSM is a standalone memory system. The following integrations provide optional interfaces for connecting agents and frameworks.
+
+### Goose (MCP)
+
+Provable memory backend for [Goose](https://github.com/block/goose) via MCP.
+
+```bash
+pip install -e ".[goose]"
+```
+
+Add to `~/.config/goose/extensions.d/dsm-memory.yaml`:
+
+```yaml
+name: dsm-memory
+description: Provable memory for Goose — SHA-256 chained, replayable, verifiable
+type: stdio
+cmd: python3
+args: ["-m", "dsm.integrations.goose"]
+```
+
+Restart Goose. 11 MCP tools are available: `dsm_status`, `dsm_start_session`, `dsm_end_session`, `dsm_log_action`, `dsm_confirm_action`, `dsm_snapshot`, `dsm_recall`, `dsm_recent`, `dsm_summary`, `dsm_search`, `dsm_verify`.
+
+See [integrations/goose/README.md](src/dsm/integrations/goose/README.md) for full documentation.
 
 ## Known limitations
 
