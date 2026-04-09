@@ -1,0 +1,65 @@
+name: Publish to PyPI
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to publish (e.g. 0.9.0)"
+        required: true
+        default: "0.9.0"
+
+permissions:
+  contents: read
+  id-token: write  # required for OIDC trusted publishing
+
+jobs:
+  publish-daryl-dsm:
+    name: Publish daryl-dsm
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/daryl-dsm
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install build
+        run: pip install build
+
+      - name: Build daryl-dsm
+        run: python -m build
+
+      - name: Publish daryl-dsm to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+
+  publish-dsm-mcp:
+    name: Publish dsm-mcp
+    runs-on: ubuntu-latest
+    needs: publish-daryl-dsm  # daryl-dsm must be on PyPI before dsm-mcp is published
+    environment:
+      name: pypi
+      url: https://pypi.org/p/dsm-mcp
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install build
+        run: pip install build
+
+      - name: Build dsm-mcp
+        working-directory: packages/dsm-mcp
+        run: python -m build
+
+      - name: Publish dsm-mcp to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: packages/dsm-mcp/dist/

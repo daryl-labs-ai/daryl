@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dsm-mcp"
+version = "0.9.0"
+description = "DSM Memory MCP server for Goose — append-only, hash-chained memory via MCP"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+keywords = ["mcp", "memory", "goose", "ai-agent", "hash-chain"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "daryl-dsm[goose]>=0.9.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/daryl-labs-ai/daryl"
+Source = "https://github.com/daryl-labs-ai/daryl/tree/main/src/dsm/integrations/goose"
+"Bug Tracker" = "https://github.com/daryl-labs-ai/daryl/issues"
+
+[project.scripts]
+dsm-mcp = "dsm.integrations.goose.__main__:main"
+
+[tool.setuptools]
+packages = []
