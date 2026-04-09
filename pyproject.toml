@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "daryl-dsm"
-version = "0.8.0"
+version = "0.9.0"
 description = "Deterministic Sharding Memory for AI agents — append-only, hash-chained, tamper-evident event log"
 requires-python = ">=3.8"
 dependencies = [
@@ -12,6 +12,12 @@ dependencies = [
     "cryptography>=41.0",
     "filelock>=3.12",
 ]
+
+
+[project.urls]
+Homepage = "https://github.com/daryl-labs-ai/daryl"
+Source = "https://github.com/daryl-labs-ai/daryl"
+"Bug Tracker" = "https://github.com/daryl-labs-ai/daryl/issues"
 
 [project.optional-dependencies]
 goose = ["mcp>=1.25.0"]
@@ -25,7 +31,7 @@ dev = [
 
 [project.scripts]
 dsm = "dsm.cli:main_dsm"
-dsm-serve-goose = "dsm.integrations.goose:main"
+dsm-serve-goose = "dsm.integrations.goose.__main__:main"
 
 [tool.setuptools.package-dir]
 "" = "src"
