@@ -35,6 +35,7 @@ jobs:
   publish-dsm-mcp:
     name: Publish dsm-mcp
     runs-on: ubuntu-latest
+    needs: publish-daryl-dsm  # daryl-dsm must be on PyPI before dsm-mcp is published
     environment:
       name: pypi
       url: https://pypi.org/p/dsm-mcp
