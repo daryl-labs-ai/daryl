@@ -167,6 +167,14 @@ status: OK
 
 If anyone — or anything — modifies the trail after the fact, verification fails.
 
+### See it in action
+
+Run the tamper-detection demo end-to-end:
+
+```bash
+python demo_verify.py
+```
+
 ## Core Guarantees
 
 - **Frozen kernel** — the core storage engine (`src/dsm/core/`) has been frozen since March 2026. Zero modifications since. Everything above it uses the public API.
