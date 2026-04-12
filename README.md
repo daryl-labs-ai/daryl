@@ -168,6 +168,8 @@ status: OK
 
 If anyone — or anything — modifies the trail after the fact, verification fails.
 
+👉 See [`demo/README.md`](demo/README.md) — tamper detection, multi-agent verification, security insight.
+
 ## 🧪 Demo
 
 ```bash
