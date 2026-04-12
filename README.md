@@ -166,8 +166,10 @@ pip install -e .
 ## Run the tests
 
 ```bash
+git clone https://github.com/daryl-labs-ai/daryl
+cd daryl
 pip install -e .[dev]
-python -m pytest tests/ -v   # 797 tests, 0 failures
+python -m pytest tests/ -v   # 1153 tests, 0 failures
 ```
 
 ## Read agent memory
