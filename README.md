@@ -178,7 +178,7 @@ python demo_verify.py
 
 Records a high-value agent decision trail, simulates a post-hoc modification, and shows how Daryl detects it.
 
-![Daryl Verify Demo](demo_verify_output.png)
+![Daryl Verify Demo](demo_verify.gif)
 
 ## Core Guarantees
 
