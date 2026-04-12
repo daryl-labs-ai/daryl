@@ -1,6 +1,6 @@
 # Daryl — Demos
 
-Two runnable demos that show what DSM actually does.
+Three runnable demos that show what DSM actually does.
 
 ---
 
@@ -49,17 +49,41 @@ python demo/demo_end_to_end.py
 
 ---
 
+## 3. `demo_support_agent.py` — Customer Support Agent
+
+**What it proves:** DSM records and verifies a real-world business decision —
+a customer support agent applying a retention policy — and detects post-hoc alteration.
+
+**Scenario:** A support AI agent handles a subscription cancellation request.
+It classifies intent, checks the subscription, applies a 30% retention discount for a loyal customer.
+Someone modifies the policy decision after the fact (discount removed, rationale changed).
+DSM detects the exact tampered entry.
+
+```bash
+python demo/demo_support_agent.py
+```
+
+**What you'll see:**
+- 6 entries recorded (start + 4 actions + end)
+- Chain verified clean: all decisions intact
+- Policy entry tampered: `discount_pct 30 → 0`, rationale altered
+- DSM detects the exact modified entry
+- Verdict: `TRAIL COMPROMISED`
+
+---
+
 ## What this demonstrates
 
-| Capability | demo_verify | demo_end_to_end |
-|---|:---:|:---:|
-| Append-only recording | ✅ | ✅ |
-| Hash chain integrity | ✅ | ✅ |
-| Tamper detection | ✅ | ✅ |
-| Multi-agent tracing | — | ✅ |
-| Causal proof (dispatch) | — | ✅ |
-| Cross-agent trust receipts | — | ✅ |
-| Per-agent isolation | — | ✅ |
+| Capability | demo_verify | demo_end_to_end | demo_support_agent |
+|---|:---:|:---:|:---:|
+| Append-only recording | ✅ | ✅ | ✅ |
+| Hash chain integrity | ✅ | ✅ | ✅ |
+| Tamper detection | ✅ | ✅ | ✅ |
+| Business scenario | — | — | ✅ |
+| Multi-agent tracing | — | ✅ | — |
+| Causal proof (dispatch) | — | ✅ | — |
+| Cross-agent trust receipts | — | ✅ | — |
+| Per-agent isolation | — | ✅ | — |
 
 ---
 
