@@ -24,6 +24,7 @@ Created by <strong>Mohamed Azizi</strong> · <a href="https://www.daryl.md">dary
 <img src="https://img.shields.io/badge/coverage-90%25-brightgreen">
 <img src="https://img.shields.io/badge/tests-1153%20passing-brightgreen">
 <img src="https://img.shields.io/badge/kernel-frozen%20%C2%B7%20stable-blueviolet">
+<img src="https://img.shields.io/badge/demo-60s%20tamper%20detection-black">
 </p>
 
 ---
@@ -179,6 +180,16 @@ python demo_verify.py
 Records a high-value agent decision trail, simulates a post-hoc modification, and shows how Daryl detects it.
 
 ![Daryl Verify Demo](demo_verify.gif)
+
+Run it locally:
+
+```bash
+git clone https://github.com/daryl-labs-ai/daryl
+cd daryl
+python demo_verify.py
+```
+
+→ See the full multi-agent demo: [`demo/README.md`](demo/README.md)
 
 ## Core Guarantees
 
