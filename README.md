@@ -9,7 +9,8 @@
 </p>
 
 <p align="center">
-<em>Cryptographic proof of every decision an agent makes.</em>
+<em>Cryptographic proof of every decision an agent makes.</em><br>
+<em>Not logs. Not traces. Evidence.</em>
 </p>
 
 <p align="center">
@@ -167,13 +168,15 @@ status: OK
 
 If anyone — or anything — modifies the trail after the fact, verification fails.
 
-### See it in action
-
-Run the tamper-detection demo end-to-end:
+## 🧪 Demo
 
 ```bash
 python demo_verify.py
 ```
+
+Records a high-value agent decision trail, simulates a post-hoc modification, and shows how Daryl detects it.
+
+![Daryl Verify Demo](demo_verify_output.png)
 
 ## Core Guarantees
 
