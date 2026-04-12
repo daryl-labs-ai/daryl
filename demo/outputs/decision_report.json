@@ -1,0 +1,12 @@
+{
+  "client": "VIP_001",
+  "decision": "recommendation",
+  "item": "Patek Philippe 5711A",
+  "price_eur": 120000,
+  "agents": [
+    "agent_a",
+    "agent_b"
+  ],
+  "causal_proof": "08ae876b4d712c8dd3726d348972fcb3e9cf9fb8d927cfaa034c5b7d78274399",
+  "receipt_status": "INTACT"
+}
