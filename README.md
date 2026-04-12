@@ -16,8 +16,8 @@ Created by <strong>Mohamed Azizi</strong> · <a href="https://www.daryl.md">dary
 <img src="https://github.com/daryl-labs-ai/daryl/actions/workflows/ci.yml/badge.svg">
 <img src="https://img.shields.io/badge/python-3.10%2B-blue">
 <img src="https://img.shields.io/badge/license-MIT-green">
-<img src="https://img.shields.io/badge/coverage-78%25-yellow">
-<img src="https://img.shields.io/badge/tests-797%20passing-brightgreen">
+<img src="https://img.shields.io/badge/coverage-90%25-brightgreen">
+<img src="https://img.shields.io/badge/tests-1153%20passing-brightgreen">
 <img src="https://img.shields.io/badge/kernel-frozen%20%C2%B7%20stable-blueviolet">
 </p>
 
