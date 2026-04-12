@@ -5,7 +5,11 @@
 <h1 align="center">Daryl</h1>
 
 <p align="center">
-<strong>Provable memory for AI agents</strong>
+<strong>DSM (Daryl Sharding Memory) — The trust layer for AI agents.</strong>
+</p>
+
+<p align="center">
+<em>Cryptographic proof of every decision an agent makes.</em>
 </p>
 
 <p align="center">
@@ -23,45 +27,134 @@ Created by <strong>Mohamed Azizi</strong> · <a href="https://www.daryl.md">dary
 
 ---
 
-AI agents forget everything between sessions.
-When they don't, you can't verify what they remember.
+## The Problem
 
-**DSM (Daryl Sharding Memory)** gives agents a memory they can prove — an append-only event log where every entry is hash-chained, every session is replayable, and every claim is verifiable with one command. With v0.9.0, DSM extends to **multi-agent collective memory**: multiple agents — across multiple AI models — share a verifiable, auditable, tamper-proof reality, governed by human sovereignty.
+You deployed an AI agent. It made a decision. Something went wrong.
 
-## What agents get
+Now prove what happened.
 
-- **Total recall** — every action, snapshot, and decision is logged as an immutable entry. Nothing is lost, nothing is overwritten.
-- **Tamper-proof history** — each entry carries a SHA-256 hash chained to the previous one. Alter one byte, the chain breaks.
-- **One-command verification** — `dsm verify --shard sessions` checks the entire history in milliseconds.
-- **Structured sessions** — start, act, observe, end. The agent's lifecycle is a first-class concept, not an afterthought.
-- **Multi-agent collective memory** — N agents share a verifiable shard with projections, not copies. Single writer guaranteed. *(v0.8.0)*
-- **Parallel shard lanes** — each agent writes to its own lane (zero contention), reads merge across all lanes. 2.5x→84x write throughput scaling. *(v0.8.0)*
-- **Multi-AI native** — Claude, GPT, Gemini, open source — same protocol. Identity is a key, not a model. *(v0.8.0)*
-- **Human sovereignty** — the owner sets who can contribute, with what trust level, and which entry types are allowed. *(v0.8.0)*
-- **Budget-aware context** — `read_with_digests(max_tokens=8000)` loads the best combination of recent entries and temporal digests within a token budget. *(v0.8.0)*
+Logs tell you *that* something ran. Observability dashboards tell you *how long* it took. Neither can answer the question that matters: **did the agent actually do what it claims it did, and can you prove it hasn't been altered after the fact?**
 
-## 10 seconds to memory
+- Logs are mutable. Anyone with access can edit or delete them.
+- Vector databases reconstruct context probabilistically — they don't preserve decisions.
+- Agent frameworks track tool calls, not verifiable proof of execution.
+
+When a regulator, an auditor, or your own CTO asks *"prove this agent did X and not Y"*, none of these tools can answer. You need a **notary**, not a logger.
+
+## The Solution
+
+**DSM (Daryl Sharding Memory)** is a trust layer that gives AI agents a cryptographically verifiable execution trail. DSM turns agent execution into cryptographic evidence.
+
+Every action, every decision, every input-output pair is recorded as an immutable, hash-chained entry. Each entry carries a SHA-256 hash linked to the previous one. Alter one byte anywhere in the chain, and verification fails. One command checks the entire history.
+
+DSM does not replace your logs or your vector database. It sits alongside them as the **proof layer** — the part you hand to an auditor.
+
+## How It Works
+
+```
+1. Agent acts                      →  action intent is appended to an append-only shard
+2. Entry is hashed                 →  SHA-256(content + prev_hash) — chained to all prior entries
+3. Entry is signed                 →  Ed25519 signature proves authorship (optional)
+4. Chain is sealed                 →  shard can be archived with a cryptographic tombstone
+5. Anyone can verify independently →  replay the chain, recompute every hash, confirm integrity
+```
+
+**Append-only**: entries are never modified or deleted. New entries extend the chain.
+**Hash-chained**: each entry's hash depends on the previous entry. Tampering breaks the chain.
+**Attestation**: input-output bindings prove which output was produced for which input.
+**Replay**: the full agent history can be deterministically replayed and verified.
+
+## How It Compares
+
+| Capability | Logs | Vector DB | Agent Frameworks | **Daryl (DSM)** |
+|---|:---:|:---:|:---:|:---:|
+| Prove nothing was altered | - | - | - | **SHA-256 hash chain** |
+| Prove agent authorship | - | - | - | **Ed25519 signatures** |
+| Prove input→output binding | - | - | - | **Compute attestation** |
+| Replay exact execution history | - | - | Partial | **Full deterministic replay** |
+| Cross-agent causal proof | - | - | - | **Dispatch + routing hashes** |
+| Compliance-ready audit trail | - | - | - | **Seal + archive** |
+| Semantic search | - | Yes | - | - |
+| Real-time dashboards | Yes | - | Yes | - |
+
+DSM is not a replacement for observability. It is the layer that makes your agent's history **admissible as evidence**.
+
+## Architecture
+
+Daryl is structured in three layers: execution, trust, and governance.
+
+```
+Your Agent(s)
+    ↓
+SessionGraph              ← lifecycle: start, act, confirm, end
+    ↓
+┌──────────────────────────────────────────────────────┐
+│  Trust Modules                                       │
+│  · Ed25519 Signing     — prove authorship            │
+│  · Compute Attestation — bind input to output        │
+│  · Causal Binding      — prove cross-agent causality │
+│  · Trust Receipts      — portable proof of work      │
+│  · Shard Sealing       — archive with crypto proof   │
+└──────────────────────────────────────────────────────┘
+    ↓
+┌──────────────────────────────────────────────────────┐
+│  Governance (A→E Pillars)                            │
+│  A IdentityRegistry    — multi-agent identity        │
+│  B SovereigntyPolicy   — human access control        │
+│  C NeutralOrchestrator — rule-based admission        │
+│  D CollectiveShard     — shared verifiable state     │
+│  E ShardLifecycle      — drain / seal / archive      │
+└──────────────────────────────────────────────────────┘
+    ↓
+DSM Core (frozen since March 2026)
+    ← append-only storage, hash chain, segments
+```
+
+## Quick Start
+
+### Install
+
+```bash
+pip install daryl-dsm
+```
+
+```bash
+# From source
+git clone https://github.com/daryl-labs-ai/daryl
+cd daryl
+pip install -e .
+```
+
+### Record and verify agent actions
 
 ```python
 from dsm.core.storage import Storage
 from dsm.session.session_graph import SessionGraph
 from dsm.session.session_limits_manager import SessionLimitsManager
 
-storage = Storage(data_dir="memory")
-limits = SessionLimitsManager.agent_defaults("memory")
+# Initialize
+storage = Storage(data_dir="agent_trail")
+limits = SessionLimitsManager.agent_defaults("agent_trail")
 session = SessionGraph(storage=storage, limits_manager=limits)
 
+# Record agent actions — each one becomes a hash-chained entry
 session.start_session(source="my_agent")
 session.execute_action("search", {"query": "weather in paris"})
 session.execute_action("reply", {"text": "It's sunny in Paris"})
 session.end_session()
 ```
 
-4 events written. Hash-chained. Replayable. Done.
+### Verify the entire trail
 
-## Verify everything
+```python
+from dsm.verify import verify_shard
 
+result = verify_shard(storage, "sessions")
+assert result["status"] == "OK"
+# → total_entries: 4, verified: 4, tampered: 0, chain_breaks: 0
 ```
+
+```bash
 $ dsm verify --shard sessions
 
 shard_id: sessions
@@ -72,98 +165,156 @@ chain_breaks: 0
 status: OK
 ```
 
-If anyone — or anything — modifies the history, DSM catches it.
+If anyone — or anything — modifies the trail after the fact, verification fails.
 
-## How it compares
+## Core Guarantees
 
-| What you need | Logs | Vector DB | DSM |
-|---|:---:|:---:|:---:|
-| Replay exact agent history | ❌ | ❌ | ✅ |
-| Prove nothing was altered | ❌ | ❌ | ✅ |
-| Audit agent behavior | ❌ | ❌ | ✅ |
-| Detect hallucinated memories | ❌ | ❌ | ✅ |
-| Semantic search | ❌ | ✅ | ❌ |
+- **Frozen kernel** — the core storage engine (`src/dsm/core/`) has been frozen since March 2026. Zero modifications since. Everything above it uses the public API.
+- **Crash-safe writes** — the WAL (write-ahead log) pattern ensures that if a process crashes between `execute_action` and `confirm_action`, the incomplete intent is detectable on replay. No silent data loss.
+- **Deterministic verification** — `verify_shard` recomputes every hash from raw data in chronological order. The result is binary: the chain is intact, or it isn't.
 
-DSM doesn't replace a vector database. It complements it — **the vector DB searches, DSM proves.**
+## Advanced Capabilities
 
-## Agents that can't lie about what they did
+### Cross-Agent Trust Receipts
 
-When an agent says *"I searched the web and found X"*, how do you know it actually did?
+*Module: `dsm.exchange`*
 
-With DSM, you don't trust — you verify. Every action the agent claims to have taken is either in the hash-chained log or it isn't. There is no middle ground.
+When Agent B completes work for Agent A, it issues a **TaskReceipt** — a portable, self-contained proof of work. The receipt includes the entry hash, shard tip hash, and entry count at the time of issuance. A third party can verify the receipt against Agent B's shard without trusting either agent.
 
 ```python
-# Agent says it searched for weather — did it?
-entries = storage.read("sessions", limit=20)
-actions = [e for e in entries if e.metadata.get("action_name") == "search"]
-# Either the search entry exists with its exact payload, or the agent is hallucinating.
+from dsm.exchange import issue_receipt, verify_receipt, verify_receipt_against_storage
+
+receipt = issue_receipt(storage, agent_id="agent_b", entry_id="...",
+                        shard_id="sessions", task_description="Translated document")
+
+result = verify_receipt(receipt)
+# → {"status": "INTACT", "issuer": "agent_b", ...}
+
+result = verify_receipt_against_storage(storage, receipt)
+# → {"status": "CONFIRMED", "entry_found": True, "hash_matches": True}
 ```
 
-This doesn't prevent an LLM from hallucinating. It makes hallucinations about past behavior **detectable and provable** — the agent's memory is a chain of cryptographic facts, not a probabilistic reconstruction.
+### Ed25519 Entry Signing
 
-### Self-aware agents
+*Module: `dsm.signing`*
 
-An agent with DSM can detect **its own** hallucinations before responding:
+Every entry or receipt can be signed with an Ed25519 keypair. This proves authorship: only the agent holding the private key could have produced a valid signature. Supports key rotation, key revocation, and hash-chained key history.
 
 ```python
-# Agent "remembers" searching for weather yesterday.
-# Instead of trusting its context window, it checks:
+from dsm.signing import AgentSigning
 
-entries = storage.read("sessions", limit=100)
-searches = [e for e in entries if e.metadata.get("action_name") == "search"]
+signer = AgentSigning(keys_dir="keys", agent_id="agent_a")
+signer.generate_keypair()
 
-if searches:
-    # Memory confirmed — respond with confidence
-    last_search = searches[0]
-else:
-    # No search in the log. The "memory" is a hallucination.
-    # Agent corrects itself before the user ever sees the mistake.
+signature = signer.sign_entry(entry_hash="abc123...")
+
+result = signer.verify_signature(data_hash="abc123...",
+                                  signature=signature,
+                                  public_key=signer.get_public_key())
+# → {"valid": True, ...}
 ```
 
-The agent's context window is lossy and probabilistic. DSM is neither. When the two disagree, DSM is right.
+### Cross-Agent Causal Binding
 
-## Architecture
+*Module: `dsm.causal`*
 
-```
-Your Agent(s)
-    ↓
-DarylAgent facade     ← SDK: register, push, pull, admit, drain, seal
-    ↓
-┌─────────────────────────────────────────────────┐
-│  A→E Pillars (v0.8.0)                          │
-│  A IdentityRegistry   — multi-agent governance  │
-│  B SovereigntyPolicy  — human access control    │
-│  C NeutralOrchestrator — rule-based admission   │
-│  D CollectiveShard     — shared memory + sync   │
-│  E ShardLifecycle      — drain/seal/archive     │
-└─────────────────────────────────────────────────┘
-    ↓
-SessionGraph          ← lifecycle: start, snapshot, action, end
-    ↓
-RR (Read Relay)       ← query: recent entries, summaries, filters
-    ↓
-DSM Core (frozen)     ← storage: append-only, hash-chained, stable
-```
+Proves that Agent B's work was in response to Agent A's specific dispatch — not a coincidence, not a replay. The dispatch hash binds A's entry, task parameters, and timestamp into a single verifiable token.
 
-The kernel (`src/dsm/core/`) is **frozen since March 2026** — battle-tested, zero modifications since. Everything above it uses the public API without touching the internals. v0.8.0 adds pillar modules A→E (identity, sovereignty, orchestration, collective, lifecycle) entirely above the freeze line — 7 new source files, 171 new tests, zero kernel changes.
+```python
+from dsm.causal import create_dispatch_hash, DispatchRecord, verify_dispatch_hash
 
-For the full architecture: [ARCHITECTURE.md](ARCHITECTURE.md)
+dispatch_hash = create_dispatch_hash(
+    dispatcher_entry_hash="abc123...",
+    task_params={"action": "translate", "lang": "fr"},
+)
 
-## Install
+record = DispatchRecord(
+    dispatch_hash=dispatch_hash,
+    dispatcher_agent_id="agent_a",
+    dispatcher_entry_hash="abc123...",
+    target_agent_id="agent_b",
+    task_params={"action": "translate", "lang": "fr"},
+    timestamp="2026-04-12T10:00:00Z",
+)
 
-```bash
-pip install daryl-dsm
+result = verify_dispatch_hash(record)
+# → {"status": "VALID", ...}
 ```
 
-Or from source:
+### Compute Attestation
 
-```bash
-git clone https://github.com/daryl-labs-ai/daryl
-cd daryl
-pip install -e .
+*Module: `dsm.attestation`*
+
+Binds a specific input to a specific output for a given model. The attestation hash proves that *this agent* claims *this output* was produced from *this input* using *this model*. Does not prove the computation was correct (that requires TEEs) — but it makes the claim verifiable and signed.
+
+```python
+from dsm.attestation import create_attestation, verify_attestation, sign_attestation
+
+attestation = create_attestation(
+    agent_id="agent_a",
+    raw_input="What is the capital of France?",
+    raw_output="Paris",
+    model_id="claude-sonnet-4-20250514",
+)
+
+result = verify_attestation(attestation)
+# → {"status": "VALID", ...}
+
+signed = sign_attestation(attestation, signer)
 ```
 
-## Run the tests
+### Shard Sealing
+
+*Module: `dsm.seal`*
+
+When a shard is complete — a session is over, a compliance window has closed — it can be **sealed**. Sealing computes a cryptographic tombstone over the entire shard, optionally archives the data, and records the seal in a registry. The shard data can then be deleted; the seal proves the history existed and what it contained.
+
+```python
+from dsm.seal import seal_shard, SealRegistry, verify_seal
+
+registry = SealRegistry(seal_dir="seals")
+
+record = seal_shard(storage, "old_sessions", registry, archive_path="archive/")
+
+result = verify_seal(registry, "old_sessions")
+# → {"status": "VALID", "entry_count": 42, "sealed_at": "2026-04-12T..."}
+```
+
+## Why It Matters
+
+**EU AI Act (2026)**: High-risk AI systems must maintain logs that allow traceability of decisions. DSM provides a hash-chained, tamper-evident audit trail that satisfies this requirement by design.
+
+**Legal accountability**: When an agent makes a consequential decision — approving a loan, triaging a patient, executing a trade — the organization must be able to reconstruct exactly what happened. DSM makes the reconstruction verifiable, not just plausible.
+
+**Internal governance**: For teams running multi-agent systems, DSM provides the infrastructure to answer "which agent did what, when, and was it authorized?" — with cryptographic proof, not log grep.
+
+## Open vs Private
+
+**This repository (open source, MIT)**:
+- DSM core engine — append-only storage, hash chain, verification
+- Session lifecycle — start, act, confirm, end
+- All trust modules — signing, attestation, causal binding, receipts, sealing
+- Multi-agent governance — identity, sovereignty, orchestration, collective, lifecycle
+- Parallel shard lanes, cold storage, Read Relay query layer
+- CLI tools, Goose MCP integration
+- 1153 tests
+
+**Private extensions (not in this repo)**:
+- Hosted verification API
+- Dashboard and compliance reporting UI
+- Enterprise SSO and team management
+- Managed archival and retention policies
+
+## Vision
+
+Daryl aims to become the standard for verifiable agent execution — the equivalent of digital signatures, but for AI decisions.
+
+## Get in Touch
+
+- Web: [daryl.md](https://www.daryl.md)
+- GitHub: [github.com/daryl-labs-ai/daryl](https://github.com/daryl-labs-ai/daryl)
+
+## Run the Tests
 
 ```bash
 git clone https://github.com/daryl-labs-ai/daryl
@@ -171,170 +322,6 @@ cd daryl
 pip install -e .[dev]
 python -m pytest tests/ -v   # 1153 tests, 0 failures
 ```
-
-## Read agent memory
-
-```python
-from dsm.core.storage import Storage
-from dsm.rr.relay import DSMReadRelay
-
-storage = Storage(data_dir="memory")
-relay = DSMReadRelay(storage=storage)
-
-# Last 10 events
-recent = relay.read_recent("sessions", limit=10)
-
-# Session summary with top actions
-summary = relay.summary("sessions")
-# → {'entry_count': 15, 'unique_sessions': 4, 'top_actions': [('search', 3), ('reply', 2)]}
-```
-
-## Verify integrity
-
-```python
-from dsm.verify import verify_shard, verify_all
-
-# Verify one shard
-result = verify_shard(storage, "sessions")
-assert result["status"] == "OK"
-
-# Verify everything
-results = verify_all(storage)
-```
-
-## Repository structure
-
-```
-src/dsm/
-  core/                # frozen kernel — storage, models, hash chain, segments
-  session/             # SessionGraph lifecycle management
-  identity/            # Identity module — IdentityManager + IdentityRegistry (A)
-  rr/                  # Read Relay — query layer over storage
-  ans/                 # Analytics — skill performance, workflow insights
-  skills/              # Skill registry, router, ingestor
-  agent.py             # DarylAgent — SDK facade + A→E integration
-  sovereignty.py       # Human sovereignty — pre-execution access control (B)
-  orchestrator.py      # Neutral orchestration — rule-based admission (C)
-  collective.py        # Collective memory — sync engine, digester (D)
-  lanes.py             # Parallel shard lanes — zero-contention multi-agent writes
-  lifecycle.py         # Shard lifecycle — drain/seal/archive state machine (E)
-  shard_families.py    # Shard classification by family (cross-cutting)
-  exceptions.py        # A→E shared exceptions
-  anchor.py            # Pre-commitment & environment anchoring
-  seal.py              # Shard sealing for selective forgetting
-  exchange.py          # Cross-agent trust receipts
-  signing.py           # Ed25519 entry signing
-  artifacts.py         # Content-addressable artifact store
-  causal.py            # Cross-agent causal binding
-  attestation.py       # Compute attestation — input-output binding
-  status.py            # Status enums (including A→E enums)
-
-tests/                 # 769 tests — core, session, rr, ans, A→E, lanes, security, integration
-docs/architecture/     # DSM_PILLARS_A_TO_E.md — full design + quantitative impact
-```
-
-## Multi-agent in 30 seconds (v0.8.0)
-
-```python
-from dsm.agent import DarylAgent
-
-agent = DarylAgent(data_dir="memory")
-
-# A — Register agents
-agent.register_agent("claude_1", "pk_claude")
-agent.register_agent("gpt_1", "pk_gpt")
-
-# B — Set sovereignty policy
-agent.set_policy({
-    "agents": ["claude_1", "gpt_1"],
-    "min_trust_score": 0.3,
-    "allowed_types": ["observation", "decision"],
-})
-
-# D — Push to collective
-agent.start()
-agent.push("claude_1", "owner", "sessions", "key")
-agent.push("gpt_1", "owner", "sessions", "key")
-
-# D — Read with budget
-context = agent.read_context(hours=24, max_tokens=8000)
-
-# E — Lifecycle
-agent.drain_shard("old_shard", "owner", "sig")
-agent.seal_shard("old_shard", "owner", "sig")
-agent.end()
-```
-
-## Parallel lanes — zero contention (v0.8.0)
-
-```python
-from dsm.agent import DarylAgent
-
-agent = DarylAgent(data_dir="memory")
-
-# Register parallel lanes (each agent gets its own shard)
-agent.register_lane("claude_1")
-agent.register_lane("gpt_1")
-agent.register_lane("gemini_1")
-
-# Each agent writes to its own lane — zero FileLock contention
-agent.push_to_lane("claude_1", entries, summary_fn=lambda e: e.content[:100])
-agent.push_to_lane("gpt_1", entries, summary_fn=lambda e: e.content[:100])
-
-# Unified read across all lanes, sorted by time
-recent = agent.lane_recent(limit=50)
-tiered = agent.lane_recent_at_tier(tier=2, max_tokens=8000)
-
-# Merge snapshot — verifiable reference across all lanes
-merge = agent.create_lane_merge()
-print(merge.merge_hash)  # SHA-256 of all lane tips
-```
-
-3 agents, 3 independent shards, one merge view. 2.5x→84x write throughput vs single shard.
-
-Two agents, two AI models, one verifiable collective. For the full design: [DSM_PILLARS_A_TO_E.md](docs/architecture/DSM_PILLARS_A_TO_E.md)
-
-## Integrations
-
-DSM is a standalone memory system. The following integrations provide optional interfaces for connecting agents and frameworks.
-
-### Goose (MCP)
-
-Provable memory backend for [Goose](https://github.com/aaif-goose/goose) via MCP.
-
-```bash
-pip install dsm-mcp
-```
-
-Or run directly without installing:
-
-```bash
-uvx dsm-mcp
-```
-
-Add to `~/.config/goose/extensions.d/dsm-memory.yaml`:
-
-```yaml
-name: dsm-memory
-description: Provable memory for Goose — SHA-256 chained, replayable, verifiable
-type: stdio
-cmd: uvx
-args: ["dsm-mcp"]
-```
-
-Restart Goose. 11 MCP tools are available: `dsm_status`, `dsm_start_session`, `dsm_end_session`, `dsm_log_action`, `dsm_confirm_action`, `dsm_snapshot`, `dsm_recall`, `dsm_recent`, `dsm_summary`, `dsm_search`, `dsm_verify`.
-
-See [integrations/goose/README.md](src/dsm/integrations/goose/README.md) for full documentation.
-
-## Known limitations
-
-DSM is an **event log**, not a database.
-
-- **No semantic search** — it stores and verifies, it doesn't understand. Use a vector DB alongside it for retrieval.
-- **Single writer per shard** — concurrent writes are serialized per shard via lockfile (fixed in v0.7.0, see [K-1](docs/KNOWN_ISSUES.md)). Multi-process writes to the same shard are safe; multi-shard parallelism is native.
-- **Cross-platform** — v0.7.0 uses `filelock` for portable locking (Linux, macOS, Windows).
-
-These are architectural choices, not bugs. DSM does one thing — provable, replayable agent memory — and does it correctly.
 
 ## Contributing
 
@@ -344,10 +331,12 @@ pip install -e .[dev]
 python -m pytest tests/
 ```
 
-The kernel (`src/dsm/core/`) is frozen. Do not modify it without opening a design discussion.
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+The kernel (`src/dsm/core/`) is frozen. Do not modify it without opening a design discussion. See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+## Disclaimer
+
+DSM provides cryptographic integrity verification for agent execution trails. It proves that recorded data has not been tampered with after the fact. It does **not** prove that the original data was truthful, that the computation was correct, or that the agent behaved as intended. Hash chain integrity is a necessary condition for trustworthy audit trails, not a sufficient one. For claims about computation correctness, additional infrastructure (e.g., trusted execution environments) is required.
