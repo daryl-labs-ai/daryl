@@ -22,7 +22,7 @@ Created by <strong>Mohamed Azizi</strong> · <a href="https://www.daryl.md">dary
 <img src="https://img.shields.io/badge/python-3.10%2B-blue">
 <img src="https://img.shields.io/badge/license-MIT-green">
 <img src="https://img.shields.io/badge/coverage-90%25-brightgreen">
-<img src="https://img.shields.io/badge/tests-1153%20passing-brightgreen">
+<img src="https://img.shields.io/badge/tests-1230%20passing-brightgreen">
 <img src="https://img.shields.io/badge/kernel-frozen%20%C2%B7%20stable-blueviolet">
 <img src="https://img.shields.io/badge/demo-60s%20tamper%20detection-black">
 </p>
@@ -191,6 +191,32 @@ python demo_verify.py
 
 → See the full multi-agent demo: [`demo/README.md`](demo/README.md)
 
+## Consumption Layer
+
+DSM does not just store memory.
+It recalls it, packages it, and proves its origin.
+
+```python
+from dsm.recall import search_memory
+from dsm.context import build_context
+from dsm.provenance import build_provenance
+
+# Recall relevant memory across past sessions
+result = search_memory(storage, query="kernel decisions",
+                       session_id="current", include_provenance=True)
+
+# Package into token-budgeted context
+pack = build_context(storage, query="kernel decisions",
+                     max_tokens=4000)
+
+# Verify cryptographic origin
+prov = build_provenance(storage, source_shards=["sessions"],
+                        verify=True)
+# → integrity: OK | trust: verified | broken_chains: 0
+```
+
+→ Full walkthrough: [`demo_consumption_layer.py`](demo_consumption_layer.py)
+
 ## Core Guarantees
 
 - **Frozen kernel** — the core storage engine (`src/dsm/core/`) has been frozen since March 2026. Zero modifications since. Everything above it uses the public API.
@@ -321,7 +347,7 @@ result = verify_seal(registry, "old_sessions")
 - Multi-agent governance — identity, sovereignty, orchestration, collective, lifecycle
 - Parallel shard lanes, cold storage, Read Relay query layer
 - CLI tools, Goose MCP integration
-- 1153 tests
+- 1230 tests
 
 **Private extensions (not in this repo)**:
 - Hosted verification API
@@ -344,7 +370,7 @@ Daryl aims to become the standard for verifiable agent execution — the equival
 git clone https://github.com/daryl-labs-ai/daryl
 cd daryl
 pip install -e .[dev]
-python -m pytest tests/ -v   # 1153 tests, 0 failures
+python -m pytest tests/ -v   # 1230 tests, 0 failures
 ```
 
 ## Contributing
