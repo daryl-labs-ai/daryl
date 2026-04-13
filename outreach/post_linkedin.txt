@@ -1,0 +1,25 @@
+Daryl v1.1 — The DSM Consumption Layer
+
+Daryl is an open-source trust layer for AI agents. It gives every agent a cryptographically verifiable execution trail: append-only, hash-chained, tamper-evident.
+
+v1.0 solved the write side. Every decision recorded. Every hash chained. One command to verify the entire history.
+
+v1.1 solves the read side.
+
+Recording agent decisions is necessary but not sufficient. An agent that cannot recall its own history will repeat mistakes, contradict prior commitments, and lose institutional knowledge across sessions. The Consumption Layer adds three capabilities:
+
+Phase 1 — Recall. search_memory() scans past sessions and returns entries relevant to a query, ranked by keyword overlap, recency, and entry type. Temporal analysis marks older entries as superseded when a newer entry covers the same topic. The current session is excluded by default to prevent circular reasoning.
+
+Phase 2 — Context. build_context() takes recalled entries and packages them into a ContextPack that fits within a token budget. Sections are prioritized: verified facts survive trimming; uncertain or superseded entries are dropped first. The output is ready for injection into an LLM system prompt.
+
+Phase 3 — Provenance. build_provenance() traces every recalled entry back to its source shard and optionally re-verifies the hash chain. The result is a typed ProvenancePack with integrity status, trust level, and broken chain count. If the chain is intact, the recalled memory is as trustworthy as the original trail.
+
+The demo (demo_consumption_layer.py) creates three sessions over 45 days. Session 1 records an architecture decision to use REST. Session 2 supersedes it with gRPC. The recall finds both, marks the old one superseded, and packages the relevant decisions under budget. Provenance verification confirms the chain is intact.
+
+This is deterministic. No ML, no embeddings, no LLM calls, no network. Keyword scoring with recency decay and type weighting. The scoring pipeline is designed to be pluggable — embedding-based recall is planned for a future phase.
+
+77 new tests. 0 regressions against the existing 1153. Frozen kernel unchanged.
+
+The code is MIT licensed and available at github.com/daryl-labs-ai/daryl
+
+If you are building agent systems and care about what your agents remember — and whether that memory can be trusted — I would appreciate your feedback.

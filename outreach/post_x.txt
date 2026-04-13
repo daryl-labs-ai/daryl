@@ -1,0 +1,50 @@
+THREAD
+
+---
+
+1/
+
+Daryl v1.1 — the DSM Consumption Layer.
+
+Until now, DSM proved agent history was not tampered with.
+Now it also recalls that history, packages it under a token budget,
+and verifies its cryptographic origin.
+
+Three new modules. 77 new tests. 0 regressions.
+
+---
+
+2/
+
+The pipeline:
+
+search_memory()     — find relevant decisions across past sessions
+build_context()     — compact them into a token-budgeted pack
+build_provenance()  — verify chain integrity of every recalled entry
+
+Keyword scoring, temporal superseded detection, deterministic ranking.
+No ML. No embeddings. No network. Pure local DSM.
+
+---
+
+3/
+
+The demo writes 3 sessions over 45 days.
+An older architecture decision ("use REST") is superseded
+by a newer one ("use gRPC").
+
+Recall finds both. Temporal analysis marks the old one superseded.
+Context packs the relevant ones under budget.
+Provenance verifies the chain: integrity OK, trust verified.
+
+python demo_consumption_layer.py
+
+---
+
+4/
+
+1230 tests. Frozen kernel. MIT license.
+
+Recall it. Package it. Prove it.
+
+github.com/daryl-labs-ai/daryl

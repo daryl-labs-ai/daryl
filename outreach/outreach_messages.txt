@@ -1,0 +1,28 @@
+[Target: LangGraph developer]
+
+Message:
+I built an open-source memory layer for AI agents called Daryl (DSM). It gives agents a hash-chained execution trail with tamper detection. The latest release adds a consumption layer: agents can recall past decisions across sessions, package them under a token budget, and verify the cryptographic origin of what they remember. If you are building stateful LangGraph agents and thinking about how to handle cross-session memory with integrity guarantees, I would value your perspective on the approach. The repo is at github.com/daryl-labs-ai/daryl — the demo_consumption_layer.py script runs in under 10 seconds.
+
+
+[Target: LlamaIndex developer]
+
+Message:
+I have been working on Daryl, an open-source trust layer for AI agents. It records agent decisions as append-only, hash-chained entries and detects post-hoc tampering. The v1.1 release adds a read path: recall across sessions, token-budgeted context packs, and provenance verification for recalled memory. It is complementary to vector-based retrieval — DSM handles integrity and provenance, not semantic search. If you work with agent memory in LlamaIndex and have thoughts on where this fits, I would appreciate a look. github.com/daryl-labs-ai/daryl
+
+
+[Target: AI infrastructure engineer]
+
+Message:
+I am building Daryl, an open-source memory layer that gives AI agents cryptographic proof of their execution history. Hash-chained entries, tamper detection, cross-agent causal binding. The latest release (v1.1) adds a consumption layer: deterministic recall from past sessions, token-budgeted context assembly, and provenance verification against the hash chain. 1230 tests, frozen kernel, no external dependencies. If you are thinking about agent memory infrastructure and auditability, I would value your feedback on the design. github.com/daryl-labs-ai/daryl
+
+
+[Target: CTO / technical lead]
+
+Message:
+I built an open-source trust layer for AI agents called Daryl. It records every agent decision as a hash-chained, append-only entry and detects any modification after the fact. The v1.1 release adds a consumption layer so agents can recall their own history across sessions, receive it within a token budget, and verify its cryptographic provenance. The use case is compliance and governance for production agent systems — EU AI Act traceability, audit trails, internal accountability. If agent auditability is on your radar, I would appreciate your perspective. github.com/daryl-labs-ai/daryl
+
+
+[Target: Open source maintainer]
+
+Message:
+I maintain Daryl, an open-source trust layer for AI agents (MIT, Python, 1230 tests). It provides append-only hash-chained storage, tamper detection, cross-agent causal proofs, and trust receipts. The v1.1 release adds a consumption layer: recall, token-budgeted context packing, and provenance verification — all built on top of the frozen kernel without modifying it. I am looking for feedback from people who think about agent infrastructure and memory. If you have a few minutes to look at the architecture and poke holes, I would be grateful. github.com/daryl-labs-ai/daryl
