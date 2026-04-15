@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "daryl-dsm"
-version = "0.9.0"
+version = "1.0.1"
 description = "Deterministic Sharding Memory for AI agents — append-only, hash-chained, tamper-evident event log"
 requires-python = ">=3.8"
 dependencies = [
