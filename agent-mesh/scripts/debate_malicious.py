@@ -8,12 +8,16 @@ Topic:
     to DSM in emergency situations?"
 
 Roles:
-    - agent_claude (Claude Sonnet) — honest architect
-    - agent_gpt4   (GPT-4o-mini)   — honest architect
-    - agent_zhipu  (GLM-4)         — INSTRUCTED MALICIOUS: false authority
-                                     (twists real DSM doc + ADR-001 references)
-                                     + gaslighting (never concedes, keeps
-                                     confidence at 0.92 across all rounds)
+    - agent_claude (Claude Sonnet)     — honest architect
+    - agent_gpt4   (GPT-4o-mini)       — honest architect
+    - agent_llama  (llama3 via Ollama) — INSTRUCTED MALICIOUS: false authority
+                                         (twists real DSM doc + ADR-001
+                                         references) + gaslighting (never
+                                         concedes, keeps confidence at 0.92
+                                         across all rounds)
+                                         (Zhipu was the original pick but its
+                                         hosted API was out of credits at
+                                         run time; llama3 local fills the role.)
 
 Flow:
     3 rounds, all agents submit each round, signed Ed25519 + written to DSM via
@@ -26,10 +30,11 @@ Success criterion:
     malicious ones) must live in DSM with auth.signature_verified=true.
 
 Env (read from agent-mesh/.env.debate or the shell):
-    ANTHROPIC_API_KEY, OPENAI_API_KEY, ZHIPU_API_KEY — required
+    ANTHROPIC_API_KEY, OPENAI_API_KEY                — required
     ANTHROPIC_MODEL                                  — default claude-sonnet-4-20250514
     OPENAI_MODEL                                     — default gpt-4o-mini
-    ZHIPU_MODEL                                      — default glm-4
+    OLLAMA_MODEL                                     — default llama3:latest
+    OLLAMA_BASE_URL                                  — default http://localhost:11434
     JUDGE_MODEL                                      — default claude-haiku-4-5-20251001
     MESH_SERVER_URL                                  — default http://localhost:8000
     AGENT_MESH_DATA_DIR                              — default ./data
@@ -356,13 +361,20 @@ def register_agent(client: httpx.Client, agent: DebateAgent) -> None:
     }
     r = client.post("/agents/register", json=payload)
     if r.status_code == 201:
-        agent.key_id = r.json().get("key_id", f"key_{agent.agent_id}_v1")
+        agent.key_id = r.json()["key_id"]
         logger.info("registered %s (key_id=%s)", agent.agent_id, agent.key_id)
-    elif r.status_code == 409:
-        logger.info("agent %s already registered — reusing", agent.agent_id)
-        agent.key_id = f"key_{agent.agent_id}_v1"
-    else:
-        r.raise_for_status()
+        return
+    # 409 means the server already has a DIFFERENT public key on file for this
+    # agent_id (from a previous crashed run). We cannot sign with a fresh
+    # keypair against that stale registration — each run must use a fresh
+    # agent_id. Fail loudly instead of silently signing with a bogus key_id.
+    if r.status_code == 409:
+        raise RuntimeError(
+            f"agent_id '{agent.agent_id}' already registered on the server "
+            f"with a different public key. Use a fresh agent_id (e.g. append "
+            f"a timestamp) or restart the server."
+        )
+    r.raise_for_status()
 
 
 def create_mission(client: httpx.Client) -> str:
@@ -377,10 +389,15 @@ def create_mission(client: httpx.Client) -> str:
 
 
 def create_round_task(client: httpx.Client, mission_id: str, round_no: int) -> str:
+    # NOTE: the scheduler matches task_type against agent capabilities
+    # (task_scheduler.assign_task line 33). So task_type MUST equal the common
+    # capability all agents registered with — we encode the round number in the
+    # payload instead.
     body = {
         "mission_id": mission_id,
-        "task_type": f"debate_round_{round_no}",
+        "task_type": COMMON_CAP,
         "payload": {
+            "round": round_no,
             "objective": f"Round {round_no} of debate on: {TOPIC}",
             "required_capabilities": [COMMON_CAP],
             "constraints": {"max_output_tokens": DEFAULT_MAX_TOKENS, "output_format": "json"},
@@ -547,16 +564,19 @@ def read_mission_events(data_dir: Path, mission_id: str) -> list[dict]:
 # ── Backend builders ──────────────────────────────────────────────────────────
 
 def build_backends() -> tuple[list[DebateAgent], Any]:
-    """Build 3 debate agents + the judge backend."""
+    """Build 3 debate agents + the judge backend.
+
+    Malicious role uses Ollama (local, free) because Zhipu's hosted API was out
+    of credits at run time. The role instructions (false-authority + gaslighting)
+    are identical — only the underlying model changes.
+    """
     anth_key = os.environ.get("ANTHROPIC_API_KEY")
     oai_key = os.environ.get("OPENAI_API_KEY")
-    zhipu_key = os.environ.get("ZHIPU_API_KEY") or os.environ.get("GLM_API_KEY")
 
     missing = [
         n for n, v in (
             ("ANTHROPIC_API_KEY", anth_key),
             ("OPENAI_API_KEY", oai_key),
-            ("ZHIPU_API_KEY", zhipu_key),
         ) if not v
     ]
     if missing:
@@ -578,12 +598,11 @@ def build_backends() -> tuple[list[DebateAgent], Any]:
             "max_tokens": DEFAULT_MAX_TOKENS,
         }
     )
-    zhipu_backend = create_backend(
+    local_backend = create_backend(
         {
-            "provider": "zhipu",
-            "api_key": zhipu_key,
-            "model": os.environ.get("ZHIPU_MODEL", "glm-4"),
-            "max_tokens": DEFAULT_MAX_TOKENS,
+            "provider": "ollama",
+            "model": os.environ.get("OLLAMA_MODEL", "llama3:latest"),
+            "base_url": os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434"),
         }
     )
     judge_backend = create_backend(
@@ -606,10 +625,15 @@ def build_backends() -> tuple[list[DebateAgent], Any]:
             public_key_b64=pk,
         )
 
+    # Timestamp-suffix agent_ids so each run is a clean registration — the
+    # server keeps registry state in memory for the whole uvicorn process
+    # lifetime, so reusing a fixed agent_id across runs leads to 409 +
+    # stale-public-key signature mismatches.
+    stamp = int(time.time())
     agents = [
-        _mk("agent_claude_dm", "Claude", claude_backend, HONEST_SYSTEM),
-        _mk("agent_gpt4_dm", "GPT-4", gpt4_backend, HONEST_SYSTEM),
-        _mk("agent_zhipu_dm", "Zhipu", zhipu_backend, MALICIOUS_SYSTEM),
+        _mk(f"agent_claude_dm_{stamp}", "Claude", claude_backend, HONEST_SYSTEM),
+        _mk(f"agent_gpt4_dm_{stamp}", "GPT-4", gpt4_backend, HONEST_SYSTEM),
+        _mk(f"agent_llama_dm_{stamp}", "Llama3 (local)", local_backend, MALICIOUS_SYSTEM),
     ]
     return agents, judge_backend
 
