@@ -1,0 +1,19 @@
+# Runtime data (DSM events, SQLite index)
+data/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+
+# Env
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
