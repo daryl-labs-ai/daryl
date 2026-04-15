@@ -1,0 +1,614 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>agent-mesh dashboard</title>
+<style>
+ :root { color-scheme: dark; }
+ * { box-sizing: border-box; }
+ body {
+   font-family: -apple-system, BlinkMacSystemFont, "SF Mono", Menlo, Consolas, monospace;
+   margin: 0; background: #0d1117; color: #c9d1d9;
+   font-size: 13px; line-height: 1.5;
+ }
+ header {
+   background: #161b22; padding: 14px 24px; border-bottom: 1px solid #30363d;
+   display: flex; align-items: center; justify-content: space-between;
+ }
+ header h1 { margin: 0; font-size: 15px; font-weight: 600; color: #f0f6fc; }
+ header .sub { color: #8b949e; font-size: 11px; }
+ .tabs {
+   display: flex; gap: 4px; padding: 0 24px; background: #161b22;
+   border-bottom: 1px solid #30363d;
+ }
+ .tab {
+   padding: 10px 16px; cursor: pointer; border-bottom: 2px solid transparent;
+   font-size: 12px; color: #8b949e; user-select: none;
+ }
+ .tab:hover { color: #c9d1d9; }
+ .tab.active { border-bottom-color: #58a6ff; color: #58a6ff; }
+ .toolbar {
+   padding: 10px 24px; background: #0d1117; border-bottom: 1px solid #30363d;
+   display: flex; gap: 8px; align-items: center;
+ }
+ .btn {
+   background: #21262d; color: #c9d1d9; border: 1px solid #30363d;
+   padding: 5px 12px; border-radius: 4px; cursor: pointer; font-size: 11px;
+ }
+ .btn:hover { background: #30363d; border-color: #58a6ff; }
+ .btn-compare {
+   background: #1f6feb; border-color: #1f6feb; color: white;
+ }
+ .btn-compare:hover { background: #388bfd; }
+ .btn-compare[disabled] {
+   background: #21262d; color: #6e7681; cursor: not-allowed; border-color: #30363d;
+ }
+ .content { padding: 20px 24px; max-width: 1600px; }
+ .panel { display: none; }
+ .panel.active { display: block; }
+ table { width: 100%; border-collapse: collapse; font-size: 12px; }
+ th, td {
+   padding: 10px 14px; text-align: left; border-bottom: 1px solid #21262d;
+   vertical-align: top;
+ }
+ th {
+   color: #8b949e; font-weight: 500; text-transform: uppercase;
+   font-size: 10px; letter-spacing: 0.05em;
+ }
+ tr.clickable { cursor: pointer; }
+ tr.clickable:hover td { background: #161b22; }
+ .mono { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 11px; }
+ .hash { color: #8b949e; }
+ .ok { color: #3fb950; }
+ .bad { color: #f85149; }
+ .pending { color: #d29922; }
+ .badge {
+   display: inline-block; padding: 2px 8px; border-radius: 10px;
+   font-size: 10px; background: #30363d; color: #c9d1d9;
+ }
+ .badge.active, .badge.open, .badge.submitted { background: #1f6feb; color: white; }
+ .badge.closed { background: #6e7681; color: white; }
+ .badge.validated { background: #238636; color: white; }
+ .badge.pending { background: #9e6a03; color: white; }
+ .badge.cap { background: #21262d; color: #79c0ff; border: 1px solid #30363d; }
+ .mission-card {
+   background: #161b22; border: 1px solid #30363d; border-radius: 6px;
+   padding: 16px; margin-bottom: 12px; cursor: pointer;
+ }
+ .mission-card:hover { border-color: #58a6ff; background: #1c2128; }
+ .mission-card h3 { margin: 0 0 6px; font-size: 14px; color: #f0f6fc; }
+ .mission-card .meta { color: #8b949e; font-size: 11px; }
+ .mission-card .goal { color: #c9d1d9; font-size: 12px; margin: 6px 0; }
+ .mission-card .stats { color: #8b949e; font-size: 11px; margin-top: 6px; }
+ .mission-card .stats span { margin-right: 14px; }
+ .task-row {
+   margin: 16px 0; padding: 14px;
+   background: #161b22; border: 1px solid #30363d; border-radius: 6px;
+ }
+ .task-header {
+   display: flex; gap: 12px; align-items: baseline; margin-bottom: 4px;
+   justify-content: space-between;
+ }
+ .task-header-left { display: flex; gap: 12px; align-items: baseline; }
+ .task-header strong { color: #f0f6fc; font-size: 13px; }
+ .task-id { color: #8b949e; font-size: 10px; }
+ .task-objective { color: #c9d1d9; margin: 4px 0 12px; font-size: 12px; }
+ .task-meta { color: #8b949e; font-size: 11px; margin-bottom: 10px; }
+ .task-results {
+   display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+   gap: 12px;
+ }
+ .result-card {
+   background: #0d1117; border: 1px solid #30363d; border-radius: 4px;
+   padding: 12px;
+ }
+ .result-card .r-header {
+   display: flex; justify-content: space-between; align-items: center;
+   margin-bottom: 8px; font-size: 11px;
+ }
+ .result-card .agent { color: #79c0ff; font-weight: 600; }
+ .result-card .hashes { font-size: 10px; color: #8b949e; margin-bottom: 6px; }
+ .result-card .hashes div { word-break: break-all; }
+ .result-card pre {
+   white-space: pre-wrap; word-wrap: break-word; margin: 8px 0 0;
+   font-size: 11px; max-height: 360px; overflow: auto;
+   background: #161b22; padding: 8px; border-radius: 3px;
+ }
+ .event-row {
+   display: flex; gap: 16px; padding: 6px 0; font-size: 11px;
+   border-bottom: 1px solid #21262d; cursor: pointer;
+ }
+ .event-row:hover { background: #161b22; }
+ .event-row .ts { color: #8b949e; flex: 0 0 200px; }
+ .event-row .type { flex: 0 0 220px; color: #58a6ff; }
+ .event-row .scope { flex: 1; color: #8b949e; }
+ .back {
+   cursor: pointer; color: #58a6ff; font-size: 12px;
+   margin-bottom: 16px; display: inline-block; user-select: none;
+ }
+ .back:hover { text-decoration: underline; }
+ .empty { color: #6e7681; padding: 40px; text-align: center; font-size: 12px; }
+ h2 { font-size: 16px; margin: 0 0 4px; color: #f0f6fc; }
+ h3 { font-size: 13px; margin: 24px 0 10px; color: #8b949e; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; }
+
+ /* ── Event modal ────────────────────────────────────────────────── */
+ .modal { position: fixed; inset: 0; z-index: 100; display: none; }
+ .modal.open { display: block; }
+ .modal-overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.7); }
+ .modal-content {
+   position: relative; max-width: 880px; margin: 40px auto;
+   background: #0d1117; border: 1px solid #30363d; border-radius: 8px;
+   padding: 24px 28px; max-height: calc(100vh - 80px); overflow: auto;
+ }
+ .modal-close {
+   position: absolute; top: 10px; right: 14px; background: transparent;
+   border: none; color: #8b949e; font-size: 24px; cursor: pointer; line-height: 1;
+ }
+ .modal-close:hover { color: #f0f6fc; }
+ .modal h2 { font-size: 15px; margin: 0 0 14px; color: #f0f6fc; }
+ .modal h3 { margin: 18px 0 6px; }
+ .kv { font-size: 12px; padding: 3px 0; color: #c9d1d9; }
+ .kv strong { color: #8b949e; font-weight: 500; display: inline-block; min-width: 160px; }
+ .kv .val { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 11px; color: #c9d1d9; word-break: break-all; }
+ .modal pre {
+   background: #161b22; padding: 12px; border-radius: 4px;
+   font-size: 11px; white-space: pre-wrap; word-wrap: break-word;
+   max-height: 360px; overflow: auto; margin: 6px 0 0;
+ }
+</style>
+</head>
+<body>
+<header>
+  <h1>agent-mesh dashboard</h1>
+  <span class="sub">read-only · debug view</span>
+</header>
+<div class="tabs">
+  <div class="tab active" data-panel="missions">Missions</div>
+  <div class="tab" data-panel="tasks">Tasks</div>
+  <div class="tab" data-panel="agents">Agents</div>
+  <div class="tab" data-panel="events">Events</div>
+</div>
+<div class="toolbar">
+  <button class="btn" onclick="refresh()">↻ Refresh</button>
+  <span id="last-update" style="color:#6e7681;font-size:11px"></span>
+</div>
+<div class="content">
+  <div id="missions" class="panel active"></div>
+  <div id="tasks" class="panel"></div>
+  <div id="agents" class="panel"></div>
+  <div id="events" class="panel"></div>
+</div>
+
+<!-- Event detail modal -->
+<div id="modal" class="modal">
+  <div class="modal-overlay" onclick="closeModal()"></div>
+  <div class="modal-content">
+    <button class="modal-close" onclick="closeModal()" aria-label="Close">×</button>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<script>
+const $  = sel => document.querySelector(sel);
+const $$ = sel => document.querySelectorAll(sel);
+
+let currentPanel = 'missions';
+
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', () => {
+    $$('.tab').forEach(x => x.classList.remove('active'));
+    $$('.panel').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    $('#' + t.dataset.panel).classList.add('active');
+    currentPanel = t.dataset.panel;
+    loadPanel(currentPanel);
+  });
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeModal();
+});
+
+const esc = s => (s == null ? '' : String(s).replace(/[&<>"]/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])));
+
+const truncate = (s, n) => {
+  s = String(s == null ? '' : s);
+  return s.length > n ? s.slice(0, n) + '…' : s;
+};
+
+const shortHash = s => {
+  if (!s) return '—';
+  const stripped = String(s).replace('sha256:', '');
+  if (stripped.length <= 14) return stripped;
+  return stripped.slice(0, 8) + '…' + stripped.slice(-4);
+};
+
+const shortId = s => {
+  if (!s) return '—';
+  return String(s).length > 16 ? String(s).slice(0, 12) + '…' : String(s);
+};
+
+function touchUpdate() {
+  $('#last-update').textContent = 'updated ' + new Date().toLocaleTimeString();
+}
+
+// ── Missions tab ─────────────────────────────────────────────────────
+
+async function loadMissions() {
+  try {
+    const r = await fetch('/api/missions');
+    const missions = await r.json();
+    if (!missions.length) {
+      $('#missions').innerHTML = '<div class="empty">No missions yet. Create one via POST /missions.</div>';
+    } else {
+      $('#missions').innerHTML = missions.map(m => `
+        <div class="mission-card" onclick="loadMissionDetail('${esc(m.mission_id)}')">
+          <h3>${esc(m.title || m.mission_id)} <span class="badge ${esc(m.status)}">${esc(m.status)}</span></h3>
+          <div class="mono hash">${esc(m.mission_id)}</div>
+          ${m.description ? '<div class="goal">' + esc(truncate(m.description, 200)) + '</div>' : ''}
+          <div class="stats">
+            <span>${m.task_count} task${m.task_count !== 1 ? 's' : ''}</span>
+            <span>${m.result_count} submission${m.result_count !== 1 ? 's' : ''}</span>
+            <span>${m.agents_count || 0} agent${(m.agents_count || 0) !== 1 ? 's' : ''}</span>
+            <span>created ${esc(m.created_at || '?')}</span>
+            <span>last ${esc(m.last_event_at || '?')}</span>
+          </div>
+        </div>
+      `).join('');
+    }
+    touchUpdate();
+  } catch (e) {
+    $('#missions').innerHTML = '<div class="empty">Failed to load missions: ' + esc(e.message) + '</div>';
+  }
+}
+
+async function loadMissionDetail(mid) {
+  try {
+    const [detailResp, compareResp] = await Promise.all([
+      fetch('/api/missions/' + encodeURIComponent(mid)),
+      fetch('/api/missions/' + encodeURIComponent(mid) + '/compare'),
+    ]);
+    if (detailResp.status === 404) { alert('Mission not found'); return; }
+    const m = await detailResp.json();
+    const compareByTask = {};
+    if (compareResp.ok) {
+      const c = await compareResp.json();
+      (c.tasks || []).forEach(t => { compareByTask[t.task_id] = t; });
+    }
+
+    const tasksHtml = (m.tasks || []).map(t => {
+      const comparable = (compareByTask[t.task_id] || {}).comparable || false;
+      const status = (compareByTask[t.task_id] || {}).status || 'pending';
+      return `
+        <div class="task-row">
+          <div class="task-header">
+            <div class="task-header-left">
+              <strong>${esc(t.task_type || 'task')}</strong>
+              <span class="task-id mono">${esc(t.task_id)}</span>
+              <span class="badge ${esc(status)}">${esc(status)}</span>
+            </div>
+            <button class="btn btn-compare" ${comparable ? '' : 'disabled'} onclick="event.stopPropagation(); showCompareForTask('${esc(t.task_id)}')">
+              ${comparable ? 'Compare results' : 'Compare results (need ≥2)'}
+            </button>
+          </div>
+          <div class="task-objective">${esc(truncate(t.objective || '(no objective)', 400))}</div>
+          <div class="task-meta">
+            ${t.assigned_to ? 'assigned → <span class="mono">' + esc(t.assigned_to) + '</span> · ' : ''}
+            ${(t.required_capabilities || []).map(c => '<span class="badge cap">' + esc(c) + '</span>').join(' ')}
+            · ${(t.results || []).length} submission${(t.results || []).length !== 1 ? 's' : ''}
+          </div>
+          <div class="task-results">
+            ${(t.results && t.results.length)
+              ? t.results.map(res => renderResult(res)).join('')
+              : '<div class="empty" style="padding:16px">No results submitted.</div>'}
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    $('#missions').innerHTML = `
+      <div class="back" onclick="loadMissions()">← back to missions</div>
+      <h2>${esc(m.title || m.mission_id)} <span class="badge ${esc(m.status)}">${esc(m.status)}</span></h2>
+      <div class="mono hash" style="margin-bottom:20px">${esc(m.mission_id)}</div>
+      ${m.description ? '<div style="color:#c9d1d9;margin-bottom:16px">' + esc(m.description) + '</div>' : ''}
+      ${tasksHtml || '<div class="empty">No tasks.</div>'}
+      <h3>Mission events (${(m.events || []).length})</h3>
+      ${(m.events || []).map(e => `
+        <div class="event-row" onclick="showEventModal('${esc(e.event_id)}')">
+          <span class="ts">${esc(e.timestamp)}</span>
+          <span class="type">${esc(e.event_type)}</span>
+          <span class="scope">${esc(e.source_type || '')}/${esc(e.source_id || '')}</span>
+        </div>
+      `).join('') || '<div class="empty">No events.</div>'}
+    `;
+    touchUpdate();
+  } catch (e) {
+    $('#missions').innerHTML = '<div class="empty">Failed to load mission: ' + esc(e.message) + '</div>';
+  }
+}
+
+function renderResult(r) {
+  const sv = r.signature_valid;
+  const sigClass = sv === true ? 'ok' : (sv === false ? 'bad' : 'pending');
+  const sigLabel = sv === true ? 'sig ✔' : (sv === false ? 'sig ✗' : 'sig ?');
+  let contentText;
+  if (typeof r.content === 'object' && r.content !== null) {
+    contentText = JSON.stringify(r.content, null, 2);
+  } else {
+    contentText = String(r.content == null ? '' : r.content);
+  }
+  return `
+    <div class="result-card">
+      <div class="r-header">
+        <span class="agent">${esc(r.agent_id || '?')}</span>
+        <span class="${sigClass}">${sigLabel}</span>
+      </div>
+      <div class="hashes">
+        <div>content: <span class="mono">${esc(shortHash(r.content_hash))}</span></div>
+        <div>sig: <span class="mono">${esc(truncate(r.signature || '', 32))}</span></div>
+        <div>conf: ${r.self_reported_confidence == null ? '—' : esc(r.self_reported_confidence)}</div>
+      </div>
+      <pre>${esc(contentText)}</pre>
+    </div>
+  `;
+}
+
+// ── Compare view (from mission or from tasks tab) ────────────────────
+
+async function showCompareForTask(taskId) {
+  try {
+    const r = await fetch('/api/tasks/' + encodeURIComponent(taskId));
+    if (r.status === 404) { alert('Task not found'); return; }
+    const t = await r.json();
+    const subs = t.submissions || [];
+    const backTarget = currentPanel === 'tasks' ? 'loadTasks()' : `loadMissionDetail('${esc(t.mission_id)}')`;
+
+    let cols;
+    if (subs.length < 2) {
+      cols = `<div class="empty">Waiting for more agents… only ${subs.length} submission${subs.length !== 1 ? 's' : ''} so far.</div>`;
+    } else {
+      cols = `
+        <div class="task-results" style="margin-top:16px">
+          ${subs.map(s => renderCompareColumn(s)).join('')}
+        </div>
+      `;
+    }
+
+    const targetPanel = currentPanel === 'tasks' ? 'tasks' : 'missions';
+    $('#' + targetPanel).innerHTML = `
+      <div class="back" onclick="${backTarget}">← back</div>
+      <h2>Compare results · ${esc(t.task_type || 'task')}</h2>
+      <div class="mono hash" style="margin-bottom:6px">${esc(t.task_id)}</div>
+      <div style="color:#c9d1d9;margin-bottom:16px">${esc(t.objective || '')}</div>
+      ${cols}
+    `;
+    touchUpdate();
+  } catch (e) {
+    alert('Failed to load compare: ' + e.message);
+  }
+}
+
+function renderCompareColumn(s) {
+  const sv = s.signature_valid;
+  const sigClass = sv === true ? 'ok' : (sv === false ? 'bad' : 'pending');
+  const sigLabel = sv === true ? 'sig ✔' : (sv === false ? 'sig ✗' : 'sig ?');
+  const contentText = typeof s.content === 'object' && s.content !== null
+    ? JSON.stringify(s.content, null, 2)
+    : String(s.content == null ? '' : s.content);
+  const chStripped = String(s.content_hash || '').replace('sha256:', '');
+  return `
+    <div class="result-card">
+      <div class="r-header">
+        <span class="agent">${esc(s.agent_id || '?')}</span>
+        <span class="${sigClass}">${sigLabel}</span>
+      </div>
+      <div class="hashes">
+        <div>content: <span class="mono">${esc(chStripped.slice(0, 8) || '—')}</span></div>
+        <div>conf: ${s.self_reported_confidence == null ? '—' : esc(s.self_reported_confidence)}</div>
+        <div>submitted: ${esc(s.submitted_at || '')}</div>
+      </div>
+      <pre>${esc(contentText)}</pre>
+    </div>
+  `;
+}
+
+// ── Tasks tab ────────────────────────────────────────────────────────
+
+async function loadTasks() {
+  try {
+    const r = await fetch('/api/tasks');
+    const tasks = await r.json();
+    if (!tasks.length) {
+      $('#tasks').innerHTML = '<div class="empty">No tasks yet.</div>';
+    } else {
+      $('#tasks').innerHTML = `
+        <table>
+          <thead><tr>
+            <th>Task ID</th><th>Mission</th><th>Type</th><th>Agent</th>
+            <th>Subs</th><th>Receipt</th><th>Status</th><th>Last submission</th>
+          </tr></thead>
+          <tbody>
+            ${tasks.map(t => `
+              <tr class="clickable" onclick="loadTaskDetail('${esc(t.task_id)}')">
+                <td class="mono">${esc(shortId(t.task_id))}</td>
+                <td class="mono hash">${esc(shortId(t.mission_id))}</td>
+                <td>${esc(t.task_type || '')}</td>
+                <td class="mono">${esc(t.assigned_to || '—')}</td>
+                <td>${t.submissions_count}</td>
+                <td class="mono hash">${esc(shortId(t.receipt_id) || '—')}</td>
+                <td><span class="badge ${esc(t.status)}">${esc(t.status)}</span></td>
+                <td class="mono hash">${esc(t.last_submission_at || '—')}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
+    }
+    touchUpdate();
+  } catch (e) {
+    $('#tasks').innerHTML = '<div class="empty">Failed to load tasks: ' + esc(e.message) + '</div>';
+  }
+}
+
+async function loadTaskDetail(tid) {
+  try {
+    const r = await fetch('/api/tasks/' + encodeURIComponent(tid));
+    if (r.status === 404) { alert('Task not found'); return; }
+    const t = await r.json();
+    const subs = t.submissions || [];
+    const comparable = subs.length >= 2;
+
+    const subsHtml = subs.length
+      ? `
+        <div class="task-results">
+          ${subs.map(s => renderResult(s)).join('')}
+        </div>
+      `
+      : '<div class="empty">No submissions yet.</div>';
+
+    $('#tasks').innerHTML = `
+      <div class="back" onclick="loadTasks()">← back to tasks</div>
+      <h2>${esc(t.task_type || 'task')} <span class="badge ${esc(t.status || 'pending')}">${esc(t.status || 'pending')}</span></h2>
+      <div class="mono hash" style="margin-bottom:6px">${esc(t.task_id)}</div>
+      <div class="kv"><strong>Mission:</strong> <span class="val">${esc(t.mission_id || '—')}</span></div>
+      <div class="kv"><strong>Assigned to:</strong> <span class="val">${esc(t.assigned_to || '—')}</span></div>
+      <div class="kv"><strong>Receipt:</strong> <span class="val">${esc(t.receipt_id || '—')}</span></div>
+      <div class="kv"><strong>Capabilities:</strong> ${(t.required_capabilities || []).map(c => '<span class="badge cap">' + esc(c) + '</span>').join(' ') || '—'}</div>
+      <div style="margin:14px 0;color:#c9d1d9">${esc(t.objective || '(no objective)')}</div>
+      <div style="margin-bottom:14px">
+        <button class="btn btn-compare" ${comparable ? '' : 'disabled'} onclick="showCompareForTask('${esc(t.task_id)}')">
+          ${comparable ? 'Compare results' : 'Compare results (need ≥2)'}
+        </button>
+      </div>
+      <h3>Submissions (${subs.length})</h3>
+      ${subsHtml}
+    `;
+    touchUpdate();
+  } catch (e) {
+    $('#tasks').innerHTML = '<div class="empty">Failed to load task: ' + esc(e.message) + '</div>';
+  }
+}
+
+// ── Agents tab ───────────────────────────────────────────────────────
+
+async function loadAgents() {
+  try {
+    const r = await fetch('/api/agents');
+    const agents = await r.json();
+    if (!agents.length) {
+      $('#agents').innerHTML = '<div class="empty">No agents registered yet.</div>';
+    } else {
+      $('#agents').innerHTML = `
+        <table>
+          <thead><tr>
+            <th>Agent ID</th><th>Type</th><th>Capabilities</th>
+            <th>Key ID</th><th>Status</th><th>Registered</th>
+          </tr></thead>
+          <tbody>
+            ${agents.map(a => `
+              <tr>
+                <td class="mono">${esc(a.agent_id)}</td>
+                <td>${esc(a.agent_type)}</td>
+                <td>${(a.capabilities || []).map(c => '<span class="badge cap">' + esc(c) + '</span>').join(' ')}</td>
+                <td class="mono hash">${esc(a.key_id)}</td>
+                <td><span class="badge ${esc(a.status)}">${esc(a.status)}</span></td>
+                <td class="mono hash">${esc(a.registered_at || '')}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
+    }
+    touchUpdate();
+  } catch (e) {
+    $('#agents').innerHTML = '<div class="empty">Failed to load agents: ' + esc(e.message) + '</div>';
+  }
+}
+
+// ── Events tab ───────────────────────────────────────────────────────
+
+async function loadEvents() {
+  try {
+    const r = await fetch('/api/events');
+    const events = await r.json();
+    if (!events.length) {
+      $('#events').innerHTML = '<div class="empty">No events in log.</div>';
+    } else {
+      $('#events').innerHTML = events.map(e => `
+        <div class="event-row" onclick="showEventModal('${esc(e.event_id)}')">
+          <span class="ts">${esc(e.timestamp)}</span>
+          <span class="type">${esc(e.event_type)}</span>
+          <span class="scope">${esc(e.scope_id)} · ${esc(e.source_type || '')}/${esc(e.source_id || '')}</span>
+        </div>
+      `).join('');
+    }
+    touchUpdate();
+  } catch (e) {
+    $('#events').innerHTML = '<div class="empty">Failed to load events: ' + esc(e.message) + '</div>';
+  }
+}
+
+// ── Event detail modal ───────────────────────────────────────────────
+
+async function showEventModal(eventId) {
+  try {
+    const r = await fetch('/api/events/' + encodeURIComponent(eventId));
+    if (r.status === 404) { alert('Event not found'); return; }
+    const ev = await r.json();
+    $('#modal-body').innerHTML = renderEventDetail(ev);
+    $('#modal').classList.add('open');
+  } catch (e) {
+    alert('Failed to load event: ' + e.message);
+  }
+}
+
+function renderEventDetail(ev) {
+  const auth = ev.auth || {};
+  const links = ev.links || {};
+  const causal = (links.causal_refs || []).join(', ') || '—';
+  const parent = links.parent_event_id || '—';
+  const payload = ev.payload === undefined ? {} : ev.payload;
+  return `
+    <h2>Event ${esc(ev.event_type || '')}</h2>
+    <div class="kv"><strong>event_id</strong> <span class="val">${esc(ev.event_id)}</span></div>
+    <div class="kv"><strong>event_version</strong> <span class="val">${esc(ev.event_version || '')}</span></div>
+    <div class="kv"><strong>timestamp</strong> <span class="val">${esc(ev.timestamp)}</span></div>
+    <div class="kv"><strong>scope_type</strong> <span class="val">${esc(ev.scope_type || '')}</span></div>
+    <div class="kv"><strong>scope_id</strong> <span class="val">${esc(ev.scope_id || '')}</span></div>
+    <div class="kv"><strong>source</strong> <span class="val">${esc(ev.source_type || '')}/${esc(ev.source_id || '')}</span></div>
+    <div class="kv"><strong>writer</strong> <span class="val">${esc(ev.writer_type || '')}/${esc(ev.writer_id || '')}</span></div>
+    <h3>auth</h3>
+    <div class="kv"><strong>transport_authenticated</strong> <span class="val">${esc(String(auth.transport_authenticated))}</span></div>
+    <div class="kv"><strong>signature_present</strong> <span class="val">${esc(String(auth.signature_present))}</span></div>
+    <div class="kv"><strong>signature_verified</strong> <span class="val">${esc(String(auth.signature_verified))}</span></div>
+    <div class="kv"><strong>key_id</strong> <span class="val">${esc(auth.key_id == null ? '—' : auth.key_id)}</span></div>
+    <div class="kv"><strong>signature_algorithm</strong> <span class="val">${esc(auth.signature_algorithm == null ? '—' : auth.signature_algorithm)}</span></div>
+    <h3>links</h3>
+    <div class="kv"><strong>parent_event_id</strong> <span class="val">${esc(parent)}</span></div>
+    <div class="kv"><strong>causal_refs</strong> <span class="val">${esc(causal)}</span></div>
+    <h3>payload</h3>
+    <pre>${esc(JSON.stringify(payload, null, 2))}</pre>
+  `;
+}
+
+function closeModal() {
+  $('#modal').classList.remove('open');
+}
+
+// ── Panel dispatcher ─────────────────────────────────────────────────
+
+function loadPanel(name) {
+  if (name === 'missions') loadMissions();
+  else if (name === 'tasks') loadTasks();
+  else if (name === 'agents') loadAgents();
+  else if (name === 'events') loadEvents();
+}
+
+function refresh() { loadPanel(currentPanel); }
+
+loadMissions();
+</script>
+</body>
+</html>
