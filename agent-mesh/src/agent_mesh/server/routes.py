@@ -11,6 +11,7 @@ from ..adapters.daryl_adapter.signing import compute_content_hash
 from ..dsm import factory as ev_factory
 from ..models.agent import Agent
 from ..models.task import Task
+from ..bridge.models import ContextQuery
 from .schemas import (
     CreateMissionRequest,
     CreateMissionResponse,
@@ -282,3 +283,51 @@ async def submit_task_result(
         receipt_id=receipt["receipt_id"],
         entry_hash=written.entry_hash,
     )
+
+
+# ---------- Bridge ----------
+
+
+@router.get("/bridge/context", tags=["bridge"])
+async def get_context(
+    request: Request,
+    consumer_agent_id: str = Query(...),
+    scope: str = Query(...),
+    limit: int = Query(20),
+):
+    import dataclasses
+
+    state = _state(request)
+
+    if scope.startswith("mission:"):
+        mission_id = scope.split(":", 1)[1]
+        mission = await state.index_db.get_mission(mission_id)
+        if mission is None and mission_id not in state.missions:
+            raise HTTPException(status_code=404, detail="mission_not_found")
+    elif scope.startswith("agent:"):
+        agent_id = scope.split(":", 1)[1]
+        if state.registry.get(agent_id) is None:
+            raise HTTPException(status_code=404, detail="agent_not_found")
+
+    query = ContextQuery(
+        consumer_agent_id=consumer_agent_id,
+        scope=scope,
+        limit=limit,
+    )
+    context_pack = await state.context_builder.build(query)
+
+    event = ev_factory.context_pack_issued(
+        context_id=context_pack.context_id,
+        agent_id=consumer_agent_id,
+        scope=scope,
+        source_event_ids=context_pack.source_event_ids,
+        server_id=state.config.server_id,
+    )
+    written = state.dsm_writer.write(event)
+    if written is None:
+        raise HTTPException(status_code=500, detail="dsm_write_failed")
+    await state.index_db.index_event(event, written.entry_hash)
+
+    context_pack.dsm_event_id = event["event_id"]
+
+    return JSONResponse(content=dataclasses.asdict(context_pack))

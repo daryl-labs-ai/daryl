@@ -168,3 +168,43 @@ def validation_completed(
 
 def mission_closed(mission_id: str, server_id: str, payload: dict, parent_event_id: str | None = None) -> dict:
     return _mission_server_authored("mission_closed", mission_id, server_id, payload, parent_event_id)
+
+
+# ---------- Bridge events ----------
+
+def context_pack_issued(
+    context_id: str,
+    agent_id: str,
+    scope: str,
+    source_event_ids: list[str],
+    server_id: str,
+    dsm_event_id: str | None = None,
+) -> dict:
+    if scope.startswith("mission:"):
+        mission_id = scope.split(":", 1)[1]
+        scope_type = "mission"
+        scope_id = f"mission_{mission_id}"
+    elif scope.startswith("agent:"):
+        scope_type = "system"
+        scope_id = "system.agent_context"
+    else:
+        scope_type = "system"
+        scope_id = "system.context"
+
+    return build_event(
+        event_type="context_pack_issued",
+        event_version=_VERSION,
+        scope_type=scope_type,
+        scope_id=scope_id,
+        source_type="server",
+        source_id=server_id,
+        writer_type="server",
+        writer_id=server_id,
+        payload={
+            "context_id": context_id,
+            "consumer_agent_id": agent_id,
+            "scope": scope,
+            "source_event_ids": source_event_ids,
+            "dsm_event_id": dsm_event_id,
+        },
+    )
