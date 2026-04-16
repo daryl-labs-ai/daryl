@@ -30,7 +30,8 @@ class TaskScheduler:
         self._tasks_ref = tasks
 
     def assign_task(self, task: Task, registry: AgentRegistry) -> str | None:
-        candidates = [a for a in registry.list_active() if task.task_type in a.capabilities]
+        required = set(task.payload.get("required_capabilities") or [task.task_type])
+        candidates = [a for a in registry.list_active() if required.issubset(set(a.capabilities))]
         if not candidates:
             return None
         candidates.sort(key=lambda a: a.agent_id)
