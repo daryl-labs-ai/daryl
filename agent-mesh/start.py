@@ -74,7 +74,7 @@ def main():
     workers_spec = [
         ("ANTHROPIC_API_KEY", "anthropic", "agent_claude_prod", "claude-sonnet-4-20250514", "claude"),
         ("OPENAI_API_KEY", "openai", "agent_gpt4_prod", "gpt-4o-mini", "gpt4"),
-        ("ZHIPU_API_KEY", "zhipu", "agent_glm_prod", "glm-4", "glm"),
+        ("ZHIPU_API_KEY", "zhipu", "agent_glm_prod", os.environ.get("ZHIPU_MODEL", "glm-4.5-air"), "glm"),
     ]
 
     for env_var, provider, agent_id, model, cap_suffix in workers_spec:
