@@ -299,6 +299,12 @@ async def get_context(
 
     state = _state(request)
 
+    if state.context_builder is None:
+        raise HTTPException(
+            status_code=500,
+            detail="ContextBuilder not initialized — check server startup logs",
+        )
+
     if scope.startswith("mission:"):
         mission_id = scope.split(":", 1)[1]
         mission = await state.index_db.get_mission(mission_id)

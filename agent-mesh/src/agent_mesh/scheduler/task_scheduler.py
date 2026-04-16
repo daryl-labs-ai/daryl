@@ -41,8 +41,12 @@ class TaskScheduler:
     def next_for_agent(
         self, agent_id: str, capabilities: list[str]
     ) -> Optional[TaskRequest]:
-        """Return the earliest pending task whose required_capabilities are all
-        present in the agent's capabilities, marking it assigned in place.
+        """Return the next eligible task for this agent.
+
+        Handles three cases:
+          1. Pending task with matching caps → assign to this agent
+          2. Task already assigned to this agent → return it (re-poll)
+          3. Task assigned with no owner → claim it
 
         Returns None if no tasks source is wired or no eligible task is found.
         """
@@ -51,19 +55,26 @@ class TaskScheduler:
         agent_caps = set(capabilities)
 
         for task_id, task in self._tasks_ref.items():
-            if task.status != "pending":
-                continue
             required = task.payload.get("required_capabilities") or [task.task_type]
             if not set(required).issubset(agent_caps):
                 continue
 
-            self._tasks_ref[task_id] = task.model_copy(
-                update={
-                    "assigned_to": agent_id,
-                    "status": "assigned",
-                    "assigned_at": datetime.now(timezone.utc),
-                }
-            )
+            if task.status == "pending":
+                self._tasks_ref[task_id] = task.model_copy(
+                    update={
+                        "assigned_to": agent_id,
+                        "status": "assigned",
+                        "assigned_at": datetime.now(timezone.utc),
+                    }
+                )
+            elif task.status == "assigned" and task.assigned_to == agent_id:
+                pass
+            elif task.status == "assigned" and task.assigned_to is None:
+                self._tasks_ref[task_id] = task.model_copy(
+                    update={"assigned_to": agent_id}
+                )
+            else:
+                continue
 
             payload = task.payload or {}
             objective = payload.get("objective", "")
