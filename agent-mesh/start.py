@@ -77,6 +77,8 @@ def main():
         if not api_key:
             print(f"[main] {env_var} not set — skipping {agent_id}")
             continue
+        masked = api_key[:8] + "..." + api_key[-4:] if len(api_key) > 12 else "***"
+        print(f"[main] {env_var} loaded: {masked} (len={len(api_key)})")
         try:
             t = threading.Thread(
                 target=start_worker,
