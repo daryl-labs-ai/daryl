@@ -56,6 +56,23 @@ async def list_agents(request: Request):
     ]
 
 
+@router.get("/debug/tasks", tags=["diagnostic"])
+async def debug_tasks(request: Request):
+    state = _state(request)
+    return [
+        {
+            "task_id": t.task_id,
+            "mission_id": t.mission_id,
+            "task_type": t.task_type,
+            "status": t.status,
+            "assigned_to": t.assigned_to,
+            "payload_keys": list((t.payload or {}).keys()),
+            "required_caps": (t.payload or {}).get("required_capabilities"),
+        }
+        for t in state.tasks.values()
+    ]
+
+
 @router.post("/agents/register", status_code=201)
 async def register_agent(body: RegisterAgentRequest, request: Request) -> RegisterAgentResponse:
     state = _state(request)
