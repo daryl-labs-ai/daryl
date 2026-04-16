@@ -73,7 +73,7 @@ def main():
     ]
 
     for env_var, provider, agent_id, model, cap_suffix in workers_spec:
-        api_key = os.environ.get(env_var)
+        api_key = (os.environ.get(env_var) or "").strip()
         if not api_key:
             print(f"[main] {env_var} not set — skipping {agent_id}")
             continue
