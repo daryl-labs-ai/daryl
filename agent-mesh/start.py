@@ -21,7 +21,9 @@ for p in (_ROOT, _ROOT / "src"):
 import uvicorn
 
 
-def start_worker(provider: str, agent_id: str, model: str, api_key: str, port: int):
+def start_worker(
+    provider: str, agent_id: str, model: str, api_key: str, port: int, cap_suffix: str,
+):
     """Start a single LLM worker in a background thread."""
     from workers.backends import create_backend
     from workers.generic_worker.worker import GenericLLMWorker
@@ -30,7 +32,7 @@ def start_worker(provider: str, agent_id: str, model: str, api_key: str, port: i
     priv, pub = generate_keypair()
     config = WorkerConfig(
         agent_id=agent_id,
-        capabilities=["analysis", f"analysis_{provider}"],
+        capabilities=["analysis", f"analysis_{cap_suffix}"],
         server_url=f"http://localhost:{port}",
         private_key_b64=priv,
         public_key_b64=pub,
@@ -59,7 +61,7 @@ def main():
     if anthropic_key:
         t = threading.Thread(
             target=start_worker,
-            args=("anthropic", "agent_claude_prod", "claude-sonnet-4-20250514", anthropic_key, port),
+            args=("anthropic", "agent_claude_prod", "claude-sonnet-4-20250514", anthropic_key, port, "claude"),
             daemon=True,
         )
         t.start()
@@ -69,7 +71,7 @@ def main():
     if openai_key:
         t = threading.Thread(
             target=start_worker,
-            args=("openai", "agent_gpt4_prod", "gpt-4o-mini", openai_key, port),
+            args=("openai", "agent_gpt4_prod", "gpt-4o-mini", openai_key, port, "gpt4"),
             daemon=True,
         )
         t.start()
@@ -79,7 +81,7 @@ def main():
     if zhipu_key:
         t = threading.Thread(
             target=start_worker,
-            args=("zhipu", "agent_glm_prod", "glm-4", zhipu_key, port),
+            args=("zhipu", "agent_glm_prod", "glm-4", zhipu_key, port, "glm"),
             daemon=True,
         )
         t.start()
