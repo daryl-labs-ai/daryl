@@ -3,7 +3,7 @@
     "builder": "nixpacks"
   },
   "deploy": {
-    "startCommand": "cd agent-mesh && pip install -e . && python start.py",
+    "startCommand": "pip install -e . && python start.py",
     "restartPolicyType": "ON_FAILURE"
   }
 }
