@@ -43,11 +43,16 @@ def start_worker(
             poll_interval_s=2.0,
             max_output_tokens=800,
         )
-        backend = create_backend({
+        backend_config = {
             "provider": provider,
             "model": model,
             "api_key": api_key,
-        })
+        }
+        if provider == "zhipu":
+            backend_config["base_url"] = os.environ.get(
+                "ZHIPU_BASE_URL", "https://api.z.ai/api/coding/paas/v4"
+            )
+        backend = create_backend(backend_config)
         worker = GenericLLMWorker(config=config, backend=backend)
 
         print(f"[worker:{agent_id}] waiting 10s for server startup...")
