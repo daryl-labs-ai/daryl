@@ -48,8 +48,8 @@ class ContextBuilder:
             payload = ev.get("payload", {})
             content = payload.get("content", {})
             text = content.get("text", "") if isinstance(content, dict) else str(content)
-            if len(text) > 200:
-                text = text[:200]
+            if len(text) > 2000:
+                text = text[:2000]
             agent_id = payload.get("agent_id", ev.get("source_id", "unknown"))
             facts.append(ContextFact(
                 type="submission",

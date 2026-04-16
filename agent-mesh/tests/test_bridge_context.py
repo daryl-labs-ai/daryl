@@ -278,13 +278,13 @@ async def test_context_builder_facts_include_agent_id():
 
 
 @pytest.mark.asyncio
-async def test_context_builder_truncates_content_to_200():
-    long_text = "x" * 500
+async def test_context_builder_truncates_content_to_2000():
+    long_text = "x" * 5000
     ev = _make_submission_event("mission_M1", "agent_A", text=long_text)
     dr, mr = _mock_readers(events=[ev])
     cb = ContextBuilder(dr, mr)
     pack = await cb.build(ContextQuery("agent_X", "mission:M1"))
-    assert len(pack.proven_memory.facts[0].text) == 200
+    assert len(pack.proven_memory.facts[0].text) == 2000
 
 
 @pytest.mark.asyncio
