@@ -105,9 +105,9 @@ class MeshWorker:
         """Step 1 — Register with the mesh server."""
         payload = {
             "agent_id": self.config.agent_id,
+            "agent_type": "worker",
             "capabilities": self.config.capabilities,
             "public_key": self.config.public_key_b64,
-            "key_id": self.config.key_id,
         }
         r = self._client.post("/agents/register", json=payload)
         if r.status_code == 409:
@@ -116,6 +116,9 @@ class MeshWorker:
             logger.info("Registered as %s", self.config.agent_id)
         else:
             r.raise_for_status()
+        data = r.json() if r.status_code in (201, 409) else {}
+        if "key_id" in data:
+            self.config.key_id = data["key_id"]
         self._registered = True
 
     def poll_task(self) -> Optional[Task]:

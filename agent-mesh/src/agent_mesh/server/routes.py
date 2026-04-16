@@ -35,6 +35,27 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
+@router.get("/health", tags=["diagnostic"])
+async def health(request: Request):
+    state = _state(request)
+    agents = state.registry.list_active()
+    return {
+        "status": "ok",
+        "agents_registered": len(agents),
+        "agents": [{"id": a.agent_id, "capabilities": a.capabilities} for a in agents],
+    }
+
+
+@router.get("/agents", tags=["diagnostic"])
+async def list_agents(request: Request):
+    state = _state(request)
+    agents = state.registry.list_active()
+    return [
+        {"id": a.agent_id, "capabilities": a.capabilities, "status": a.status}
+        for a in agents
+    ]
+
+
 @router.post("/agents/register", status_code=201)
 async def register_agent(body: RegisterAgentRequest, request: Request) -> RegisterAgentResponse:
     state = _state(request)
