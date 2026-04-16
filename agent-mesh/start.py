@@ -21,7 +21,7 @@ for p in (_ROOT, _ROOT / "src"):
 import uvicorn
 
 
-def start_worker(provider: str, agent_id: str, model: str, api_key: str):
+def start_worker(provider: str, agent_id: str, model: str, api_key: str, port: int):
     """Start a single LLM worker in a background thread."""
     from workers.backends import create_backend
     from workers.generic_worker.worker import GenericLLMWorker
@@ -31,7 +31,7 @@ def start_worker(provider: str, agent_id: str, model: str, api_key: str):
     config = WorkerConfig(
         agent_id=agent_id,
         capabilities=["analysis", f"analysis_{provider}"],
-        server_url=f"http://localhost:{os.environ.get('PORT', '8000')}",
+        server_url=f"http://localhost:{port}",
         private_key_b64=priv,
         public_key_b64=pub,
         key_id=f"key_{provider}_v1",
@@ -45,7 +45,7 @@ def start_worker(provider: str, agent_id: str, model: str, api_key: str):
     })
     worker = GenericLLMWorker(config=config, backend=backend)
 
-    time.sleep(5)
+    time.sleep(10)
     worker.run()
 
 
@@ -59,7 +59,7 @@ def main():
     if anthropic_key:
         t = threading.Thread(
             target=start_worker,
-            args=("anthropic", "agent_claude_prod", "claude-sonnet-4-20250514", anthropic_key),
+            args=("anthropic", "agent_claude_prod", "claude-sonnet-4-20250514", anthropic_key, port),
             daemon=True,
         )
         t.start()
@@ -69,7 +69,7 @@ def main():
     if openai_key:
         t = threading.Thread(
             target=start_worker,
-            args=("openai", "agent_gpt4_prod", "gpt-4o-mini", openai_key),
+            args=("openai", "agent_gpt4_prod", "gpt-4o-mini", openai_key, port),
             daemon=True,
         )
         t.start()
@@ -79,7 +79,7 @@ def main():
     if zhipu_key:
         t = threading.Thread(
             target=start_worker,
-            args=("zhipu", "agent_glm_prod", "glm-4", zhipu_key),
+            args=("zhipu", "agent_glm_prod", "glm-4", zhipu_key, port),
             daemon=True,
         )
         t.start()
