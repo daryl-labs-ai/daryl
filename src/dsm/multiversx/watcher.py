@@ -162,6 +162,7 @@ class DualSchemaReader:
         #   the CONTAINING block → supernova path. Absence → andromeda path.
         # Deliberately does NOT use network config erd_round_duration; that
         # lives in regime.py and is orthogonal.
+        # capture_02 confirms Andromeda blocks carry no lastExecutionResult (commit df00797)
         is_supernova = bool(
             containing is not None
             and (
@@ -200,11 +201,21 @@ class DualSchemaReader:
     ) -> "ExecutionResult":
         """Andromeda: execution data is inline in the tx's own block and status.
 
-        `tx.status` is the primary signal under Andromeda (T₂ ≡ T₃) — the
-        containing block carries all execution info.
+        Primary success path (V1.B-01, I-Andromeda-1): the combination
+        `miniblockType == "TxBlock"` AND `status == "success"` is the
+        authoritative success signal on mainnet (universal since observed
+        2026-04-17). We check it first via `_is_tx_included_successfully`.
+
+        Fallback (fixtures that may lack `miniblockType`, e.g. legacy
+        derived_from_mip27 or partial captures): map `tx.status` through
+        `_ANDROMEDA_STATUS_MAP`, which also translates mainnet vocabulary
+        (`"invalid"` → `"fail"`) into the reader's internal status set.
         """
-        status_raw = str(tx.get("status", "pending")).lower()
-        status = _ANDROMEDA_STATUS_MAP.get(status_raw, "pending")
+        if _is_tx_included_successfully(tx):
+            status = "success"
+        else:
+            status_raw = str(tx.get("status", "pending")).lower()
+            status = _ANDROMEDA_STATUS_MAP.get(status_raw, "pending")
         block_nonce = int(tx.get("blockNonce") or 0)
         return ExecutionResult(
             status=status,
@@ -251,7 +262,7 @@ class DualSchemaReader:
         # Any 'fail' signal wins; no single signal is the sole determinant.
         fired_signals = [
             name
-            for name, signal in _SUPERNOVA_FAIL_SIGNALS
+            for name, signal in _FAIL_SIGNALS
             if signal(exec_result, tx)
         ]
         if fired_signals:
@@ -309,6 +320,25 @@ def _extract_receipt_data(tx: dict[str, Any]) -> str:
     return ""
 
 
+def _is_tx_included_successfully(tx: dict[str, Any]) -> bool:
+    """Andromeda-primary success discriminator (I-Andromeda-1).
+
+    Returns True iff the tx response carries BOTH
+    `miniblockType == "TxBlock"` AND `status == "success"`. Observed
+    universal on mainnet 2026-04-17 (capture_02/success_tx.json).
+
+    Returns False for every other combination (including absence of
+    `miniblockType`), by intent: the reader falls back to the legacy
+    status-only path in `_read_andromeda` when this returns False, which
+    preserves backward compatibility with fixtures that pre-date
+    miniblockType awareness.
+    """
+    return (
+        tx.get("miniblockType") == "TxBlock"
+        and tx.get("status") == "success"
+    )
+
+
 # Status vocabulary for Andromeda; pending is the catch-all for unknown.
 _ANDROMEDA_STATUS_MAP: dict[str, str] = {
     "success": "success",
@@ -352,9 +382,28 @@ def _signal_failed_tx_count(
         return False
 
 
-_SUPERNOVA_FAIL_SIGNALS: list[tuple[str, _FailSignal]] = [
+def _signal_tx_miniblock_type_invalid(
+    exec_result: dict[str, Any], tx: dict[str, Any]
+) -> bool:
+    """Andromeda-primary fail signal: tx.miniblockType == 'InvalidBlock'.
+
+    Observed on mainnet 2026-04-17 (capture_01/invalid_tx.json). Regime-
+    agnostic in principle — if a future Supernova tx response also carries
+    miniblockType, this signal fires regardless of regime. The signals
+    list approach means zero change at the call site.
+    """
+    return tx.get("miniblockType") == "InvalidBlock"
+
+
+# V1.B-01: list renamed from its V0 Supernova-scoped identifier to the
+# current `_FAIL_SIGNALS`. The name change reflects that the list is now
+# heterogeneous (block-level + tx-level) and regime-agnostic in scope.
+# The InvalidBlock miniblock signal was observed on Andromeda mainnet
+# 2026-04-17, contradicting the V0 hypothesis that it was Supernova-only.
+_FAIL_SIGNALS: list[tuple[str, _FailSignal]] = [
     ("invalid_block_miniblock_header", _signal_invalid_block_miniblock),
     ("failed_tx_count", _signal_failed_tx_count),
+    ("tx_miniblock_type_invalid", _signal_tx_miniblock_type_invalid),
 ]
 
 
