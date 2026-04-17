@@ -1,0 +1,9 @@
+{
+  "id": "andromeda_tx_success",
+  "regime": "andromeda",
+  "scenario": "baseline_success_intra_shard",
+  "source": "observed_on_mainnet_2026-04-17",
+  "source_ref": "capture_02/success_tx.json, commit df00797",
+  "purpose": "Baseline — Andromeda happy path intra-shard.",
+  "caveats": []
+}
