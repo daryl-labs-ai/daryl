@@ -9,41 +9,57 @@ toward F2 sign-off.
 
 ```
 fixtures/
-├── README.md                          (this file)
-├── andromeda/
-│   ├── tx_success.json                F0 baseline — status='success'
-│   ├── tx_fail.json                   F2b CRITICAL — status='fail'
-│   └── block_containing_tx.json       block header under Andromeda
-└── supernova/
-    ├── tx_included_pending.json       T₂ intermediate observation
-    ├── tx_settled_success.json        T₃ baseline — status='success'
-    ├── tx_settled_fail.json           F2a CRITICAL tx-side — status='fail'
-    ├── block_containing_tx.json       block N (tx included, no ExecResult)
-    ├── block_settling_success.json    block N+1 with successful lastExecutionResult
-    └── block_settling_fail.json       F2a CRITICAL block-side — InvalidBlock miniblock
+├── README.md                           (this file)
+├── andromeda/                          (V1.B-01: observed_on_mainnet 2026-04-17)
+│   ├── tx_success.json                 F0 baseline — status='success', miniblockType='TxBlock'
+│   ├── tx_success.meta.json            sidecar metadata (source provenance)
+│   ├── tx_invalid.json                 F2b CRITICAL — status='invalid', miniblockType='InvalidBlock'
+│   ├── tx_invalid.meta.json            sidecar metadata
+│   ├── block_containing_tx.json        block containing the success tx (shard 1, nonce 30024315)
+│   ├── block_containing_tx.meta.json   sidecar metadata
+│   ├── block_invalid.json              block containing the invalid tx (shard 1, nonce 30023889); miniBlocks[2].type == 'InvalidBlock'
+│   └── block_invalid.meta.json         sidecar metadata
+├── supernova/                          (still derived_from_mip27; mainnet activation pending)
+│   ├── tx_included_pending.json        T₂ intermediate observation
+│   ├── tx_settled_success.json         T₃ baseline — status='success'
+│   ├── tx_settled_fail.json            F2a CRITICAL tx-side — status='fail'
+│   ├── block_containing_tx.json        block N (tx included, no ExecResult)
+│   ├── block_settling_success.json     block N+1 with successful lastExecutionResult
+│   └── block_settling_fail.json        F2a CRITICAL block-side — InvalidBlock miniblock
+└── observed_on_mainnet/                (append-only capture archive — read-only for the reader)
+    ├── 2026-04-17_capture_01/          invalid-side authoritative source + superseded cross-shard success
+    └── 2026-04-17_capture_02/          intra-shard success-side correction of capture_01
 ```
 
 ## Epistemic status of each fixture
 
-Each fixture's `_fixture_metadata.source` field is one of:
+Each fixture's source is now recorded in a **sidecar `*.meta.json` file**
+next to the fixture, not inline. Observed fixtures are byte-exact vs their
+source capture (I23): the payload JSON itself is never modified for
+metadata. Sidecar `source` values:
 
-- **`documented`** — shape matches the published MultiversX Gateway docs 1:1.
-  Field names, envelope structure, and status vocabulary are lifted directly
-  from official documentation. These fixtures are ground truth.
-- **`derived_from_mip27`** — shape is reconstructed from MIP-27 (the Supernova
-  specification draft). The STRUCTURE is what MIP-27 guarantees (decoupled
-  execution notarized in later block headers, `lastExecutionResult` on
-  `ApiBlock`, ExecutionResult struct defined in Appendix B). The exact JSON
-  field NAMES and CASING are best-effort Go-JSON conventions. These fixtures
-  must be recalibrated against a real Battle Net capture before mainnet.
+- **`observed_on_mainnet_YYYY-MM-DD`** — copied byte-exact from a real
+  mainnet gateway response captured under `observed_on_mainnet/`. The
+  source_ref field points to the specific capture file + commit hash.
+  This is ground truth.
+- **`documented`** — legacy status for pre-V1.B-01 Andromeda fixtures
+  (superseded; all Andromeda entries are now observed).
+- **`derived_from_mip27`** — shape reconstructed from MIP-27 (the Supernova
+  specification draft). The STRUCTURE is what MIP-27 guarantees
+  (decoupled execution notarized in later block headers,
+  `lastExecutionResult` on `ApiBlock`, ExecutionResult struct in
+  Appendix B). The exact JSON field NAMES and CASING are best-effort
+  Go-JSON conventions. Supernova fixtures MUST be recalibrated against
+  a real mainnet capture once Supernova activates.
 
 Summary:
 
 | Fixture | Source | Confidence |
 |---|---|---|
-| andromeda/tx_success.json | documented | high |
-| andromeda/tx_fail.json | documented | high |
-| andromeda/block_containing_tx.json | documented | high |
+| andromeda/tx_success.json | observed_on_mainnet_2026-04-17 | high |
+| andromeda/tx_invalid.json | observed_on_mainnet_2026-04-17 | high |
+| andromeda/block_containing_tx.json | observed_on_mainnet_2026-04-17 | high |
+| andromeda/block_invalid.json | observed_on_mainnet_2026-04-17 | high |
 | supernova/tx_included_pending.json | derived_from_mip27 | medium |
 | supernova/tx_settled_success.json | derived_from_mip27 | medium |
 | supernova/tx_settled_fail.json | derived_from_mip27 | medium |
@@ -65,6 +81,8 @@ miniblock header, failure SCR, tx endpoint status='fail'.
 All fixtures share these values so each fixture can be substituted for its
 variant without recomputing hashes:
 
+**Supernova** (still derived_from_mip27; deterministic):
+
 | Name | Value |
 |---|---|
 | DSM01 payload (base64) | `RFNNMDEIc2Vzc2lvbnOrq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urqwAAAAAAAABCASNFZ4mrfN6BI0VniavN7w==` |
@@ -73,21 +91,35 @@ variant without recomputing hashes:
 | entry_nonce (DSM) | 66 |
 | last_hash (DSM, 0x+hex) | `0x` + `ab` × 32 |
 | shard_id | `sessions` |
-| tx_hash | `d9ed0f70fc2326adb8f02c1cc44e4a531c5d1808bb6aa8558a396f03694a554a` |
+| tx_hash (Supernova) | `d9ed0f70fc2326adb8f02c1cc44e4a531c5d1808bb6aa8558a396f03694a554a` |
 | tx nonce (sender) | 42 |
 | sender = receiver | `erd1qyu5wthldzr8wx5c9ucg8kjagg0jfs53s8nr3zpz3hypefsdd8ssycr6th` |
-| containing block nonce (Andromeda) | 1000000 |
 | containing block nonce (Supernova) | 10000000 |
 | settling block nonce (Supernova) | 10000001 |
-| containing block hash | `3c5e9d60cdd02cbfeba896f6cef6b9a3de1d92e351c08d659cdb0d2a5557812c` |
+| containing block hash (Supernova) | `3c5e9d60cdd02cbfeba896f6cef6b9a3de1d92e351c08d659cdb0d2a5557812c` |
 | settling block hash (Supernova) | `02954ba529ce93d0a77e127c2f8a4e31cd89373a2c8c1c5f377b225dc7b62fac` |
-| miniblock hash | `72c5ec7d924ee15b2f0496d030e22bc5cee0b1b4485b7dc9542779152956ea70` |
-| timestamp (Andromeda, seconds) | 1776376800 |
+| miniblock hash (Supernova) | `72c5ec7d924ee15b2f0496d030e22bc5cee0b1b4485b7dc9542779152956ea70` |
 | timestamp (Supernova, ms) | 1776376800000 / 250 / 600 |
 
-These values were generated deterministically; their derivation is in
-`tools/generate_fixture_constants.py` (to be added alongside the V1-F2
-prompt).
+**Andromeda** (observed_on_mainnet 2026-04-17; NOT deterministic — real mainnet values):
+
+| Name | Value |
+|---|---|
+| success tx hash | `c07636310ed94a4b169019666384283f0eb411733617da75179aef1b45685146` |
+| success block nonce | 30024315 |
+| success block hash | `0cb39a6f7f75655d984af32caed9762f7b359ca467b0ce8032c72b95015b0a8c` |
+| success shard | 1 (intra-shard, `tx.blockHash == block.hash` verified) |
+| invalid tx hash | `95235d257505512d39f98dc60765cdebfc19fe90f39bea4b05661c10874ae8be` |
+| invalid block nonce | 30023889 |
+| invalid block hash | `f806c9690d4c8fc74bc8a72ab85607e9c0fa0255bebbbff0b7da3dc23d1fb81d` |
+| invalid miniblock hash (InvalidBlock) | `5959721f63a0d30ddeeccd2b7ea089b27aa51f524cb8b24a52bf58d07b24dfae` |
+| invalid shard | 1 (intra-shard) |
+| timestamp (Andromeda, seconds + ms) | per-fixture; real mainnet values; `timestamp` and `timestampMs` coexist |
+
+Supernova values were generated deterministically. Andromeda values are
+the real mainnet transactions/blocks observed on 2026-04-17; changing any
+Andromeda constant requires a new capture and a new commit under
+`observed_on_mainnet/`.
 
 ## How the dual-schema reader must use these
 
@@ -104,7 +136,7 @@ Expected decisions per fixture combination:
 | tx response | containing block | settling block | Expected output |
 |---|---|---|---|
 | `andromeda/tx_success.json` | `andromeda/block_containing_tx.json` | None | ExecutionResult(status='success', schema_path_used='andromeda_top_level') |
-| `andromeda/tx_fail.json` | `andromeda/block_containing_tx.json` | None | ExecutionResult(status='fail', schema_path_used='andromeda_top_level') |
+| `andromeda/tx_invalid.json` | `andromeda/block_invalid.json` | None | ExecutionResult(status='fail', schema_path_used='andromeda_top_level') — mainnet emits `status='invalid'`, `_ANDROMEDA_STATUS_MAP` translates to `'fail'` |
 | `supernova/tx_included_pending.json` | `supernova/block_containing_tx.json` | None | ExecutionResult(status='pending', schema_path_used='supernova_lastExecutionResult') — because the settling block has not yet been observed |
 | `supernova/tx_settled_success.json` | `supernova/block_containing_tx.json` | `supernova/block_settling_success.json` | ExecutionResult(status='success', schema_path_used='supernova_lastExecutionResult') |
 | `supernova/tx_settled_fail.json` | `supernova/block_containing_tx.json` | `supernova/block_settling_fail.json` | ExecutionResult(status='fail', schema_path_used='supernova_lastExecutionResult') |
@@ -139,13 +171,19 @@ Asserted invariants:
 
 ### F2b (Andromeda execution fail)
 
-1. Watcher polls tx endpoint → receives `andromeda/tx_fail.json`
-2. Watcher synthesizes `IncludeEvent` immediately from the same block data.
-3. Watcher yields `AnchorIncludedEntry`.
-4. Watcher synthesizes `ExecFailEvent` co-terminous (no separate settling
+1. Watcher polls tx endpoint → receives `andromeda/tx_invalid.json`
+   (mainnet vocabulary: `status="invalid"`, `miniblockType="InvalidBlock"`;
+   `_ANDROMEDA_STATUS_MAP["invalid"] = "fail"` translates into the
+   reader's internal status).
+2. Watcher polls containing block → receives `andromeda/block_invalid.json`
+   (contains `miniBlocks[2].type == "InvalidBlock"` as the block-side
+   corroborating signal).
+3. Watcher synthesizes `IncludeEvent` from the containing block.
+4. Watcher yields `AnchorIncludedEntry`.
+5. Watcher synthesizes `ExecFailEvent` co-terminous (no separate settling
    block under Andromeda; T₂≡T₃).
-5. Watcher yields `AnchorFailedEntry`.
-6. Watcher stops.
+6. Watcher yields `AnchorFailedEntry`.
+7. Watcher stops.
 
 Asserted invariants:
 - Exactly 2 events yielded (Included, Failed), both derived from ONE tx
@@ -176,23 +214,28 @@ Out of scope for V1-F2, in scope for V1.B and later:
 
 ## Update protocol
 
-When the first real Battle Net response is captured and diverges from these
-fixtures:
+When a new real mainnet response is captured (applies to both Andromeda
+refreshes and the upcoming Supernova activation):
 
-1. Save the raw capture as `battle_net_capture_YYYY-MM-DD.json` under a
-   new `captured/` subdirectory (append-only, never edit captures).
-2. Compare field-by-field against the derived_from_mip27 fixture. Any
-   divergence is a real finding — document it in a changelog file.
-3. Update the derived fixture to match the capture. Do NOT edit the
-   capture.
+1. Save the raw capture under `observed_on_mainnet/YYYY-MM-DD_capture_NN/`
+   (append-only, never edit captures). Use `curl -o` — never re-serialize
+   with `json.dump`.
+2. Run `cmp` between the capture and the target fixture before ANY
+   replacement. If you are refreshing a fixture, first verify the old
+   fixture's source_ref still points at a live capture; replace only
+   the payload, byte-exact, via `cp`.
+3. Update the sidecar `*.meta.json` with the new `source_ref` (capture
+   path + commit hash) and bump the `source` field if provenance tier
+   changes (e.g. `derived_from_mip27` → `observed_on_mainnet_YYYY-MM-DD`).
 4. Re-run V1-F2 tests. If they now fail, either the dual-schema reader
    needs an update (preferred) or a new fixture variant is needed (flag
    as a new V1.B task).
-5. Bump the fixture metadata `source` field from `derived_from_mip27` to
-   `observed_on_battle_net_YYYY-MM-DD`.
+5. NEVER inline metadata inside the payload — I23 requires byte-exact
+   fixtures vs their source capture, enforced by `cmp` in sign-off.
 
 ## Provenance log
 
 | Date | Action | By |
 |---|---|---|
 | 2026-04-17 | Initial fixtures created from docs (Andromeda) + MIP-27 §B (Supernova). | pre-V1-F2 |
+| 2026-04-17 | V1.B-01: Andromeda fixtures replaced with observed_on_mainnet byte-exact captures (capture_01 invalid-side + capture_02 success-side). `tx_fail.json` renamed to `tx_invalid.json` to reflect mainnet vocabulary. New `block_invalid.json` added. Sidecar `*.meta.json` introduced per I23. Supernova fixtures unchanged — pending mainnet activation. | V1.B-01 |
