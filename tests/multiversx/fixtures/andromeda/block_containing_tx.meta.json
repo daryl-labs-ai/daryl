@@ -1,0 +1,9 @@
+{
+  "id": "andromeda_block_containing_tx",
+  "regime": "andromeda",
+  "scenario": "baseline_success_intra_shard_block",
+  "source": "observed_on_mainnet_2026-04-17",
+  "source_ref": "capture_02/success_block_containing.json, commit df00797",
+  "purpose": "Block containing the Andromeda success tx. Shard 1, nonce 30024315. tx.blockHash == block.hash verified in capture_02/CAPTURE_REPORT.md.",
+  "caveats": []
+}

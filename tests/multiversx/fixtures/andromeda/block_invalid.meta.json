@@ -1,0 +1,9 @@
+{
+  "id": "andromeda_block_invalid",
+  "regime": "andromeda",
+  "scenario": "F2b_execution_fail_block_mainnet_observed",
+  "source": "observed_on_mainnet_2026-04-17",
+  "source_ref": "capture_01/invalid_block_containing.json, commit 4ac2816",
+  "purpose": "Block containing the Andromeda invalid tx. Shard 1, nonce 30023889. miniBlocks[2].type == 'InvalidBlock' is the block-side fail signal; tx-level signal (miniblockType='InvalidBlock') is redundant-and-corroborating.",
+  "caveats": []
+}

@@ -1,0 +1,9 @@
+{
+  "id": "andromeda_tx_invalid",
+  "regime": "andromeda",
+  "scenario": "F2b_execution_fail_mainnet_observed",
+  "source": "observed_on_mainnet_2026-04-17",
+  "source_ref": "capture_01/invalid_tx.json, commit 4ac2816",
+  "purpose": "F2b input. Andromeda mainnet emits status='invalid' (not 'fail') with miniblockType='InvalidBlock'. _ANDROMEDA_STATUS_MAP handles the vocabulary translation.",
+  "caveats": []
+}
