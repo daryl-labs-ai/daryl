@@ -1,0 +1,61 @@
+{
+  "_fixture_metadata": {
+    "id": "supernova_block_settling_success",
+    "regime": "supernova",
+    "scenario": "T3_settling_block_success",
+    "source": "derived_from_mip27",
+    "source_ref": "MIP-27 §4.2, §4.7, §B. Block N+1 carries `lastExecutionResult` notarizing the execution outcome of block N's txs. The ExecutionResult struct shape is defined in MIP-27 Appendix B.",
+    "purpose": "Baseline happy-path settling block for Supernova. The dual-schema reader, fed this block alongside the tx_settled_success.json tx response, MUST produce ExecutionResult(status='success', schema_path_used='supernova_lastExecutionResult'). This is the negative control for F2a — if this path gives status='success' correctly, F2a must give status='fail' on the analogous fail fixture.",
+    "caveats": [
+      "JSON field names (camelCase) are derived from MIP-27 §B Go struct names via Go JSON conventions (PascalCase field → camelCase JSON). Actual Battle Net wire format MAY use different casing or a wrapper envelope. On the first real Battle Net capture: swap these fixtures and update the dual-schema reader's field lookup tables. The STRUCTURE (a lastExecutionResult containing miniBlockHeaders with receiptsHash, gasUsed, developerFees, etc.) is what MIP-27 guarantees; exact field names are best-effort.",
+      "MIP-27 §B's ExecutionResult does NOT include an explicit per-tx status field. Under Supernova, per-tx success/fail is derived from: (a) the tx appearing in a MiniBlockHeader with type != InvalidBlock, AND (b) the receipt/SCR data. This fixture models a success as 'tx present in a TxBlock miniblock + no failure receipt'. The F2-fail counterpart (block_settling_fail.json) adds an InvalidBlock or SmartContractResultBlock carrying the failure.",
+      "`accumulatedFees` and `developerFees` use string-encoded big integers per MultiversX convention for amounts exceeding int64. See existing Andromeda fixtures for the pattern."
+    ]
+  },
+  "data": {
+    "block": {
+      "nonce": 10000001,
+      "round": 10000001,
+      "epoch": 2000,
+      "shard": 0,
+      "hash": "02954ba529ce93d0a77e127c2f8a4e31cd89373a2c8c1c5f377b225dc7b62fac",
+      "prevBlockHash": "3c5e9d60cdd02cbfeba896f6cef6b9a3de1d92e351c08d659cdb0d2a5557812c",
+      "timestamp": 1776376800600,
+      "numTxs": 0,
+      "miniBlocks": [],
+      "lastExecutionResult": {
+        "baseExecutionResult": {
+          "headerHash": "3c5e9d60cdd02cbfeba896f6cef6b9a3de1d92e351c08d659cdb0d2a5557812c",
+          "headerNonce": 10000000,
+          "headerRound": 10000000,
+          "rootHash": "48f7a935441c71b353deedbdb5305176df71936865c2f8699dfff8c78f576bb2"
+        },
+        "receiptsHash": "690d4161312662e9773c7eb0e23bae5eb91d77abaac54205ba92485dd193c679",
+        "miniBlockHeaders": [
+          {
+            "hash": "72c5ec7d924ee15b2f0496d030e22bc5cee0b1b4485b7dc9542779152956ea70",
+            "senderShard": 0,
+            "receiverShard": 0,
+            "type": "TxBlock",
+            "txCount": 1
+          }
+        ],
+        "developerFees": "15000000000000",
+        "accumulatedFees": "150000000000000",
+        "gasUsed": 150000,
+        "executedTxCount": 1
+      },
+      "lastExecutionResultInfo": {
+        "notarizedOnHeaderHash": "02954ba529ce93d0a77e127c2f8a4e31cd89373a2c8c1c5f377b225dc7b62fac",
+        "executionResult": {
+          "headerHash": "3c5e9d60cdd02cbfeba896f6cef6b9a3de1d92e351c08d659cdb0d2a5557812c",
+          "headerNonce": 10000000,
+          "headerRound": 10000000,
+          "rootHash": "48f7a935441c71b353deedbdb5305176df71936865c2f8699dfff8c78f576bb2"
+        }
+      }
+    }
+  },
+  "error": "",
+  "code": "successful"
+}
