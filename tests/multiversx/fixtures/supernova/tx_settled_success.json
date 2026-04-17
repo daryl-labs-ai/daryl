@@ -1,0 +1,44 @@
+{
+  "_fixture_metadata": {
+    "id": "supernova_tx_settled_success",
+    "regime": "supernova",
+    "scenario": "T3_tx_settled_success",
+    "source": "derived_from_mip27",
+    "source_ref": "MIP-27 §4.7 states the tx wire format is unchanged under Supernova and that ApiBlock preserves legacy field access during the transition window. The tx endpoint therefore returns the same field set as Andromeda once execution has been notarized — with `status` populated and, where relevant, `smartContractResults`/`receipt`.",
+    "purpose": "Baseline happy-path tx observation at T₃ under Supernova. Read together with block_settling_success.json, the dual-schema reader MUST produce ExecutionResult(status='success', schema_path_used='supernova_lastExecutionResult'). The presence of `lastExecutionResult` in the settling block is the discriminator that chooses the supernova path over the andromeda path.",
+    "intent_id": "01234567-89ab-7cde-8123-456789abcdef",
+    "entry_nonce_dsm": 66,
+    "caveats": [
+      "Under Supernova the tx endpoint includes an additional field `executedInBlockNonce` (or similar) that references the block where the ExecutionResult was notarized. MIP-27 does not name this field explicitly. This fixture adds `executedInBlockNonce` for clarity; the dual-schema reader must also accept a tx response that lacks this field and fall back to reading it from the settling block's ExecutionResult.",
+      "The `timestamp` field is in ms per MIP-27 §4.5."
+    ]
+  },
+  "data": {
+    "transaction": {
+      "type": "normal",
+      "nonce": 42,
+      "round": 10000000,
+      "epoch": 2000,
+      "value": "0",
+      "receiver": "erd1qyu5wthldzr8wx5c9ucg8kjagg0jfs53s8nr3zpz3hypefsdd8ssycr6th",
+      "sender": "erd1qyu5wthldzr8wx5c9ucg8kjagg0jfs53s8nr3zpz3hypefsdd8ssycr6th",
+      "gasPrice": 1000000000,
+      "gasLimit": 300000,
+      "data": "RFNNMDEIc2Vzc2lvbnOrq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urqwAAAAAAAABCASNFZ4mrfN6BI0VniavN7w==",
+      "signature": "aa000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "sourceShard": 0,
+      "destinationShard": 0,
+      "blockNonce": 10000000,
+      "blockHash": "3c5e9d60cdd02cbfeba896f6cef6b9a3de1d92e351c08d659cdb0d2a5557812c",
+      "miniblockHash": "72c5ec7d924ee15b2f0496d030e22bc5cee0b1b4485b7dc9542779152956ea70",
+      "timestamp": 1776376800000,
+      "gasUsed": 150000,
+      "status": "success",
+      "hash": "d9ed0f70fc2326adb8f02c1cc44e4a531c5d1808bb6aa8558a396f03694a554a",
+      "executedInBlockNonce": 10000001,
+      "executedInBlockHash": "02954ba529ce93d0a77e127c2f8a4e31cd89373a2c8c1c5f377b225dc7b62fac"
+    }
+  },
+  "error": "",
+  "code": "successful"
+}

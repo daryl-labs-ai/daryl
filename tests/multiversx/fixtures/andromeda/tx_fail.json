@@ -1,0 +1,47 @@
+{
+  "_fixture_metadata": {
+    "id": "andromeda_tx_fail",
+    "regime": "andromeda",
+    "scenario": "F2b_execution_fail",
+    "source": "documented",
+    "source_ref": "https://docs.multiversx.com/sdk-and-tools/rest-api/transactions/ — shallow status values: success, invalid, pending, fail. MultiversX convention for failed tx: status='fail' with a receipt describing the failure.",
+    "purpose": "F2b critical input. The dual-schema reader, fed this response, MUST produce ExecutionResult(status='fail', schema_path_used='andromeda_top_level'). The watcher, fed this observation, MUST yield AnchorIncludedEntry followed by AnchorFailedEntry — NOT AnchorSettledEntry. The audit tool MUST return VerifyResult(verdict='execution_failed').",
+    "intent_id": "01234567-89ab-7cde-8123-456789abcdef",
+    "entry_nonce_dsm": 66,
+    "caveats": [
+      "The exact `receipt` shape for a failed self-addressed 0-EGLD transfer varies by failure cause. This fixture models a generic out-of-gas-style failure. If the real runtime failure cause for a DSM anchor differs, update the `receipt.data` field — but the status='fail' discriminator is what F2b actually tests."
+    ]
+  },
+  "data": {
+    "transaction": {
+      "type": "normal",
+      "nonce": 42,
+      "round": 1000000,
+      "epoch": 1500,
+      "value": "0",
+      "receiver": "erd1qyu5wthldzr8wx5c9ucg8kjagg0jfs53s8nr3zpz3hypefsdd8ssycr6th",
+      "sender": "erd1qyu5wthldzr8wx5c9ucg8kjagg0jfs53s8nr3zpz3hypefsdd8ssycr6th",
+      "gasPrice": 1000000000,
+      "gasLimit": 300000,
+      "data": "RFNNMDEIc2Vzc2lvbnOrq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urqwAAAAAAAABCASNFZ4mrfN6BI0VniavN7w==",
+      "signature": "aa000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "sourceShard": 0,
+      "destinationShard": 0,
+      "blockNonce": 1000000,
+      "blockHash": "3c5e9d60cdd02cbfeba896f6cef6b9a3de1d92e351c08d659cdb0d2a5557812c",
+      "miniblockHash": "72c5ec7d924ee15b2f0496d030e22bc5cee0b1b4485b7dc9542779152956ea70",
+      "timestamp": 1776376800,
+      "gasUsed": 300000,
+      "status": "fail",
+      "hash": "d9ed0f70fc2326adb8f02c1cc44e4a531c5d1808bb6aa8558a396f03694a554a",
+      "receipt": {
+        "value": "0",
+        "sender": "erd1qyu5wthldzr8wx5c9ucg8kjagg0jfs53s8nr3zpz3hypefsdd8ssycr6th",
+        "data": "QDZlNzU3NDIwNmY2NjIwNjc2MTczNGAyMTY4Njg2Mg==",
+        "txHash": "d9ed0f70fc2326adb8f02c1cc44e4a531c5d1808bb6aa8558a396f03694a554a"
+      }
+    }
+  },
+  "error": "",
+  "code": "successful"
+}

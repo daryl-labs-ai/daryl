@@ -1,0 +1,48 @@
+{
+  "_fixture_metadata": {
+    "id": "andromeda_block_containing_tx",
+    "regime": "andromeda",
+    "scenario": "block_header_context_for_F2b",
+    "source": "documented",
+    "source_ref": "https://docs.multiversx.com/sdk-and-tools/rest-api/blocks/ — Gateway /block/{shard}/by-nonce/{nonce}. Under Andromeda, block headers expose top-level `rootHash` / `stateRootHash` / `receiptsHash` directly.",
+    "purpose": "Block containing both the success and fail fixtures' tx. Under Andromeda this block carries all execution data: rootHash, stateRootHash are top-level fields, and this is the only block the watcher needs to inspect (T₂≡T₃).",
+    "caveats": []
+  },
+  "data": {
+    "block": {
+      "nonce": 1000000,
+      "round": 1000000,
+      "epoch": 1500,
+      "shard": 0,
+      "hash": "3c5e9d60cdd02cbfeba896f6cef6b9a3de1d92e351c08d659cdb0d2a5557812c",
+      "prevBlockHash": "0000000000000000000000000000000000000000000000000000000000000001",
+      "timestamp": 1776376800,
+      "rootHash": "48f7a935441c71b353deedbdb5305176df71936865c2f8699dfff8c78f576bb2",
+      "stateRootHash": "48f7a935441c71b353deedbdb5305176df71936865c2f8699dfff8c78f576bb2",
+      "receiptsHash": "690d4161312662e9773c7eb0e23bae5eb91d77abaac54205ba92485dd193c679",
+      "accumulatedFees": "300000000000000",
+      "developerFees": "30000000000000",
+      "numTxs": 1,
+      "miniBlocks": [
+        {
+          "hash": "72c5ec7d924ee15b2f0496d030e22bc5cee0b1b4485b7dc9542779152956ea70",
+          "type": "TxBlock",
+          "sourceShard": 0,
+          "destinationShard": 0,
+          "transactions": [
+            {
+              "hash": "d9ed0f70fc2326adb8f02c1cc44e4a531c5d1808bb6aa8558a396f03694a554a",
+              "nonce": 42,
+              "sender": "erd1qyu5wthldzr8wx5c9ucg8kjagg0jfs53s8nr3zpz3hypefsdd8ssycr6th",
+              "receiver": "erd1qyu5wthldzr8wx5c9ucg8kjagg0jfs53s8nr3zpz3hypefsdd8ssycr6th",
+              "value": "0",
+              "gasLimit": 300000
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "error": "",
+  "code": "successful"
+}

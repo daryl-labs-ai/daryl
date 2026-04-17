@@ -1,0 +1,56 @@
+{
+  "_fixture_metadata": {
+    "id": "supernova_block_containing_tx",
+    "regime": "supernova",
+    "scenario": "T2_block_no_execution_result_yet",
+    "source": "derived_from_mip27",
+    "source_ref": "MIP-27 §4.2, §4.7. Under Supernova, a block at nonce N contains the tx miniblock but does NOT yet carry the execution result for its own txs — the execution result is notarized in block N+k (typically N+1).",
+    "purpose": "Block N containing the DSM anchor tx. This block has NO `lastExecutionResult` for the current tx because under Supernova execution is decoupled. The dual-schema reader MUST NOT extract an ExecutionResult from this block alone — it must wait for the settling block (see block_settling_*.json).",
+    "caveats": [
+      "MIP-27 §7 says `ApiBlock` preserves legacy `rootHash` top-level field during the transition window, populated from the preceding block's ExecutionResult (i.e. the state AT END of block N-1). In Supernova this is subtle: `rootHash` on block N reflects state BEFORE executing block N's txs. Audit tools that treat rootHash as 'state after this block' get stale-by-one under Supernova. This fixture deliberately populates the legacy `rootHash` field with the pre-tx state root to model this correctly. The dual-schema reader MUST prefer `lastExecutionResult` on the SETTLING block (N+1) for authoritative post-execution state, NOT `rootHash` on block N.",
+      "The block also carries a `lastExecutionResultInfo` (succinct reference) pointing to the previous block's ExecutionResult. Modeled below. Field name/shape derived from MIP-27 §B `ExecutionResultInfo`; swap on Battle Net confirmation."
+    ]
+  },
+  "data": {
+    "block": {
+      "nonce": 10000000,
+      "round": 10000000,
+      "epoch": 2000,
+      "shard": 0,
+      "hash": "3c5e9d60cdd02cbfeba896f6cef6b9a3de1d92e351c08d659cdb0d2a5557812c",
+      "prevBlockHash": "0000000000000000000000000000000000000000000000000000000000000001",
+      "timestamp": 1776376800000,
+      "rootHash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "numTxs": 1,
+      "miniBlocks": [
+        {
+          "hash": "72c5ec7d924ee15b2f0496d030e22bc5cee0b1b4485b7dc9542779152956ea70",
+          "type": "TxBlock",
+          "sourceShard": 0,
+          "destinationShard": 0,
+          "transactions": [
+            {
+              "hash": "d9ed0f70fc2326adb8f02c1cc44e4a531c5d1808bb6aa8558a396f03694a554a",
+              "nonce": 42,
+              "sender": "erd1qyu5wthldzr8wx5c9ucg8kjagg0jfs53s8nr3zpz3hypefsdd8ssycr6th",
+              "receiver": "erd1qyu5wthldzr8wx5c9ucg8kjagg0jfs53s8nr3zpz3hypefsdd8ssycr6th",
+              "value": "0",
+              "gasLimit": 300000
+            }
+          ]
+        }
+      ],
+      "lastExecutionResultInfo": {
+        "notarizedOnHeaderHash": "0000000000000000000000000000000000000000000000000000000000000001",
+        "executionResult": {
+          "headerHash": "0000000000000000000000000000000000000000000000000000000000000001",
+          "headerNonce": 9999999,
+          "headerRound": 9999999,
+          "rootHash": "0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      }
+    }
+  },
+  "error": "",
+  "code": "successful"
+}

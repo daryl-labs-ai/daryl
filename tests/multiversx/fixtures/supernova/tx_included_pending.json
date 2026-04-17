@@ -1,0 +1,41 @@
+{
+  "_fixture_metadata": {
+    "id": "supernova_tx_included_pending",
+    "regime": "supernova",
+    "scenario": "intermediate_T2_observation",
+    "source": "derived_from_mip27",
+    "source_ref": "MIP-27 §4.2, §4.7, §7. Propose/Vote-then-Execute decoupling: tx is finalized in consensus at T₂ (block N becomes irreversible) but execution is notarized later (typically block N+1). During the T₂→T₃ window, the tx endpoint necessarily exposes the tx as included (blockNonce set, blockHash set) but without execution outcome yet.",
+    "purpose": "Intermediate observation a Supernova watcher sees between T₂ (~250ms) and T₃ (~850ms). If the watcher polls the tx endpoint in this window and receives this shape, it MUST NOT emit AnchorSettledEntry — it MUST wait for the settling block or a subsequent tx-endpoint query. This fixture tests that the dual-schema reader recognizes the included-but-not-settled state as 'pending' rather than inferring settlement from inclusion.",
+    "intent_id": "01234567-89ab-7cde-8123-456789abcdef",
+    "entry_nonce_dsm": 66,
+    "caveats": [
+      "MIP-27 does not explicitly document the tx endpoint's status field value during the T₂→T₃ gap. This fixture uses 'pending' consistent with the documented Andromeda shallow-status vocabulary ('success', 'invalid', 'pending', 'fail'). If Battle Net introduces a new value ('included', 'consensus-final-not-executed', etc.), swap the status field and update the dual-schema reader's pending-detection branch accordingly — but the structural test (no execution outcome visible yet) remains unchanged.",
+      "The `timestamp` field is in seconds in the documented Andromeda shape. MIP-27 §4.5 mandates ms-precision timestamps after activation. This fixture uses a ms-precision integer (1776376800250) to match Supernova semantics; if the gateway exposes a separate `timestampMs` field while keeping `timestamp` in seconds for back-compat, update the dual-schema reader to prefer `timestampMs` when present."
+    ]
+  },
+  "data": {
+    "transaction": {
+      "type": "normal",
+      "nonce": 42,
+      "round": 10000000,
+      "epoch": 2000,
+      "value": "0",
+      "receiver": "erd1qyu5wthldzr8wx5c9ucg8kjagg0jfs53s8nr3zpz3hypefsdd8ssycr6th",
+      "sender": "erd1qyu5wthldzr8wx5c9ucg8kjagg0jfs53s8nr3zpz3hypefsdd8ssycr6th",
+      "gasPrice": 1000000000,
+      "gasLimit": 300000,
+      "data": "RFNNMDEIc2Vzc2lvbnOrq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urqwAAAAAAAABCASNFZ4mrfN6BI0VniavN7w==",
+      "signature": "aa000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "sourceShard": 0,
+      "destinationShard": 0,
+      "blockNonce": 10000000,
+      "blockHash": "3c5e9d60cdd02cbfeba896f6cef6b9a3de1d92e351c08d659cdb0d2a5557812c",
+      "miniblockHash": "72c5ec7d924ee15b2f0496d030e22bc5cee0b1b4485b7dc9542779152956ea70",
+      "timestamp": 1776376800250,
+      "status": "pending",
+      "hash": "d9ed0f70fc2326adb8f02c1cc44e4a531c5d1808bb6aa8558a396f03694a554a"
+    }
+  },
+  "error": "",
+  "code": "successful"
+}
