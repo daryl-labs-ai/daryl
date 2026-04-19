@@ -128,6 +128,18 @@ class RRNavigator:
         records = index.get(shard_id, [])
         return list(records)
 
+    def navigate_action(self, action_name: str) -> List[Dict[str, Any]]:
+        """
+        Return metadata records for the given action_name.
+
+        Uses action_index populated by RRIndexBuilder (Phase 7a extension). Each returned record
+        exposes the same keys as other navigators plus action_name and success.
+        Does not call Storage.read().
+        """
+        index = getattr(self._index_builder, "action_index", {}) or {}
+        records = index.get(action_name, [])
+        return list(records)
+
     def resolve_entries(
         self,
         records: List[Dict[str, Any]],

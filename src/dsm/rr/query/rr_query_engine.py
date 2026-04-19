@@ -26,6 +26,26 @@ def _normalize_timestamp(value: Any) -> float:
         return 0.0
 
 
+def _coerce_to_numeric(value: Any) -> Optional[float]:
+    """
+    Coerce a value to a numeric Unix timestamp or return None when no bound is requested.
+    Accepts None, datetime, float/int, or ISO 8601 string (for SessionIndex.get_actions
+    compatibility — see src/dsm/session/session_index.py:174).
+    """
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.timestamp()
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
+        except ValueError:
+            return None
+    return None
+
+
 class RRQueryEngine:
     """
     Query engine on top of RRNavigator. Translates high-level criteria
@@ -113,6 +133,51 @@ class RRQueryEngine:
         if resolve:
             return self._navigator.resolve_entries(records, limit=limit)
         return records
+
+    def query_actions(
+        self,
+        action_name: Optional[str] = None,
+        session_id: Optional[str] = None,
+        start_time: Optional[Union[datetime, float, int, str]] = None,
+        end_time: Optional[Union[datetime, float, int, str]] = None,
+        limit: int = 100,
+    ) -> List[Dict[str, Any]]:
+        """
+        Query actions with optional filters, signature-compatible with SessionIndex.get_actions
+        (src/dsm/session/session_index.py:156).
+
+        When action_name is provided, uses action_index (O(k) dict lookup) to pull the bucket,
+        which is already sorted by timestamp ascending. When action_name is None, iterates over
+        every bucket. AND-filters by session_id, start_time, end_time. start_time / end_time may
+        be ISO strings (for SessionIndex wire-compat) or datetime / numeric timestamps (normalized
+        to float).
+        Early-exit on limit. Does not call Storage.read().
+        """
+        start_ts = _coerce_to_numeric(start_time)
+        end_ts = _coerce_to_numeric(end_time)
+
+        if action_name is not None:
+            buckets: List[List[Dict[str, Any]]] = [
+                self._navigator.navigate_action(action_name)
+            ]
+        else:
+            action_index = getattr(self._navigator.index_builder, "action_index", {}) or {}
+            buckets = [list(bucket) for bucket in action_index.values()]
+
+        results: List[Dict[str, Any]] = []
+        for bucket in buckets:
+            for act in bucket:
+                if session_id and act.get("session_id") != session_id:
+                    continue
+                ts = act.get("timestamp")
+                if start_ts is not None and (ts is None or ts < start_ts):
+                    continue
+                if end_ts is not None and (ts is None or ts > end_ts):
+                    continue
+                results.append(act)
+                if len(results) >= limit:
+                    return results
+        return results
 
     def _intersect_by_entry_id(
         self,
