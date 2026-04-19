@@ -54,6 +54,8 @@ from dsm.session.session_index import SessionIndex  # noqa: E402
 N_ENTRIES = 10_000
 N_SESSIONS = 500
 TIME_SPAN_DAYS = 30
+# Default target: ~20 entries per session. Sessions scale linearly with fixture_size.
+ENTRIES_PER_SESSION_TARGET = 20
 EVENT_TYPE_POOL: List[Tuple[str, float]] = [
     ("session_start", 0.05),
     ("tool_call", 0.70),
@@ -92,10 +94,19 @@ def _action_weights(n: int, mode: str, zipf_s: float | None) -> List[float]:
     raise ValueError(f"unknown distribution {mode!r}")
 
 
-def _build_dataset(dataset_cfg: Dict[str, Any]) -> Dict[str, Any]:
+def _build_dataset(
+    dataset_cfg: Dict[str, Any],
+    fixture_size: int = N_ENTRIES,
+    n_sessions: int = N_SESSIONS,
+) -> Dict[str, Any]:
     """
     Build dataset in-memory: returns dict with `entries` (list of JSON-ready dicts),
     `action_names` (full list), `top_action`, `rare_action`, `session_ids`, etc.
+
+    fixture_size and n_sessions default to the Phase 7a 10 000-entry constants for
+    backwards compatibility with the original Phase 7a invocation; callers that
+    parameterise them (e.g. Phase 7a.5 at 100 000 entries) should keep the
+    ~20-entries-per-session ratio by scaling n_sessions linearly.
     """
     rng = random.Random(dataset_cfg["seed"])
     n_actions = dataset_cfg["n_actions"]
@@ -105,7 +116,7 @@ def _build_dataset(dataset_cfg: Dict[str, Any]) -> Dict[str, Any]:
     event_types = [et for et, _ in EVENT_TYPE_POOL]
     event_weights = [w for _, w in EVENT_TYPE_POOL]
 
-    session_ids = [f"session_{i:04d}" for i in range(N_SESSIONS)]
+    session_ids = [f"session_{i:04d}" for i in range(n_sessions)]
     agents = ["agent_alpha", "agent_beta", "agent_gamma"]
     t0 = datetime(2026, 3, 1, tzinfo=timezone.utc)
     span = timedelta(days=TIME_SPAN_DAYS).total_seconds()
@@ -113,7 +124,7 @@ def _build_dataset(dataset_cfg: Dict[str, Any]) -> Dict[str, Any]:
     entries: List[Dict[str, Any]] = []
     action_counts: Dict[str, int] = {}
 
-    for i in range(N_ENTRIES):
+    for i in range(fixture_size):
         ts_offset = rng.random() * span
         ts = t0 + timedelta(seconds=ts_offset)
         session_id = rng.choice(session_ids)
@@ -372,8 +383,12 @@ def _make_query_calls(
 # End-to-end benchmark.
 # ---------------------------------------------------------------------------
 
-def bench_dataset(dataset_cfg: Dict[str, Any]) -> Dict[str, Any]:
-    ds = _build_dataset(dataset_cfg)
+def bench_dataset(
+    dataset_cfg: Dict[str, Any],
+    fixture_size: int = N_ENTRIES,
+    n_sessions: int = N_SESSIONS,
+) -> Dict[str, Any]:
+    ds = _build_dataset(dataset_cfg, fixture_size=fixture_size, n_sessions=n_sessions)
     entries = ds["entries"]
 
     # -- Build phase -----------------------------------------------------
@@ -438,6 +453,11 @@ def bench_dataset(dataset_cfg: Dict[str, Any]) -> Dict[str, Any]:
         else float("inf")
     )
     build_operational_flag = absolute_build_ratio > 3.0
+    # Gate (iii), blocking as of Phase 7a.5 — see
+    # docs/architecture/ADR_0001_CANONICAL_CONSUMPTION_PATH.md > Migration plan > Phase 7a.5.
+    # At 10 k this gate passes with margin (observed 6.44×) ; at 100 k it is the operational
+    # acceptability check that conditions Phase 7b.
+    absolute_gate_pass = absolute_build_ratio <= 10.0
 
     def _ratio(label_rr: str, label_si: str) -> float:
         si_med = query_results[label_si]["median_ms"]
@@ -453,7 +473,11 @@ def bench_dataset(dataset_cfg: Dict[str, Any]) -> Dict[str, Any]:
     for g in query_gates.values():
         g["pass"] = g["ratio"] <= g["threshold"]
 
-    dataset_pass = build_gate_pass and all(g["pass"] for g in query_gates.values())
+    dataset_pass = (
+        build_gate_pass
+        and absolute_gate_pass
+        and all(g["pass"] for g in query_gates.values())
+    )
 
     return {
         "cfg": dataset_cfg,
@@ -475,6 +499,7 @@ def bench_dataset(dataset_cfg: Dict[str, Any]) -> Dict[str, Any]:
             "absolute_RR_with_over_SI": absolute_build_ratio,
             "build_gate_pass": build_gate_pass,
             "build_operational_flag_over_3x": build_operational_flag,
+            "absolute_gate_pass_under_10x": absolute_gate_pass,
         },
         "queries": query_results,
         "query_row_counts": hit_counts,
@@ -485,13 +510,18 @@ def bench_dataset(dataset_cfg: Dict[str, Any]) -> Dict[str, Any]:
 
 def render_markdown(results: Dict[str, Any]) -> str:
     lines: List[str] = []
-    lines.append("# Phase 7a benchmark — RR action_name index vs SessionIndex")
+    phase = results.get("phase", "7a")
+    fixture_size = results.get("fixture_size", N_ENTRIES)
+    lines.append(f"# Phase {phase} benchmark — RR action_name index vs SessionIndex")
     lines.append("")
     lines.append(f"- Run timestamp (UTC): {results['run_utc']}")
     lines.append(f"- Prototype branch: {results['branch']}")
     lines.append(f"- Commit SHA: {results['commit_sha']}")
     lines.append(f"- Python: {results['python']}")
     lines.append(f"- Platform: {results['platform']}")
+    lines.append(f"- Fixture size per dataset: {fixture_size:,} entries")
+    if results.get("comparison_baseline"):
+        lines.append(f"- Comparison baseline: `{results['comparison_baseline']}`")
     lines.append("")
     lines.append(f"**Overall verdict: {'PASS' if results['verdict'] == 'PASS' else 'FAIL'}**")
     lines.append("")
@@ -586,30 +616,64 @@ def _env_meta() -> Dict[str, Any]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Phase 7a benchmark")
+    parser = argparse.ArgumentParser(description="Phase 7a / 7a.5 benchmark")
     parser.add_argument(
         "--out",
         default=str(REPO_ROOT / "benchmarks" / "results"),
         help="Directory for JSON / MD outputs (default: benchmarks/results)",
     )
+    parser.add_argument(
+        "--fixture-size",
+        type=int,
+        default=N_ENTRIES,
+        help="Entries per dataset (default: 10000 = Phase 7a baseline ; use 100000 for Phase 7a.5).",
+    )
+    parser.add_argument(
+        "--output-suffix",
+        default="",
+        help="Filename suffix to distinguish runs (e.g. '_100k' for Phase 7a.5). "
+             "Empty suffix preserves Phase 7a filenames.",
+    )
     args = parser.parse_args()
+
+    fixture_size = args.fixture_size
+    if fixture_size <= 0:
+        raise SystemExit("--fixture-size must be positive")
+    n_sessions = max(1, fixture_size // ENTRIES_PER_SESSION_TARGET)
+    phase_label = "7a.5" if args.output_suffix else "7a"
 
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    # Rewrite dataset descriptions to reflect the actual fixture size.
+    runtime_datasets: List[Dict[str, Any]] = []
+    for base_cfg in (DATASET_A, DATASET_B):
+        cfg = dict(base_cfg)
+        cfg["description"] = (
+            f"{fixture_size:,} entries, {n_sessions:,} sessions, "
+            f"{cfg['n_actions']} action_names "
+            f"{'Zipf s=' + str(cfg['zipf_s']) if cfg['distribution'] == 'zipf' else 'quasi-uniform'}"
+        )
+        runtime_datasets.append(cfg)
+
     results: Dict[str, Any] = {
         **_env_meta(),
-        "n_entries_per_dataset": N_ENTRIES,
-        "n_sessions": N_SESSIONS,
+        "phase": phase_label,
+        "fixture_size": fixture_size,
+        "n_entries_per_dataset": fixture_size,
+        "n_sessions": n_sessions,
         "time_span_days": TIME_SPAN_DAYS,
         "event_type_pool": EVENT_TYPE_POOL,
+        "comparison_baseline": (
+            "phase_7a_action_index_20260419.json" if args.output_suffix else None
+        ),
         "datasets": [],
     }
 
-    for cfg in (DATASET_A, DATASET_B):
+    for cfg in runtime_datasets:
         print(f"[bench] running dataset {cfg['label']} ({cfg['description']})", flush=True)
         t0 = time.monotonic()
-        ds_result = bench_dataset(cfg)
+        ds_result = bench_dataset(cfg, fixture_size=fixture_size, n_sessions=n_sessions)
         elapsed = time.monotonic() - t0
         print(
             f"[bench] dataset {cfg['label']} done in {elapsed:.2f}s — "
@@ -622,8 +686,10 @@ def main() -> int:
     results["verdict"] = "PASS" if overall_pass else "FAIL"
 
     stamp = datetime.utcnow().strftime("%Y%m%d")
-    json_path = out_dir / f"phase_7a_action_index_{stamp}.json"
-    md_path = out_dir / f"phase_7a_action_index_{stamp}.md"
+    suffix = args.output_suffix
+    stem_base = "phase_7a_5_action_index" if suffix else "phase_7a_action_index"
+    json_path = out_dir / f"{stem_base}{suffix}_{stamp}.json"
+    md_path = out_dir / f"{stem_base}{suffix}_{stamp}.md"
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2, ensure_ascii=False)
     with open(md_path, "w", encoding="utf-8") as f:
