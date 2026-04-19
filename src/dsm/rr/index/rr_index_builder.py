@@ -21,6 +21,7 @@ from typing import Any, Dict, List, Optional
 
 from ...core.storage import Storage
 from ...core.models import Entry
+from .. import _profiler as _prof
 
 logger = logging.getLogger(__name__)
 
@@ -149,68 +150,83 @@ class RRIndexBuilder:
         5. Build session_index, agent_index, timeline_index, shard_index.
         6. Sort timeline_index by timestamp.
         7. Write to data/index/*.idx (atomically).
+
+        When the DSM_RR_PROFILE env var is set to "1", section-level timings are
+        accumulated via :mod:`dsm.rr._profiler` for Phase 7a.5 root-cause
+        decomposition (ADR 0001). The profiler is a no-op when disabled, so this
+        method's production-path behaviour is unchanged.
         """
-        self.session_index.clear()
-        self.agent_index.clear()
-        self.timeline_index.clear()
-        self.shard_index.clear()
-        self.action_index.clear()
+        with _prof.Timed("build:total"):
+            with _prof.Timed("build:clear"):
+                self.session_index.clear()
+                self.agent_index.clear()
+                self.timeline_index.clear()
+                self.shard_index.clear()
+                self.action_index.clear()
 
-        shard_meta_list = self._storage.list_shards()
-        for meta in shard_meta_list:
-            shard_id = meta.shard_id
-            offset = 0
-            while True:
-                entries = _read_batch(
-                    self._storage,
-                    shard_id,
-                    offset=offset,
-                    limit=self._batch_size,
-                )
-                if not entries:
-                    break
+            with _prof.Timed("build:list_shards"):
+                shard_meta_list = self._storage.list_shards()
 
-                for i, entry in enumerate(entries):
-                    record = _entry_to_index_record(entry, shard_id, offset + i)
-                    if record is None:
-                        continue
+            with _prof.Timed("build:scan_and_populate"):
+                for meta in shard_meta_list:
+                    shard_id = meta.shard_id
+                    offset = 0
+                    while True:
+                        with _prof.Timed("build:storage_read_batch"):
+                            entries = _read_batch(
+                                self._storage,
+                                shard_id,
+                                offset=offset,
+                                limit=self._batch_size,
+                            )
+                        if not entries:
+                            break
 
-                    sid = record["session_id"] or "none"
-                    if sid not in self.session_index:
-                        self.session_index[sid] = []
-                    self.session_index[sid].append(record)
+                        with _prof.Timed("build:populate_indexes"):
+                            for i, entry in enumerate(entries):
+                                record = _entry_to_index_record(entry, shard_id, offset + i)
+                                if record is None:
+                                    continue
 
-                    agent = record["agent"] or "unknown"
-                    if agent not in self.agent_index:
-                        self.agent_index[agent] = []
-                    self.agent_index[agent].append(record)
+                                sid = record["session_id"] or "none"
+                                if sid not in self.session_index:
+                                    self.session_index[sid] = []
+                                self.session_index[sid].append(record)
 
-                    self.timeline_index.append(record)
+                                agent = record["agent"] or "unknown"
+                                if agent not in self.agent_index:
+                                    self.agent_index[agent] = []
+                                self.agent_index[agent].append(record)
 
-                    if shard_id not in self.shard_index:
-                        self.shard_index[shard_id] = []
-                    self.shard_index[shard_id].append(record)
+                                self.timeline_index.append(record)
 
-                    if self._enable_action_index:
-                        aname = record.get("action_name")
-                        if aname is not None:
-                            bucket = self.action_index.get(aname)
-                            if bucket is None:
-                                bucket = []
-                                self.action_index[aname] = bucket
-                            bucket.append(record)
+                                if shard_id not in self.shard_index:
+                                    self.shard_index[shard_id] = []
+                                self.shard_index[shard_id].append(record)
 
-                offset += len(entries)
-                if len(entries) < self._batch_size:
-                    break
+                                if self._enable_action_index:
+                                    aname = record.get("action_name")
+                                    if aname is not None:
+                                        bucket = self.action_index.get(aname)
+                                        if bucket is None:
+                                            bucket = []
+                                            self.action_index[aname] = bucket
+                                        bucket.append(record)
 
-        self.timeline_index.sort(key=lambda x: x["timestamp"])
-        if self._enable_action_index:
-            for bucket in self.action_index.values():
-                bucket.sort(key=lambda x: x["timestamp"])
+                        offset += len(entries)
+                        if len(entries) < self._batch_size:
+                            break
 
-        self._index_dir.mkdir(parents=True, exist_ok=True)
-        self._write_index_files()
+            with _prof.Timed("build:timeline_sort"):
+                self.timeline_index.sort(key=lambda x: x["timestamp"])
+            if self._enable_action_index:
+                with _prof.Timed("build:bucket_sort_actions"):
+                    for bucket in self.action_index.values():
+                        bucket.sort(key=lambda x: x["timestamp"])
+
+            with _prof.Timed("build:write_files"):
+                self._index_dir.mkdir(parents=True, exist_ok=True)
+                self._write_index_files()
 
     def _write_index_files(self) -> None:
         """Write in-memory indexes to JSON files under index_dir. Uses atomic rename."""
@@ -226,24 +242,27 @@ class RRIndexBuilder:
             file_specs.append(("actions.idx", self.action_index))
 
         for name, data in file_specs:
-            path = self._index_dir / name
-            payload = {"index_version": INDEX_VERSION, "entries": data}
-            fd, tmp_path = tempfile.mkstemp(
-                prefix=f".{name}.",
-                suffix=".tmp",
-                dir=str(self._index_dir),
-                text=True,
-            )
-            try:
-                with os.fdopen(fd, "w", encoding="utf-8") as f:
-                    json.dump(payload, f, ensure_ascii=False, indent=2)
-                os.replace(tmp_path, path)
-            except Exception:
+            with _prof.Timed(f"write:{name}:total"):
+                path = self._index_dir / name
+                payload = {"index_version": INDEX_VERSION, "entries": data}
+                fd, tmp_path = tempfile.mkstemp(
+                    prefix=f".{name}.",
+                    suffix=".tmp",
+                    dir=str(self._index_dir),
+                    text=True,
+                )
                 try:
-                    os.unlink(tmp_path)
-                except OSError as e:
-                    logger.debug("index file cleanup failed: %s", e)
-                raise
+                    with os.fdopen(fd, "w", encoding="utf-8") as f:
+                        with _prof.Timed(f"write:{name}:json_dump"):
+                            json.dump(payload, f, ensure_ascii=False, indent=2)
+                    with _prof.Timed(f"write:{name}:replace"):
+                        os.replace(tmp_path, path)
+                except Exception:
+                    try:
+                        os.unlink(tmp_path)
+                    except OSError as e:
+                        logger.debug("index file cleanup failed: %s", e)
+                    raise
 
     def load(self) -> bool:
         """

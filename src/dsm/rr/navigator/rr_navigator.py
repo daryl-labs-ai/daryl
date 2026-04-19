@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional, Set, Union
 from ...core.storage import Storage
 from ...core.models import Entry
 from ..index import RRIndexBuilder
+from .. import _profiler as _prof
 
 
 logger = logging.getLogger(__name__)
@@ -135,10 +136,18 @@ class RRNavigator:
         Uses action_index populated by RRIndexBuilder (Phase 7a extension). Each returned record
         exposes the same keys as other navigators plus action_name and success.
         Does not call Storage.read().
+
+        When DSM_RR_PROFILE is active, records two section timings per call:
+          - nav:action:bucket_lookup — the dict.get call alone
+          - nav:action:list_copy    — the list(records) copy alone
+        (Phase 7a.5 root-cause decomposition — ADR 0001.)
         """
         index = getattr(self._index_builder, "action_index", {}) or {}
-        records = index.get(action_name, [])
-        return list(records)
+        with _prof.Timed("nav:action:bucket_lookup"):
+            records = index.get(action_name, [])
+        with _prof.Timed("nav:action:list_copy"):
+            copied = list(records)
+        return copied
 
     def resolve_entries(
         self,

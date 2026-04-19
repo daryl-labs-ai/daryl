@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional, Union
 
 from ...core.models import Entry
 from ..navigator import RRNavigator
+from .. import _profiler as _prof
 
 
 def _normalize_timestamp(value: Any) -> float:
@@ -153,31 +154,34 @@ class RRQueryEngine:
         to float).
         Early-exit on limit. Does not call Storage.read().
         """
-        start_ts = _coerce_to_numeric(start_time)
-        end_ts = _coerce_to_numeric(end_time)
+        with _prof.Timed("query_actions:total"):
+            start_ts = _coerce_to_numeric(start_time)
+            end_ts = _coerce_to_numeric(end_time)
 
-        if action_name is not None:
-            buckets: List[List[Dict[str, Any]]] = [
-                self._navigator.navigate_action(action_name)
-            ]
-        else:
-            action_index = getattr(self._navigator.index_builder, "action_index", {}) or {}
-            buckets = [list(bucket) for bucket in action_index.values()]
+            if action_name is not None:
+                # navigate_action records its own bucket_lookup + list_copy timings.
+                buckets: List[List[Dict[str, Any]]] = [
+                    self._navigator.navigate_action(action_name)
+                ]
+            else:
+                action_index = getattr(self._navigator.index_builder, "action_index", {}) or {}
+                buckets = [list(bucket) for bucket in action_index.values()]
 
-        results: List[Dict[str, Any]] = []
-        for bucket in buckets:
-            for act in bucket:
-                if session_id and act.get("session_id") != session_id:
-                    continue
-                ts = act.get("timestamp")
-                if start_ts is not None and (ts is None or ts < start_ts):
-                    continue
-                if end_ts is not None and (ts is None or ts > end_ts):
-                    continue
-                results.append(act)
-                if len(results) >= limit:
-                    return results
-        return results
+            with _prof.Timed("query_actions:slice_or_filter"):
+                results: List[Dict[str, Any]] = []
+                for bucket in buckets:
+                    for act in bucket:
+                        if session_id and act.get("session_id") != session_id:
+                            continue
+                        ts = act.get("timestamp")
+                        if start_ts is not None and (ts is None or ts < start_ts):
+                            continue
+                        if end_ts is not None and (ts is None or ts > end_ts):
+                            continue
+                        results.append(act)
+                        if len(results) >= limit:
+                            return results
+            return results
 
     def _intersect_by_entry_id(
         self,

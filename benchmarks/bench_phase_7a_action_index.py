@@ -41,6 +41,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from dsm.core.storage import Storage  # noqa: E402
+from dsm.rr import _profiler as _rr_profiler  # noqa: E402
 from dsm.rr.index import RRIndexBuilder  # noqa: E402
 from dsm.rr.navigator import RRNavigator  # noqa: E402
 from dsm.rr.query import RRQueryEngine  # noqa: E402
@@ -228,22 +229,35 @@ def _run_build_series(
     entries: List[Dict[str, Any]],
     build_fn_factory: Callable[[Path], Callable[[], Any]],
     n_runs: int = 5,
+    collect_profile: bool = False,
 ) -> Dict[str, Any]:
     """
     Run a build N times on fresh temp dirs; return stats in seconds.
     Each run wipes the temp dir, re-materialises the JSONL, then calls the factory
     which returns the callable to time.
+
+    When collect_profile=True and the RR profiler is enabled, snapshots the
+    profiler state after each run and returns per-run snapshots under the
+    "profile_snapshots" key. Caller owns aggregation.
     """
     samples: List[float] = []
+    profile_snapshots: List[Dict[str, List[float]]] = []
     for _ in range(n_runs):
         tmp = Path(tempfile.mkdtemp(prefix="bench_phase7a_build_"))
         try:
             _materialize_dataset(entries, tmp)
             call = build_fn_factory(tmp)
+            if collect_profile and _rr_profiler.enabled():
+                _rr_profiler.reset()
             samples.append(_time_call(call))
+            if collect_profile and _rr_profiler.enabled():
+                profile_snapshots.append(_rr_profiler.snapshot())
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
-    return _stats(samples, label)
+    stats = _stats(samples, label)
+    if profile_snapshots:
+        stats["profile_snapshots"] = profile_snapshots
+    return stats
 
 
 def _run_query_series(
@@ -251,14 +265,26 @@ def _run_query_series(
     call: Callable[[], Any],
     warmup: int = 5,
     n_runs: int = 100,
+    collect_profile: bool = False,
 ) -> Dict[str, Any]:
-    """Run a query call `warmup + n_runs` times; return stats for the last n_runs."""
+    """Run a query call `warmup + n_runs` times; return stats for the last n_runs.
+
+    When collect_profile=True and the RR profiler is enabled, resets the
+    profiler AFTER warmup and snapshots at the end of the n_runs timed loop.
+    The single snapshot therefore contains n_runs samples per instrumented
+    section.
+    """
     for _ in range(warmup):
         call()
+    if collect_profile and _rr_profiler.enabled():
+        _rr_profiler.reset()
     samples: List[float] = []
     for _ in range(n_runs):
         samples.append(_time_call(call))
-    return _stats(samples, label)
+    stats = _stats(samples, label)
+    if collect_profile and _rr_profiler.enabled():
+        stats["profile_snapshot"] = _rr_profiler.snapshot()
+    return stats
 
 
 def _stats(samples: List[float], label: str) -> Dict[str, Any]:
@@ -409,6 +435,7 @@ def bench_dataset(
         entries,
         lambda tmp: _rr_build_factory(tmp, enable_action_index=True),
         n_runs=5,
+        collect_profile=True,
     )
     delta_build_ms = rr_with_action["median_ms"] - rr_baseline["median_ms"]
 
@@ -426,7 +453,14 @@ def bench_dataset(
 
         query_results: Dict[str, Any] = {}
         for label, call in calls.items():
-            query_results[label] = _run_query_series(label, call, warmup=5, n_runs=100)
+            # Collect profiler snapshots only for RR variants — the RR profiler
+            # does not instrument SessionIndex and would yield empty snapshots
+            # there. Keeping SI runs uninstrumented also avoids any dead-code
+            # profiler overhead (nominal but non-zero).
+            collect = label.startswith("RR_")
+            query_results[label] = _run_query_series(
+                label, call, warmup=5, n_runs=100, collect_profile=collect
+            )
 
         # Expose the returned result counts for transparency.
         hit_counts = {
@@ -479,6 +513,14 @@ def bench_dataset(
         and all(g["pass"] for g in query_gates.values())
     )
 
+    # -- Profiler decomposition (Phase 7a.5 root-cause, only when DSM_RR_PROFILE=1) --
+    profile_decomposition: Dict[str, Any] = {}
+    if _rr_profiler.enabled():
+        profile_decomposition = _aggregate_profiles(
+            rr_with_action=rr_with_action,
+            query_results=query_results,
+        )
+
     return {
         "cfg": dataset_cfg,
         "derived": {
@@ -505,6 +547,99 @@ def bench_dataset(
         "query_row_counts": hit_counts,
         "query_gates": query_gates,
         "dataset_pass": dataset_pass,
+        "profile_decomposition": profile_decomposition,
+    }
+
+
+def _aggregate_profiles(
+    rr_with_action: Dict[str, Any],
+    query_results: Dict[str, Any],
+) -> Dict[str, Any]:
+    """
+    Phase 7a.5 root-cause aggregation — called only when DSM_RR_PROFILE is enabled.
+
+    Build path: each of the 5 runs produced one snapshot with one sample per
+    section (`build:*` / `write:*`). We take the median across the 5 runs per
+    section, which mirrors the build series' median-of-5 wall-clock metric.
+
+    Query path: each variant produced one snapshot containing 100 samples per
+    instrumented section (`nav:*` / `query_actions:*`). We report median, p95
+    and max in µs.
+    """
+    def ms_stats(samples_s: List[float]) -> Dict[str, float]:
+        if not samples_s:
+            return {"median_ms": 0.0, "p95_ms": 0.0, "max_ms": 0.0, "n": 0}
+        samples_ms = [s * 1000.0 for s in samples_s]
+        samples_ms.sort()
+        p95_idx = min(len(samples_ms) - 1, int(round(0.95 * len(samples_ms))) - 1)
+        return {
+            "median_ms": statistics.median(samples_ms),
+            "p95_ms": samples_ms[max(0, p95_idx)],
+            "max_ms": max(samples_ms),
+            "n": len(samples_ms),
+        }
+
+    def us_stats(samples_s: List[float]) -> Dict[str, float]:
+        if not samples_s:
+            return {"median_us": 0.0, "p95_us": 0.0, "max_us": 0.0, "n": 0}
+        samples_us = [s * 1_000_000.0 for s in samples_s]
+        samples_us.sort()
+        p95_idx = min(len(samples_us) - 1, int(round(0.95 * len(samples_us))) - 1)
+        return {
+            "median_us": statistics.median(samples_us),
+            "p95_us": samples_us[max(0, p95_idx)],
+            "max_us": max(samples_us),
+            "n": len(samples_us),
+        }
+
+    # --- Build: 5 snapshots, each section may have 1+ samples (sections timed
+    # per-batch like `build:storage_read_batch` / `build:populate_indexes`
+    # accumulate multiple samples in a single run). For each run we sum the
+    # samples of a given section into a per-run total, then take median across
+    # the 5 per-run totals. This matches the wall-clock median-of-5 we already
+    # report for build_total. ---
+    snaps = rr_with_action.get("profile_snapshots", [])
+    section_medians: Dict[str, Dict[str, float]] = {}
+    if snaps:
+        all_sections = set()
+        for snap in snaps:
+            all_sections.update(snap.keys())
+        for sec in sorted(all_sections):
+            per_run_totals = [
+                sum(snap.get(sec, [])) for snap in snaps if snap.get(sec) is not None
+            ]
+            # Drop runs where this section did not fire at all (e.g. bucket_sort
+            # on disabled action_index — not applicable here since we only
+            # profile RR_with_action).
+            per_run_totals = [t for t in per_run_totals if t > 0.0 or sec in snaps[0]]
+            section_medians[sec] = ms_stats(per_run_totals)
+            # Also expose the per-run firing count to detect multi-sample sections.
+            sample_counts = [len(snap.get(sec, [])) for snap in snaps]
+            section_medians[sec]["samples_per_run_median"] = (
+                statistics.median(sample_counts) if sample_counts else 0
+            )
+
+    # Deletion of the raw per-run samples from stats to keep the main JSON tidy —
+    # the decomposition below is the consolidated view.
+    rr_with_action.pop("profile_snapshots", None)
+
+    # --- Query: per-variant, 100 samples per instrumented section ---
+    query_decompositions: Dict[str, Dict[str, Any]] = {}
+    for label, qr in query_results.items():
+        snap = qr.pop("profile_snapshot", None)
+        if not snap:
+            continue
+        section_stats = {sec: us_stats(vals) for sec, vals in snap.items()}
+        query_decompositions[label] = {
+            "variant": label,
+            "runs": qr["n"],
+            "query_total_median_ms": qr["median_ms"],
+            "sections": section_stats,
+        }
+
+    return {
+        "build_sections": section_medians,
+        "query_decompositions": query_decompositions,
     }
 
 
