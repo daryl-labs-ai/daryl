@@ -86,17 +86,52 @@ Row counts: top = 19/19, rare = 4/4, C1 = 1/1, C2 = 7/7. Identical cardinality a
 
 Per-query stability: RR p95 stays within 15 % of median on all four variants; max never exceeds 0.004 ms.
 
+### Interpretation of Dataset B query ratios
+
+The 0.00×–0.01× ratios observed on Dataset B are a measurement artefact of the fixture, not an algorithmic speedup multiplier. Reading them as "100× faster" would be wrong. The honest reading is:
+
+- Dataset B has **1 000 action_names quasi-uniformly distributed over ~7 200 action entries** (`benchmarks/bench_phase_7a_action_index.py:75–81`, generator confirmed at `benchmarks/results/phase_7a_action_index_20260419.json:datasets[1].derived.distinct_actions_seen = 997`). The average bucket therefore contains ~7 entries.
+- `limit=100` is **never reached** on any Dataset B query. Row counts from `query_row_counts` confirm : top = 19, rare = 4, C1 = 1, C2 = 7. Every query returns the entire bucket.
+- The observed ratio is **dominated by bucket size**, not by algorithmic improvement : RR scans ~7–19 items inside a pre-partitioned bucket ; SessionIndex scans ~7 200 items inside its flat `self._actions` list (`src/dsm/session/session_index.py:168–181`) until the filter yields the same handful of matches. The gain is proportional to `(N_total_actions / N_per_bucket)` — a structural partitioning dividend, not an algorithmic one.
+- **What this ratio does not prove.** It does not prove that RR maintains a 100× advantage on a distribution where the top action concentrates a large fraction of the entries. In such a regime the bucket is large, `limit=100` triggers early-exit in both implementations, and the ratio should compress toward the Dataset A result (top = 0.69×). Dataset A already shows this compression (top bucket holds ~2 000 entries before Zipf weighting).
+- **Correct formulation** : RR benefits from action-bucketed partitioning ; the Dataset B ratio is dominated by bucket size, not by algorithmic improvement. Whether the partitioning dividend holds on a larger, more skewed dataset is precisely what Phase 7a.5 is designed to measure (see `ADR_0001_CANONICAL_CONSUMPTION_PATH.md > Migration plan > Phase 7a.5`).
+
+---
+
+## Bucket sorting: build-time vs query-time
+
+A question left implicit in the Phase 7a results : does the RR prototype pay the sort cost at build or at query ? The answer determines whether `delta_build = 67.5 ms` is a complete accounting of the extension, or whether the query latency numbers hide a deferred cost.
+
+**Verdict of reading: `build-time sort` — stable ordering by timestamp.** Sort happens once at the end of `RRIndexBuilder.build()`, after all entries have been scanned into their buckets. No query-time sort.
+
+Evidence, ligne-précis :
+
+- **Bucket populate (scan order during build).** `src/dsm/rr/index/rr_index_builder.py:201` — `bucket.append(record)` is executed inside the per-entry scan loop (lines 194–201). Entries are appended in the order they come out of `Storage.read(...)` batches. There is no per-insertion sorting ; this is intentional (O(1) per entry).
+- **Bucket sort (build-time, post-scan pass).** `src/dsm/rr/index/rr_index_builder.py:208–210` — after the shard loop terminates, the builder iterates `self.action_index.values()` and calls `bucket.sort(key=lambda x: x["timestamp"])` on each. Python's `list.sort` is Timsort : **stable** ordering. Entries with identical timestamps preserve insertion (scan) order as tiebreaker, which on a single monolithic shard equals append order.
+- **Query reads, no sort.** `src/dsm/rr/query/rr_query_engine.py:137–180` (method `query_actions`) — the bucket is retrieved via `self._navigator.navigate_action(action_name)` (line 161), then iterated linearly (lines 168–179) with early-exit on `limit`. There is no `sorted(...)` or `.sort()` call anywhere in `query_actions`. The docstring at line 150 states the invariant explicitly : *"the bucket is already sorted by timestamp ascending"*. That invariant is upheld by the build-time sort at line 210.
+
+**Ordering guarantee: stable by timestamp, with insertion-order tiebreaker.** Not a scan-order accident : even if a future backfill loads entries in non-chronological order (e.g. multi-shard merge, delayed segments), the post-scan sort at line 210 re-establishes chronological order. The prototype does not rely on shard append order for correctness.
+
+**Symmetry with baseline.** `SessionIndex` uses the same pattern : populate in scan order (`src/dsm/session/session_index.py:86–93`), sort once at the end of build (`src/dsm/session/session_index.py:97`, `actions.sort(key=lambda a: a["timestamp"])`), iterate at query without sorting (`src/dsm/session/session_index.py:169`). The `delta_build = 67.5 ms` therefore **does include** the bucket-sort cost, and the query latency numbers are a complete accounting of per-query work. No deferred sort cost is hiding.
+
+**Consequence.** The Phase 7a gates are well-defined under this sort discipline : build-time sort is amortised across builds (5 runs median) and excluded from query timing. If a future implementation switches to sort-on-insert (e.g. `bisect.insort`), `delta_build` would rise and query would remain equivalent — a trade-off worth re-benchmarking, but out of scope for Phase 7a.
+
 ---
 
 ## Verdict
 
-**Final verdict: PASS — on BOTH datasets, on BOTH gates.**
+**Final verdict : PASS (architectural gates).**
 
-Both PASS conditions of the Phase 7a exit criterion are met:
-- `delta_build ≤ 1× SessionIndex_build` on dataset A (**0.79×**) and dataset B (**0.78×**). The incremental cost of promoting `action_name` into an RR index is well below the budget. `delta_build` was computed from medians of 5-run series (not from single-shot measurements), so the signal is not bruit-dominated.
-- All four query variants (top / rare / C1 / C2) are `≤ 1.5× SessionIndex` on both datasets. In fact **every** variant on **every** dataset is **faster than SessionIndex** — the worst RR ratio on any variant is 0.69× (dataset A, top query), far below the gate.
+Phase 7a validates the **architectural feasibility** of absorbing `action_name` into RR. Delta build gate and query latency gate are met on both datasets :
 
-The RR dict-bucket structure wins structurally on rare queries (early exit is useless for SessionIndex when the match is sparse in a long flat list), on session-combined queries (the bucket is already small before the AND-filter), and on time-combined queries (the bucket is already sorted by timestamp).
+- `delta_build ≤ 1× SessionIndex_build` on dataset A (**0.79×**) and dataset B (**0.78×**). The incremental cost of promoting `action_name` into an RR index is well below the budget. `delta_build` was computed from medians of 5-run series (not from single-shot measurements), so the signal is not noise-dominated.
+- All four query variants (top / rare / C1 / C2) are `≤ 1.5× SessionIndex` on both datasets. The worst RR ratio on any variant is 0.69× (dataset A, top query), below the gate. Dataset B's 0.00×–0.01× ratios are dominated by bucket size, not by algorithmic superiority — see the `Interpretation of Dataset B query ratios` sub-section above for the correct reading.
+
+The RR dict-bucket structure wins structurally on rare queries (early exit is useless for SessionIndex when the match is sparse in a long flat list), on session-combined queries (the bucket is already small before the AND-filter), and on time-combined queries (the bucket is already sorted by timestamp, courtesy of the build-time sort documented in `Bucket sorting: build-time vs query-time` above).
+
+**Transition to Phase 7b is conditioned on Phase 7a.5.** Phase 7a.5 is a scalability check on a production-representative dataset (100 000 entries) that carries its own blocking gate. See `ADR_0001_CANONICAL_CONSUMPTION_PATH.md > Migration plan > Phase 7a.5`.
+
+**If Phase 7a.5 exit criterion is missed, Phase 7b is blocked** — RR must be optimised before former SessionIndex consumers are migrated — **but Phase 7a remains PASS.** Architectural feasibility and operational acceptability are two distinct questions ; this report answers the first, Phase 7a.5 answers the second.
 
 ### Operational concerns (do not block PASS)
 
@@ -106,11 +141,21 @@ This is *not* a new cost introduced by Phase 7a. RR_baseline (without the action
 
 **Mitigation note for migration.** Phase 7b operators should schedule index rebuilds on meaningful shard growth (as they already do for SessionIndex today, `src/dsm/cli.py:570–580 dsm session-index`), not at read time. In the long run RR benefits from an incremental build (not in scope for this prototype) — covered by a dedicated follow-up ADR if/when absolute build time becomes a production bottleneck. Until then, 550 ms to rebuild over 10 000 entries is a one-time operator cost, not a per-query cost.
 
+#### Debt transfer to former SessionIndex consumers
+
+The 6.44× ratio is not just a number on an operational dashboard — it represents a **transfer of debt** from RR's current user base to the eight SessionIndex consumers enumerated in the classification report. This is worth naming explicitly because the transfer is invisible in the raw benchmark output.
+
+- **Before migration.** A consumer wanting an `action_name` lookup calls `SessionIndex.build_from_storage()` once per meaningful shard growth event. Cost per rebuild : **1× baseline** (~85 ms on the 10 000-entry fixture, `benchmarks/results/phase_7a_action_index_20260419.json:datasets[0].builds.SessionIndex_build.median_ms`). The consumer pays only for the one specialised index it needs.
+- **After migration (Phase 7b).** The same consumer inherits `RRIndexBuilder.build()`. Cost per rebuild : **6.44× baseline** (~550 ms on the same fixture, same JSON key `.RR_with_action_build.median_ms`). The consumer now pays for four indexes (`session / agent / timeline / shard`) it never asked for, plus the action index it actually needs.
+- **The 5.65× pre-existing RR debt** (attributable to the four cross-cutting indexes, `.RR_baseline_build.median_ms`) **is unchanged by Phase 7a.** What changes at Phase 7b is **who pays it**. Today, only consumers who already use RR's primitives absorb that cost. Post-Phase-7b, the eight SessionIndex consumers — `DarylAgent.index_sessions / find_session / query_actions` (`src/dsm/agent.py:620,625,630`), CLI `dsm session-index / session-find / session-query / session-list` (`src/dsm/cli.py:570–633`), MCP `dsm_search` (`src/dsm/integrations/goose/server.py:378`) — inherit it wholesale.
+- **Why this doesn't block Phase 7a.** Phase 7a's exit criterion measures the **incremental** cost of adding `action_name` to RR (`delta_build = 67.5 ms`, 0.79× baseline). That measurement is sound and its gate is met. The debt transfer is a separate question : *is the absolute post-migration cost tolerable for the consumers that will inherit it at production scale ?* Phase 7a does not answer that question — it deliberately cannot, because it measures architectural feasibility, not operational scaling.
+- **Why this requires a separate phase.** A 550 ms rebuild on 10 000 entries is tolerable ; a 10 000 ms rebuild on 100 000 entries might not be. Whether RR's fixed-overhead amortises favourably or poorly on larger datasets is precisely the question Phase 7a.5 is designed to answer. Phase 7a.5's gate (iii) — `RR_with_action_build absolute ≤ 10× SessionIndex_build` at 100 000 entries — is the concrete expression of this debt-transfer tolerance : above 10×, the migration's operational cost outgrows its architectural benefit.
+
 ### Consequences of this verdict
 
-- **Phase 7b is unblocked.** Rebranching the 8 live SessionIndex consumers (listed in `docs/architecture/ADR_0001_SESSIONINDEX_CLASSIFICATION.md` under the "Implications" section) onto `RRQueryEngine.query_actions` is mechanically feasible within the ADR 0001 exit-criterion budget.
+- **Phase 7b is architecturally unblocked, operationally conditioned on Phase 7a.5.** Rebranching the 8 live SessionIndex consumers (listed in `docs/architecture/ADR_0001_SESSIONINDEX_CLASSIFICATION.md` under the "Implications" section) onto `RRQueryEngine.query_actions` is mechanically feasible within the ADR 0001 migration-plan budget. Actual execution of Phase 7b requires a PASS verdict on Phase 7a.5 first — see `ADR_0001_CANONICAL_CONSUMPTION_PATH.md > Migration plan > Phase 7a.5`.
 - **ADR 0001 remains `Proposed`.** A PASS verdict satisfies a necessary precondition for promotion; it does not itself promote. The transition `Proposed → Accepted` is a separate phase that weighs the full migration plan, not just Phase 7a.
-- **`SessionIndex` classification does not need to be re-executed.** The `duplicative` verdict from `docs/architecture/ADR_0001_SESSIONINDEX_CLASSIFICATION.md` stands: RR is empirically demonstrated as able to cover the one access pattern (`action_name` filter) that was observed missing at criterion (a) review, at equal-or-better latency on all query shapes tested.
+- **`SessionIndex` classification does not need to be re-executed.** The `duplicative` verdict from `docs/architecture/ADR_0001_SESSIONINDEX_CLASSIFICATION.md` stands : RR is empirically demonstrated as able to cover the one access pattern (`action_name` filter) that was observed missing at criterion (a) review, at equal-or-better latency on all query shapes tested at the 10 000-entry fixture scale. A Phase 7a.5 FAIL would not reopen classification either — a scaling failure on RR's pre-existing 4 indexes is an optimisation requirement, independent of the `action_name` extension that drove the classification question.
 
 ### Commitments by this verdict
 
