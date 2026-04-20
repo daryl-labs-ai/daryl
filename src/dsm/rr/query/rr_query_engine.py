@@ -158,10 +158,27 @@ class RRQueryEngine:
             start_ts = _coerce_to_numeric(start_time)
             end_ts = _coerce_to_numeric(end_time)
 
+            # Phase N+1A : when the caller has no post-bucket filter active, the
+            # early-exit in the slice_or_filter loop below would stop at `limit`
+            # regardless — so passing `limit` down to navigate_action lets it skip
+            # the full-bucket copy and only materialise the first `limit` records
+            # (which, by the build-time sort invariant, are the earliest by
+            # timestamp — the same records pre-fix code would have iterated first).
+            #
+            # We do NOT pass `limit` down when a filter is active, because the
+            # filter may reject many records before the caller has collected
+            # `limit` matches. Slicing the bucket to `limit` before the filter
+            # runs would produce a strictly smaller result than the pre-fix code
+            # (which iterates the full bucket until `limit` matches accumulate).
+            has_post_bucket_filter = bool(
+                session_id or (start_ts is not None) or (end_ts is not None)
+            )
+            nav_limit = None if has_post_bucket_filter else limit
+
             if action_name is not None:
                 # navigate_action records its own bucket_lookup + list_copy timings.
                 buckets: List[List[Dict[str, Any]]] = [
-                    self._navigator.navigate_action(action_name)
+                    self._navigator.navigate_action(action_name, limit=nav_limit)
                 ]
             else:
                 action_index = getattr(self._navigator.index_builder, "action_index", {}) or {}

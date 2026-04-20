@@ -129,13 +129,31 @@ class RRNavigator:
         records = index.get(shard_id, [])
         return list(records)
 
-    def navigate_action(self, action_name: str) -> List[Dict[str, Any]]:
+    def navigate_action(
+        self,
+        action_name: str,
+        limit: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
         """
         Return metadata records for the given action_name.
 
         Uses action_index populated by RRIndexBuilder (Phase 7a extension). Each returned record
         exposes the same keys as other navigators plus action_name and success.
         Does not call Storage.read().
+
+        Args:
+            action_name: name of the action bucket to look up.
+            limit: Phase N+1A addition. When not None, returns at most `limit` records
+                taken from the head of the bucket (i.e. the `limit` earliest by
+                timestamp, because RRIndexBuilder sorts each action_index bucket at
+                build time via Timsort — stable, ascending by timestamp, see Phase 7a
+                Amendement A). When None (default), returns the full bucket as before —
+                backward-compatible for any caller that iterates or mutates the result.
+
+        Ordering contract (Phase 7a Amendement A) : the returned list preserves the
+        bucket's build-time sort order (timestamp ascending, with insertion order as
+        stable tiebreaker). The `limit` parameter does not change this order, it only
+        truncates the tail.
 
         When DSM_RR_PROFILE is active, records two section timings per call:
           - nav:action:bucket_lookup — the dict.get call alone
@@ -146,7 +164,12 @@ class RRNavigator:
         with _prof.Timed("nav:action:bucket_lookup"):
             records = index.get(action_name, [])
         with _prof.Timed("nav:action:list_copy"):
-            copied = list(records)
+            if limit is not None:
+                # Slice the underlying list in O(limit), then wrap in a fresh list to
+                # keep the defensive-copy semantics the legacy caller relied on.
+                copied = list(records[:limit])
+            else:
+                copied = list(records)
         return copied
 
     def resolve_entries(

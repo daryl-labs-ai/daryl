@@ -75,3 +75,53 @@ def test_timeline_with_start(navigator):
         ts = r.get("timestamp")
         if ts is not None:
             assert float(ts) >= start_ts
+
+
+def test_navigate_action_order_preserved_under_limit(navigator):
+    """Phase N+1A order contract — Phase 7a Amendement A invariant.
+
+    navigate_action(name, limit=k) must return the exact same records (in the
+    exact same order) as navigate_action(name) truncated to [:k]. The `limit`
+    parameter is a performance optimisation that does not change result order
+    or set — slicing the head of a build-time-sorted bucket preserves timestamp-
+    ascending order by construction.
+    """
+    # Pick an action_name that the conftest fixture actually populates. If none
+    # has multiple records the test is trivially satisfied but the invariant
+    # still must hold.
+    builder = navigator.index_builder
+    idx = getattr(builder, "action_index", {}) or {}
+    assert idx, "conftest fixture should populate action_index for this test"
+
+    # Pick a non-empty bucket.
+    target = next(iter(idx.keys()))
+
+    full = navigator.navigate_action(target)
+    assert isinstance(full, list)
+
+    # limit=0 is an edge case but is documented — should return empty list.
+    empty = navigator.navigate_action(target, limit=0)
+    assert empty == []
+
+    # limit=1 should match first element of full result.
+    if full:
+        one = navigator.navigate_action(target, limit=1)
+        assert one == full[:1], "limit=1 must equal full[:1]"
+
+    # limit >= len(full) should return the full bucket in the same order.
+    over = navigator.navigate_action(target, limit=len(full) + 10)
+    assert over == full, "limit above bucket size must equal full result"
+
+    # limit in the middle — order AND identity invariance.
+    if len(full) >= 2:
+        mid = len(full) // 2
+        half = navigator.navigate_action(target, limit=mid)
+        assert half == full[:mid], "limit=k must equal full[:k] (order preserved)"
+
+    # And the returned list must still be a fresh list — a caller mutating it
+    # should not corrupt the underlying action_index bucket.
+    stolen = navigator.navigate_action(target, limit=1)
+    if stolen:
+        stolen.clear()
+        again = navigator.navigate_action(target, limit=1)
+        assert again == full[:1], "mutating the returned list must not affect the index"
