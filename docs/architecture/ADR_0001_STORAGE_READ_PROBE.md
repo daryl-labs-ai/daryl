@@ -124,6 +124,20 @@ So the honest physical reading is : **per-call cost on monolithic is dominated b
 
 Per-call cost at fixed offset is essentially independent of limit, changing by < 1 % across a 100× limit range. Confirms the reading above : **the dominant cost on monolithic is the full-file scan, which happens regardless of limit (and of offset).**
 
+### Fixed-term hypothesis — measurement anchor
+
+The "per-call cost dominated by a fixed O(file_size) term" reading in the Interpretation subsection above was argued from reading `_read_monolithic` in `src/dsm/core/storage.py:198–225`. For the report to be auto-porteur, that reading must also be checkable from a measurement the report already contains. The direct check is the ratio of the extreme-offset medians :
+
+- `time_at_offset_0` = **353.8337 ms** — source : `benchmarks/results/storage_read_probe_20260420.json:modes.monolithic.points[0].median_ms` (list entry where `offset == 0`).
+- `time_at_offset_99900` = **529.0806 ms** — source : `benchmarks/results/storage_read_probe_20260420.json:modes.monolithic.points[5].median_ms` (list entry where `offset == 99900`).
+- `ratio Y/X` = 529.0806 / 353.8337 = **1.495×**.
+
+Decision rule applied verbatim from the amendment brief : the "fixed-term dominance" reading is confirmed only if the ratio lies within `[0.90, 1.10]`. The measured 1.495× lies outside that interval.
+
+**Verdict — fixed-term dominance NOT supported by measurement.** `time_0` and `time_99900` differ by 49.5 %. Monolithic classification remains **`other / unclear`** strictly. The code-reading hypothesis of an O(file_size) fixed term that dominates per-call cost is **not** confirmed by this probe — a follow-up phase would be needed to isolate the offset-dependent component (which accounts for the ~175 ms gap between K=0 and K=99 900) from the floor that is genuinely independent of offset (the ~354 ms baseline at K=0). This probe does not perform that isolation.
+
+Consequence for downstream language in this report : any earlier sentence framing the monolithic behaviour as "fixed-term dominated" (including the Interpretation subsection above) was the code-reading hypothesis *before* this anchor measurement was surfaced. With the anchor in place, the honest quantified reading is : monolithic has a floor near ~354 ms at K=0 **plus** a non-trivial offset-dependent growth that reaches +49.5 % at K=99 900. The Strategic implication section below was drafted under the pre-anchor framing and is not modified by this amendment ; its conclusions should be re-read with this 1.495× ratio in mind, acknowledging that the "fixed-term" framing overstated the invariance.
+
 ---
 
 ## Cross-mode comparison (main sweep)
