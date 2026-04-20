@@ -35,11 +35,12 @@ import tempfile
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
+from dsm.core.models import Entry  # noqa: E402
 from dsm.core.storage import Storage  # noqa: E402
 from dsm.rr import _profiler as _rr_profiler  # noqa: E402
 from dsm.rr.index import RRIndexBuilder  # noqa: E402
@@ -213,6 +214,79 @@ def _materialize_dataset(entries: List[Dict[str, Any]], target_dir: Path) -> Non
             f.write(json.dumps(e, ensure_ascii=False) + "\n")
 
 
+def _entry_from_dict(d: Dict[str, Any]) -> Entry:
+    """Reconstitute an Entry from a bench-generated dict. Timestamps are ISO strings
+    in the dataset dicts; Entry expects a datetime. Hash is left empty so that
+    Storage.append computes the canonical entry hash itself."""
+    ts_raw = d["timestamp"]
+    if isinstance(ts_raw, str):
+        ts = datetime.fromisoformat(ts_raw)
+    else:
+        ts = ts_raw
+    return Entry(
+        id=d.get("id", ""),
+        timestamp=ts,
+        session_id=d.get("session_id", ""),
+        source=d.get("source", ""),
+        content=d.get("content", ""),
+        shard=d.get("shard", "sessions"),
+        hash="",
+        prev_hash=None,
+        metadata=d.get("metadata", {}),
+        version=d.get("version", "v2.0"),
+    )
+
+
+def _build_segmented_golden(
+    entries: List[Dict[str, Any]],
+    shard_id: str = "sessions",
+    max_events_per_segment: Optional[int] = None,
+) -> tuple:
+    """Generate a golden segmented fixture via Storage.append() (the production path).
+
+    Returns (golden_dir: Path, verification: dict). Caller is responsible for
+    rmtree-ing golden_dir when done.
+
+    Verification dict contents :
+      - verified: bool — True iff layout is truly segmented with >= 2 segment files.
+      - segments_count: int — count of <family>_NNNN.jsonl files on disk.
+      - max_events_per_segment_used: int — threshold actually used by the segment manager.
+      - shard_paths: list[str] — relative paths of created segment files (for audit).
+      - list_shards_dispatch: str — which read path Storage would choose for this shard.
+    """
+    golden = Path(tempfile.mkdtemp(prefix="bench_golden_segmented_"))
+    storage = Storage(data_dir=str(golden))
+    if max_events_per_segment is not None:
+        # Instance-level override only — does NOT modify src/dsm/core/shard_segments.py.
+        storage.segment_manager.MAX_EVENTS_PER_SEGMENT = max_events_per_segment
+
+    for d in entries:
+        entry = _entry_from_dict(d)
+        entry.shard = shard_id
+        storage.append(entry)
+
+    family_dir = golden / "shards" / shard_id.replace("shard_", "")
+    segment_files = sorted(family_dir.glob("*.jsonl"))
+    shards_listed = storage.list_shards()
+
+    verification = {
+        "verified": family_dir.is_dir() and len(segment_files) >= 2,
+        "segments_count": len(segment_files),
+        "max_events_per_segment_used": storage.segment_manager.MAX_EVENTS_PER_SEGMENT,
+        "shard_paths": [str(p.relative_to(golden)) for p in segment_files],
+        "list_shards_names": [sm.shard_id for sm in shards_listed],
+        "list_shards_dispatch": "segmented" if family_dir.is_dir() else "monolithic",
+    }
+    return golden, verification
+
+
+def _copy_golden_to(target_dir: Path, golden_dir: Path) -> None:
+    """Copy the pre-generated segmented golden fixture into target_dir.
+    Uses shutil.copytree with dirs_exist_ok so that target_dir (empty) gets
+    populated with the same shards/ and integrity/ layout as golden_dir."""
+    shutil.copytree(str(golden_dir), str(target_dir), dirs_exist_ok=True)
+
+
 # ---------------------------------------------------------------------------
 # Measurement primitives.
 # ---------------------------------------------------------------------------
@@ -230,6 +304,7 @@ def _run_build_series(
     build_fn_factory: Callable[[Path], Callable[[], Any]],
     n_runs: int = 5,
     collect_profile: bool = False,
+    materialize_fn: Optional[Callable[[Path], None]] = None,
 ) -> Dict[str, Any]:
     """
     Run a build N times on fresh temp dirs; return stats in seconds.
@@ -239,13 +314,19 @@ def _run_build_series(
     When collect_profile=True and the RR profiler is enabled, snapshots the
     profiler state after each run and returns per-run snapshots under the
     "profile_snapshots" key. Caller owns aggregation.
+
+    When materialize_fn is provided (Phase 7a.5-bis), it is called with the fresh
+    tmp dir to populate the fixture instead of the default monolithic writer. The
+    caller is responsible for shape / determinism of the materialisation.
     """
+    if materialize_fn is None:
+        materialize_fn = lambda tmp: _materialize_dataset(entries, tmp)
     samples: List[float] = []
     profile_snapshots: List[Dict[str, List[float]]] = []
     for _ in range(n_runs):
         tmp = Path(tempfile.mkdtemp(prefix="bench_phase7a_build_"))
         try:
-            _materialize_dataset(entries, tmp)
+            materialize_fn(tmp)
             call = build_fn_factory(tmp)
             if collect_profile and _rr_profiler.enabled():
                 _rr_profiler.reset()
@@ -345,10 +426,20 @@ def _rr_build_factory(data_dir: Path, enable_action_index: bool) -> Callable[[],
 # Query runners — build once, query many.
 # ---------------------------------------------------------------------------
 
-def _prepare_query_env(entries: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """Build fresh indexes on disk and return resolved query callables for all 4 variants."""
+def _prepare_query_env(
+    entries: List[Dict[str, Any]],
+    materialize_fn: Optional[Callable[[Path], None]] = None,
+) -> Dict[str, Any]:
+    """Build fresh indexes on disk and return resolved query callables for all 4 variants.
+
+    materialize_fn (Phase 7a.5-bis) overrides the default monolithic writer when
+    provided. Keeps the query-env layout identical to the build-series layout
+    across a given benchmark run."""
     tmp = Path(tempfile.mkdtemp(prefix="bench_phase7a_query_"))
-    _materialize_dataset(entries, tmp)
+    if materialize_fn is None:
+        _materialize_dataset(entries, tmp)
+    else:
+        materialize_fn(tmp)
 
     si_storage = Storage(data_dir=str(tmp))
     si_index = SessionIndex(str(tmp / "index_session"), shard_id="sessions")
@@ -413,142 +504,192 @@ def bench_dataset(
     dataset_cfg: Dict[str, Any],
     fixture_size: int = N_ENTRIES,
     n_sessions: int = N_SESSIONS,
+    fixture_layout: str = "monolithic",
 ) -> Dict[str, Any]:
     ds = _build_dataset(dataset_cfg, fixture_size=fixture_size, n_sessions=n_sessions)
     entries = ds["entries"]
 
-    # -- Build phase -----------------------------------------------------
-    si_build = _run_build_series(
-        "SessionIndex_build",
-        entries,
-        lambda tmp: _session_index_build_factory(tmp),
-        n_runs=5,
-    )
-    rr_baseline = _run_build_series(
-        "RR_baseline_build",
-        entries,
-        lambda tmp: _rr_build_factory(tmp, enable_action_index=False),
-        n_runs=5,
-    )
-    rr_with_action = _run_build_series(
-        "RR_with_action_build",
-        entries,
-        lambda tmp: _rr_build_factory(tmp, enable_action_index=True),
-        n_runs=5,
-        collect_profile=True,
-    )
-    delta_build_ms = rr_with_action["median_ms"] - rr_baseline["median_ms"]
-
-    # -- Query phase -----------------------------------------------------
-    env = _prepare_query_env(entries)
-    try:
-        calls = _make_query_calls(
-            env,
-            top_action=ds["top_action"],
-            rare_action=ds["rare_action"],
-            c1_session=ds["c1_session"],
-            c2_start=ds["c2_start"],
-            c2_end=ds["c2_end"],
+    # -- Fixture materialisation strategy --------------------------------
+    # For monolithic (Phase 7a / 7a.5 compatibility), write raw JSONL per run.
+    # For segmented (Phase 7a.5-bis), generate a golden fixture ONCE via
+    # Storage.append() and copy it into each fresh tmp dir. This isolates the
+    # (very expensive, fsync-per-entry) golden generation from the build
+    # measurements while still giving each build run a fresh tmp path.
+    golden_dir: Optional[Path] = None
+    fixture_layout_meta: Dict[str, Any] = {"fixture_layout": fixture_layout}
+    if fixture_layout == "segmented":
+        print(
+            f"[bench] generating segmented golden fixture via Storage.append() "
+            f"({len(entries):,} entries)...",
+            flush=True,
         )
+        t0 = time.monotonic()
+        golden_dir, verification = _build_segmented_golden(entries)
+        gen_elapsed = time.monotonic() - t0
+        print(
+            f"[bench] golden segmented fixture ready in {gen_elapsed:.1f}s — "
+            f"segments={verification['segments_count']} "
+            f"verified={verification['verified']}",
+            flush=True,
+        )
+        fixture_layout_meta.update({
+            "fixture_layout_verified": verification,
+            "golden_generation_seconds": gen_elapsed,
+        })
+        materialize_fn: Optional[Callable[[Path], None]] = (
+            lambda tmp: _copy_golden_to(tmp, golden_dir)
+        )
+        if not verification["verified"]:
+            shutil.rmtree(golden_dir, ignore_errors=True)
+            raise RuntimeError(
+                f"Segmented fixture verification FAILED — "
+                f"segments_count={verification['segments_count']} < 2. "
+                f"Investigate kernel segment-rotation parameters before continuing."
+            )
+    else:
+        materialize_fn = None  # default monolithic path
+        fixture_layout_meta["fixture_layout_verified"] = {"verified": True, "layout": "monolithic"}
 
-        query_results: Dict[str, Any] = {}
-        for label, call in calls.items():
-            # Collect profiler snapshots only for RR variants — the RR profiler
-            # does not instrument SessionIndex and would yield empty snapshots
-            # there. Keeping SI runs uninstrumented also avoids any dead-code
-            # profiler overhead (nominal but non-zero).
-            collect = label.startswith("RR_")
-            query_results[label] = _run_query_series(
-                label, call, warmup=5, n_runs=100, collect_profile=collect
+    try:
+        # -- Build phase -----------------------------------------------------
+        si_build = _run_build_series(
+            "SessionIndex_build",
+            entries,
+            lambda tmp: _session_index_build_factory(tmp),
+            n_runs=5,
+            materialize_fn=materialize_fn,
+        )
+        rr_baseline = _run_build_series(
+            "RR_baseline_build",
+            entries,
+            lambda tmp: _rr_build_factory(tmp, enable_action_index=False),
+            n_runs=5,
+            materialize_fn=materialize_fn,
+        )
+        rr_with_action = _run_build_series(
+            "RR_with_action_build",
+            entries,
+            lambda tmp: _rr_build_factory(tmp, enable_action_index=True),
+            n_runs=5,
+            collect_profile=True,
+            materialize_fn=materialize_fn,
+        )
+        delta_build_ms = rr_with_action["median_ms"] - rr_baseline["median_ms"]
+
+        # -- Query phase -----------------------------------------------------
+        env = _prepare_query_env(entries, materialize_fn=materialize_fn)
+        try:
+            calls = _make_query_calls(
+                env,
+                top_action=ds["top_action"],
+                rare_action=ds["rare_action"],
+                c1_session=ds["c1_session"],
+                c2_start=ds["c2_start"],
+                c2_end=ds["c2_end"],
             )
 
-        # Expose the returned result counts for transparency.
-        hit_counts = {
-            "SI_top_rowcount": len(calls["SI_top"]()),
-            "RR_top_rowcount": len(calls["RR_top"]()),
-            "SI_rare_rowcount": len(calls["SI_rare"]()),
-            "RR_rare_rowcount": len(calls["RR_rare"]()),
-            "SI_c1_rowcount": len(calls["SI_c1"]()),
-            "RR_c1_rowcount": len(calls["RR_c1"]()),
-            "SI_c2_rowcount": len(calls["SI_c2"]()),
-            "RR_c2_rowcount": len(calls["RR_c2"]()),
+            query_results: Dict[str, Any] = {}
+            for label, call in calls.items():
+                # Collect profiler snapshots only for RR variants — the RR profiler
+                # does not instrument SessionIndex and would yield empty snapshots
+                # there. Keeping SI runs uninstrumented also avoids any dead-code
+                # profiler overhead (nominal but non-zero).
+                collect = label.startswith("RR_")
+                query_results[label] = _run_query_series(
+                    label, call, warmup=5, n_runs=100, collect_profile=collect
+                )
+
+            # Expose the returned result counts for transparency.
+            hit_counts = {
+                "SI_top_rowcount": len(calls["SI_top"]()),
+                "RR_top_rowcount": len(calls["RR_top"]()),
+                "SI_rare_rowcount": len(calls["SI_rare"]()),
+                "RR_rare_rowcount": len(calls["RR_rare"]()),
+                "SI_c1_rowcount": len(calls["SI_c1"]()),
+                "RR_c1_rowcount": len(calls["RR_c1"]()),
+                "SI_c2_rowcount": len(calls["SI_c2"]()),
+                "RR_c2_rowcount": len(calls["RR_c2"]()),
+            }
+        finally:
+            shutil.rmtree(env["tmp"], ignore_errors=True)
+
+        # -- Gates -----------------------------------------------------------
+        build_gate_ratio = (
+            delta_build_ms / si_build["median_ms"] if si_build["median_ms"] > 0 else float("inf")
+        )
+        build_gate_pass = build_gate_ratio <= 1.0
+        absolute_build_ratio = (
+            rr_with_action["median_ms"] / si_build["median_ms"]
+            if si_build["median_ms"] > 0
+            else float("inf")
+        )
+        build_operational_flag = absolute_build_ratio > 3.0
+        # Gate (iii), blocking as of Phase 7a.5 — see
+        # docs/architecture/ADR_0001_CANONICAL_CONSUMPTION_PATH.md > Migration plan > Phase 7a.5.
+        # At 10 k this gate passes with margin (observed 6.44×) ; at 100 k it is the operational
+        # acceptability check that conditions Phase 7b.
+        absolute_gate_pass = absolute_build_ratio <= 10.0
+
+        def _ratio(label_rr: str, label_si: str) -> float:
+            si_med = query_results[label_si]["median_ms"]
+            rr_med = query_results[label_rr]["median_ms"]
+            return rr_med / si_med if si_med > 0 else float("inf")
+
+        query_gates = {
+            "top":  {"ratio": _ratio("RR_top",  "SI_top"),  "threshold": 1.5},
+            "rare": {"ratio": _ratio("RR_rare", "SI_rare"), "threshold": 1.5},
+            "c1":   {"ratio": _ratio("RR_c1",   "SI_c1"),   "threshold": 1.5},
+            "c2":   {"ratio": _ratio("RR_c2",   "SI_c2"),   "threshold": 1.5},
         }
-    finally:
-        shutil.rmtree(env["tmp"], ignore_errors=True)
+        for g in query_gates.values():
+            g["pass"] = g["ratio"] <= g["threshold"]
 
-    # -- Gates -----------------------------------------------------------
-    build_gate_ratio = (
-        delta_build_ms / si_build["median_ms"] if si_build["median_ms"] > 0 else float("inf")
-    )
-    build_gate_pass = build_gate_ratio <= 1.0
-    absolute_build_ratio = (
-        rr_with_action["median_ms"] / si_build["median_ms"]
-        if si_build["median_ms"] > 0
-        else float("inf")
-    )
-    build_operational_flag = absolute_build_ratio > 3.0
-    # Gate (iii), blocking as of Phase 7a.5 — see
-    # docs/architecture/ADR_0001_CANONICAL_CONSUMPTION_PATH.md > Migration plan > Phase 7a.5.
-    # At 10 k this gate passes with margin (observed 6.44×) ; at 100 k it is the operational
-    # acceptability check that conditions Phase 7b.
-    absolute_gate_pass = absolute_build_ratio <= 10.0
-
-    def _ratio(label_rr: str, label_si: str) -> float:
-        si_med = query_results[label_si]["median_ms"]
-        rr_med = query_results[label_rr]["median_ms"]
-        return rr_med / si_med if si_med > 0 else float("inf")
-
-    query_gates = {
-        "top":  {"ratio": _ratio("RR_top",  "SI_top"),  "threshold": 1.5},
-        "rare": {"ratio": _ratio("RR_rare", "SI_rare"), "threshold": 1.5},
-        "c1":   {"ratio": _ratio("RR_c1",   "SI_c1"),   "threshold": 1.5},
-        "c2":   {"ratio": _ratio("RR_c2",   "SI_c2"),   "threshold": 1.5},
-    }
-    for g in query_gates.values():
-        g["pass"] = g["ratio"] <= g["threshold"]
-
-    dataset_pass = (
-        build_gate_pass
-        and absolute_gate_pass
-        and all(g["pass"] for g in query_gates.values())
-    )
-
-    # -- Profiler decomposition (Phase 7a.5 root-cause, only when DSM_RR_PROFILE=1) --
-    profile_decomposition: Dict[str, Any] = {}
-    if _rr_profiler.enabled():
-        profile_decomposition = _aggregate_profiles(
-            rr_with_action=rr_with_action,
-            query_results=query_results,
+        dataset_pass = (
+            build_gate_pass
+            and absolute_gate_pass
+            and all(g["pass"] for g in query_gates.values())
         )
 
-    return {
-        "cfg": dataset_cfg,
-        "derived": {
-            "top_action": ds["top_action"],
-            "rare_action": ds["rare_action"],
-            "c1_session": ds["c1_session"],
-            "c2_start": ds["c2_start"],
-            "c2_end": ds["c2_end"],
-            "distinct_actions_seen": ds["distinct_actions_seen"],
-            "total_entries": len(entries),
-        },
-        "builds": {
-            "SessionIndex_build": si_build,
-            "RR_baseline_build": rr_baseline,
-            "RR_with_action_build": rr_with_action,
-            "delta_build_ms": delta_build_ms,
-            "delta_build_ratio_vs_SI": build_gate_ratio,
-            "absolute_RR_with_over_SI": absolute_build_ratio,
-            "build_gate_pass": build_gate_pass,
-            "build_operational_flag_over_3x": build_operational_flag,
-            "absolute_gate_pass_under_10x": absolute_gate_pass,
-        },
-        "queries": query_results,
-        "query_row_counts": hit_counts,
-        "query_gates": query_gates,
-        "dataset_pass": dataset_pass,
-        "profile_decomposition": profile_decomposition,
-    }
+        # -- Profiler decomposition (Phase 7a.5 root-cause, only when DSM_RR_PROFILE=1) --
+        profile_decomposition: Dict[str, Any] = {}
+        if _rr_profiler.enabled():
+            profile_decomposition = _aggregate_profiles(
+                rr_with_action=rr_with_action,
+                query_results=query_results,
+            )
+
+        return {
+            "cfg": dataset_cfg,
+            "fixture_layout_meta": fixture_layout_meta,
+            "derived": {
+                "top_action": ds["top_action"],
+                "rare_action": ds["rare_action"],
+                "c1_session": ds["c1_session"],
+                "c2_start": ds["c2_start"],
+                "c2_end": ds["c2_end"],
+                "distinct_actions_seen": ds["distinct_actions_seen"],
+                "total_entries": len(entries),
+            },
+            "builds": {
+                "SessionIndex_build": si_build,
+                "RR_baseline_build": rr_baseline,
+                "RR_with_action_build": rr_with_action,
+                "delta_build_ms": delta_build_ms,
+                "delta_build_ratio_vs_SI": build_gate_ratio,
+                "absolute_RR_with_over_SI": absolute_build_ratio,
+                "build_gate_pass": build_gate_pass,
+                "build_operational_flag_over_3x": build_operational_flag,
+                "absolute_gate_pass_under_10x": absolute_gate_pass,
+            },
+            "queries": query_results,
+            "query_row_counts": hit_counts,
+            "query_gates": query_gates,
+            "dataset_pass": dataset_pass,
+            "profile_decomposition": profile_decomposition,
+        }
+    finally:
+        if golden_dir is not None:
+            shutil.rmtree(golden_dir, ignore_errors=True)
 
 
 def _aggregate_profiles(
@@ -769,13 +910,31 @@ def main() -> int:
         help="Filename suffix to distinguish runs (e.g. '_100k' for Phase 7a.5). "
              "Empty suffix preserves Phase 7a filenames.",
     )
+    parser.add_argument(
+        "--fixture-layout",
+        choices=["monolithic", "segmented"],
+        default="monolithic",
+        help="Disk layout of the shard fixture. 'monolithic' (default) matches "
+             "Phase 7a / 7a.5 methodology (raw JSONL). 'segmented' generates the "
+             "production layout via Storage.append() for Phase 7a.5-bis.",
+    )
     args = parser.parse_args()
 
     fixture_size = args.fixture_size
     if fixture_size <= 0:
         raise SystemExit("--fixture-size must be positive")
     n_sessions = max(1, fixture_size // ENTRIES_PER_SESSION_TARGET)
-    phase_label = "7a.5" if args.output_suffix else "7a"
+    fixture_layout = args.fixture_layout
+    # Phase-label inference:
+    #   default monolithic + no suffix  → "7a"
+    #   monolithic + suffix             → "7a.5"
+    #   segmented                       → "7a.5-bis"
+    if fixture_layout == "segmented":
+        phase_label = "7a.5-bis"
+    elif args.output_suffix:
+        phase_label = "7a.5"
+    else:
+        phase_label = "7a"
 
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -791,6 +950,15 @@ def main() -> int:
         )
         runtime_datasets.append(cfg)
 
+    # Comparison baseline — Phase 7a.5-bis compares against the Phase 7a.5
+    # monolithic 100k results, not against Phase 7a 10k.
+    if fixture_layout == "segmented":
+        comparison_baseline = "phase_7a_5_action_index_100k_20260419.json"
+    elif args.output_suffix:
+        comparison_baseline = "phase_7a_action_index_20260419.json"
+    else:
+        comparison_baseline = None
+
     results: Dict[str, Any] = {
         **_env_meta(),
         "phase": phase_label,
@@ -799,16 +967,21 @@ def main() -> int:
         "n_sessions": n_sessions,
         "time_span_days": TIME_SPAN_DAYS,
         "event_type_pool": EVENT_TYPE_POOL,
-        "comparison_baseline": (
-            "phase_7a_action_index_20260419.json" if args.output_suffix else None
-        ),
+        "fixture_layout": fixture_layout,
+        "comparison_baseline": comparison_baseline,
         "datasets": [],
     }
 
     for cfg in runtime_datasets:
-        print(f"[bench] running dataset {cfg['label']} ({cfg['description']})", flush=True)
+        print(f"[bench] running dataset {cfg['label']} ({cfg['description']}) "
+              f"layout={fixture_layout}", flush=True)
         t0 = time.monotonic()
-        ds_result = bench_dataset(cfg, fixture_size=fixture_size, n_sessions=n_sessions)
+        ds_result = bench_dataset(
+            cfg,
+            fixture_size=fixture_size,
+            n_sessions=n_sessions,
+            fixture_layout=fixture_layout,
+        )
         elapsed = time.monotonic() - t0
         print(
             f"[bench] dataset {cfg['label']} done in {elapsed:.2f}s — "
@@ -822,7 +995,12 @@ def main() -> int:
 
     stamp = datetime.utcnow().strftime("%Y%m%d")
     suffix = args.output_suffix
-    stem_base = "phase_7a_5_action_index" if suffix else "phase_7a_action_index"
+    if fixture_layout == "segmented":
+        stem_base = "phase_7a_5_bis_action_index"
+    elif suffix:
+        stem_base = "phase_7a_5_action_index"
+    else:
+        stem_base = "phase_7a_action_index"
     json_path = out_dir / f"{stem_base}{suffix}_{stamp}.json"
     md_path = out_dir / f"{stem_base}{suffix}_{stamp}.md"
     with open(json_path, "w", encoding="utf-8") as f:
