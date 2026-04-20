@@ -158,3 +158,19 @@ A rebenchmark with each candidate optimisation (keeping the 10× / 10k→100k me
 - **Baselines (unchanged, verified).** `src/dsm/session/session_index.py` (never touched), `benchmarks/results/phase_7a_action_index_20260419.json` (used as reference baseline at `comparison_baseline` JSON key, content byte-identical to the Phase 7a artefact).
 - **Reference for gate definitions.** `docs/architecture/ADR_0001_CANONICAL_CONSUMPTION_PATH.md > Migration plan > Phase 7a.5` (gates i/ii/iii, thresholds fixed pre-measurement).
 - **Reference for Phase 7a results.** `docs/architecture/ADR_0001_PHASE_7A_VERDICT.md` (including Amendments A/B/C/D — the 6.44× figure referenced there is 10 k-only and remains accurate at that scale).
+
+---
+
+## Resolution
+
+This FAIL verdict remains valid as published. It applied to the monolithic storage
+layout, which is not the production layout.
+
+- The layout dependency was identified by Phase N+1B (`ADR_0001_STORAGE_READ_PROBE.md`).
+- Re-measurement under the segmented (production) layout was executed in Phase 7a.5-bis
+  (`ADR_0001_PHASE_7A_5_BIS_VERDICT.md`). Gates (i) and (iii) moved from FAIL to PASS.
+- The residual gate (ii) top was resolved by Phase N+1A (`ADR_0001_PHASE_N1A_VERDICT.md`).
+- ADR 0001 was Accepted on 2026-04-20 under condition 1 (production uses segmented layout).
+
+This verdict is not retracted. It remains the authoritative measurement under its tested
+conditions (monolithic, 100k).

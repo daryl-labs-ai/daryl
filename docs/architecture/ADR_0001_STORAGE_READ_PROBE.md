@@ -169,49 +169,21 @@ Monolithic is uniformly slower than segmented across every offset tested, with t
 
 ## Strategic implication for ADR 0001
 
-The Phase 7a.5 fixture creates **monolithic** shards (via `benchmarks/bench_phase_7a_action_index.py:113` `_materialize_dataset`, which writes a single `shards/sessions.jsonl` — no segmentation). The 70 % `storage_read_batch` contribution measured in `ADR_0001_PHASE_7A_5_ROOTCAUSE.md` was therefore produced by RR calling `_read_monolithic` repeatedly.
+> This section was originally written with three conditional branches (constant /
+> linear-like / super-linear-like). The branch that applied has been confirmed by
+> subsequent phases. This section is updated in-place to reflect the resolved state.
 
-Direct arithmetic cross-check against the probe :
+**Branch retained: offset-sensitive linear-like on segmented, `other / unclear` on monolithic with ratio 1.495×.**
 
-- Phase 7a.5 100 k build makes **21 batch reads** per build run (per `ADR_0001_PHASE_7A_5_ROOTCAUSE.md §A.1`, `samples_per_run_median=21` for `build:storage_read_batch`).
-- Probe monolithic per-call cost at offset near zero : ~350–360 ms.
-- Expected cumulative cost : 21 × ~350–500 ms ≈ 7 350 – 10 500 ms.
-- Observed `storage_read_batch` total on Phase 7a.5 Dataset A : **10 343 ms** (within the computed envelope).
-- SessionIndex makes **1 call** with `limit=10**7` (`src/dsm/session/session_index.py:51`) → pays the ~354 ms file scan once.
-- Ratio of RR calls to SessionIndex calls : 21 × ≈ 7.4 s of RR overhead that SessionIndex does not pay.
+- **Segmented (production layout)** scales offset-sensitive linear-like at ~2.55 µs/offset, which makes aggregate RR build cost over a 100k fixture measurable but bounded. Phase 7a.5-bis confirmed that gate (iii) passes on segmented (7.167× and 6.980×, both below the 10× gate).
 
-The 70 % contribution is arithmetically explained by RR's paginated call pattern on a monolithic shard, not by a per-call kernel anomaly. Each call's cost is what the kernel's design on monolithic shards specifies : `O(file_size)` per call, not `O(limit)`. RR pays that cost 21 times ; SessionIndex pays it once.
+- **Monolithic (fixture-only)** measured ratio Y/X = 1.495×, which did not confirm the "fixed-term dominated" reading of `_read_monolithic`. The classification remained `other / unclear`. Because production does not use monolithic, this is not a blocker for ADR 0001. It remains a measurement artifact worth documenting.
 
-### Strategic branch mapping
+- **The 70% `storage_read_batch` contribution measured in Phase 7a.5 rootcause was a property of the monolithic fixture, not of RR under production conditions.** Under segmented layout, `storage_read_batch` contribution is materially lower (confirmed by Phase 7a.5-bis measurements).
 
-The probe brief defined three outcome branches. The measurement straddles two of them depending on the shard layout :
+- **Residual RR-local cost (`list_copy` in `navigate_action`)** was quantified at 69.1% of query_actions:total on Dataset A top by the rootcause decomposition, and fixed by Phase N+1A (measured 2.394× → 0.542×).
 
-**Branch — segmented ⇒ `offset-sensitive (empirically linear-like)` (from the brief) :**
-On segmented shards, per-call cost grows with offset at ~2.55 µs/entry. RR's paginated pattern with increasing offset would accumulate linearly : batch K at offset K×5 000 costs ~K × 5 000 × 2.55 µs ≈ K × 12.75 ms. Sum over 20 batches ≈ 12.75 × (0+1+…+19) × 1 ms ≈ 2 423 ms. A segmented-shard RR build at 100 k would therefore pay ~2.5 s in `storage_read_batch` alone, substantially less than the ~10 s observed on monolithic but still non-trivial.
-
-Per the brief's branch for this case :
-> the 70 % contribution is **unlikely to be eliminated** within RR at 100 k scale without one of two interventions : (a) changing RR's call pattern to `Storage.read` materially (fewer calls, larger batches, or a fundamentally different traversal), or (b) changing kernel read behavior to make offset-skip cheaper.
-
-The probe does not prescribe (a) vs (b). For segmented, both options remain open.
-
-**Branch — monolithic ⇒ `other / unclear` (per the brief's fallback category) :**
-On monolithic shards, the dominant term is a fixed O(file_size) per-call cost, not an offset-scaling term. The aggregate RR cost scales with **number of calls × file_size**. RR makes 21 calls where SessionIndex makes 1 ; this is a call-pattern difference, not a kernel-scaling difference.
-
-Per the brief's branch for this case, mapping the "flat / constant per call, with call count being the real driver" physical reading :
-> the 70 % `storage_read_batch` cost in RR build is **not** driven by per-call `Storage.read` cost growing with offset. It must come from another factor — possibly the number of `Storage.read` calls RR makes (batch iteration pattern), or per-call fixed overhead multiplied by many calls.
-> **Consequence for ADR 0001** : the 70 % is potentially actionable within RR. Phase N+1A's scope extends from "fix `list_copy`" to "investigate RR's call pattern to `Storage.read`". ADR 0001 remains viable.
-
-For monolithic this is the applicable reading. The 70 % cost is **actionable within RR** by reducing the number of `Storage.read` calls per build (call pattern change), not by changing what each call does.
-
-### Combined strategic reading
-
-Because production shards in this repo are created by `Storage.append()` (`src/dsm/core/storage.py:80`), which goes through `segment_manager.get_active_segment`, **production shards are segmented, not monolithic**. The Phase 7a.5 fixture used monolithic only because the benchmark harness writes raw JSONL for efficiency. The two verdicts are therefore relevant to different contexts :
-
-- **Phase 7a.5's 70 % figure is not representative of production** — it reflects a monolithic-fixture artefact, amplified by RR's 21-call pagination pattern. Production, which stores segmented shards, would pay the linear-like cost measured in the segmented verdict instead.
-- **On segmented shards at 100 k**, the estimated RR `storage_read_batch` cost is ~2.5 s rather than ~10 s. Still significant, but recovers meaningfully without any kernel intervention.
-- **On both shard layouts, RR's call pattern matters** : 21 paginated calls vs 1 single call (SessionIndex's pattern) is a 21× multiplier that compounds any per-call cost, and is entirely under RR's control.
-
-Neither case rules ADR 0001 out ; both cases locate the problem in RR's integration with `Storage.read`, not in the kernel's internals under production layout. **No kernel intervention is required by the measurement to unblock gate (iii) investigation.** Whether a follow-up phase then finds that RR can hit gate (iii) under production-segmented layout without kernel changes — that is a separate measurement, not this probe.
+Conclusion: the probe's role was to distinguish a kernel-bound problem (non-actionable under freeze) from a layout-dependent artifact (non-production) and an RR-local inefficiency (actionable). Subsequent phases confirmed the latter two. ADR 0001 was Accepted on this basis.
 
 ---
 

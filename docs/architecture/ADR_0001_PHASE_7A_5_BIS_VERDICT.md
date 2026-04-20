@@ -174,3 +174,20 @@ What remains is the `list_copy` cost on the top-Zipf bucket, which is independen
 - **Baseline (unchanged, verified).** `benchmarks/results/phase_7a_5_action_index_100k_20260419.json` (Phase 7a.5 monolithic) — referenced, not modified.
 - **Prototype code (unchanged, verified).** `src/dsm/rr/*` — `git diff 58d7789..HEAD -- src/dsm/rr/` shows only the additive profiler commits from Phase N+1 (no logic changes introduced by this phase). `src/dsm/core/` and `src/dsm/session/` untouched — `git diff 58d7789..HEAD --` on both paths returns empty.
 - **Regression evidence.** `python3 -m pytest tests/rr/ -q` = 29 passed before and after the harness extension.
+
+---
+
+## Resolution
+
+The MIXED verdict was resolved by Phase N+1A, which addressed the residual gate (ii) top
+on Dataset A with a targeted fix in `RRNavigator.navigate_action` (full bucket copy
+replaced by slice under limit).
+
+- Gate (ii) top Dataset A: 2.394× → 0.542× (below 1.5× gate, with margin).
+- Fingerprint identity confirmed pre/post fix on Dataset A top (SHA-256 of first 100
+  entry_ids identical).
+- No regression on any previously-PASS gate.
+- See `ADR_0001_PHASE_N1A_VERDICT.md`.
+
+ADR 0001 was Accepted on 2026-04-20 on the basis of the combined 7a.5-bis + N+1A results
+under the segmented layout.
