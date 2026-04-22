@@ -174,7 +174,7 @@ If anyone — or anything — modifies the trail after the fact, verification fa
 ## 🧪 Demo
 
 ```bash
-python demo_verify.py
+python demo/demo_verify.py
 ```
 
 Records a high-value agent decision trail, simulates a post-hoc modification, and shows how Daryl detects it.
@@ -186,7 +186,7 @@ Run it locally:
 ```bash
 git clone https://github.com/daryl-labs-ai/daryl
 cd daryl
-python demo_verify.py
+python demo/demo_verify.py
 ```
 
 → See the full multi-agent demo: [`demo/README.md`](demo/README.md)
@@ -215,7 +215,7 @@ prov = build_provenance(storage, source_shards=["sessions"],
 # → integrity: OK | trust: verified | broken_chains: 0
 ```
 
-→ Full walkthrough: [`demo_consumption_layer.py`](demo_consumption_layer.py)
+→ Full walkthrough: [`demo_consumption_layer.py`](demo/demo_consumption_layer.py)
 
 ## Core Guarantees
 

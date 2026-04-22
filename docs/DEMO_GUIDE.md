@@ -19,7 +19,7 @@ pip install -e .
 **How to run**:
 
 ```bash
-python demo_verify.py
+python demo/demo_verify.py
 ```
 
 **What to look for**:
@@ -94,7 +94,7 @@ The key insight: the tamper changes a business decision (discount granted vs. de
 **How to run**:
 
 ```bash
-python demo_consumption_layer.py
+python demo/demo_consumption_layer.py
 ```
 
 **What to look for**:
