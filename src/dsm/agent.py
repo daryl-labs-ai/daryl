@@ -61,6 +61,26 @@ from .shard_families import ShardFamily, classify_shard, list_shards_by_family
 logger = logging.getLogger("dsm.agent")
 
 
+def _get_populated_rr_builder(storage, index_dir):
+    """Build or load a populated RRIndexBuilder for read access.
+
+    Encapsulates the ensure_index + defensive-build pattern used by every
+    RR-backed read path (find_session, query_actions, and PR #11 CLI
+    subcommands). Returns a builder whose session_index/action_index are
+    guaranteed non-empty as long as the underlying shard has entries.
+
+    Rationale for the defensive fallback: ensure_index() loads persisted
+    index files if present but is a no-op otherwise. If the index has never
+    been built (or was deleted), we trigger a full build to avoid silent
+    empty-result bugs.
+    """
+    builder = RRIndexBuilder(storage=storage, index_dir=str(index_dir))
+    builder.ensure_index()
+    if not builder.session_index:
+        builder.build()
+    return builder
+
+
 def _build_session_summary(records: list, session_id: str) -> dict:
     """Aggregate RR index records into a SessionIndex-compatible session summary.
 
@@ -71,8 +91,6 @@ def _build_session_summary(records: list, session_id: str) -> dict:
     appearance order in the records (matches dict-insertion order in Python 3.7+,
     which is what SessionIndex.find_session produced).
     """
-    from datetime import datetime, timezone
-
     if not records:
         return {
             "session_id": session_id,
@@ -670,15 +688,16 @@ class DarylAgent:
         return index.build_from_storage(self._storage)
 
     def find_session(self, session_id: str) -> Optional[dict]:
-        """Quick session summary lookup via RR index (ADR-0001 Phase 7b).
+        """Look up a session summary by session_id, via RR index (ADR-0001 Phase 7b).
 
-        Contract preserved: returns same dict shape as SessionIndex.find_session,
-        or None if session is not indexed.
+        Returns the same dict shape as SessionIndex.find_session, or None if
+        the session has no entries in the current index.
+
+        Complexity: O(1) dict lookup once the index is loaded. First call may
+        trigger an index build (O(N) in the number of entries) if no persisted
+        index is present.
         """
-        builder = RRIndexBuilder(storage=self._storage, index_dir=str(self._index_dir))
-        builder.ensure_index()
-        if not builder.session_index:
-            builder.build()
+        builder = _get_populated_rr_builder(self._storage, self._index_dir)
         records = builder.session_index.get(session_id)
         if not records:
             return None
@@ -692,12 +711,7 @@ class DarylAgent:
         limit: int = 100,
     ) -> list:
         """Query actions across sessions via RR (ADR-0001 Phase 7b)."""
-        builder = RRIndexBuilder(storage=self._storage, index_dir=str(self._index_dir))
-        builder.ensure_index()
-        # Defensive fallback: if ensure_index() is a no-op or fails to populate,
-        # force a build. Avoids silent empty-result bugs.
-        if not builder.session_index:
-            builder.build()
+        builder = _get_populated_rr_builder(self._storage, self._index_dir)
         navigator = RRNavigator(index_builder=builder, storage=self._storage)
         engine = RRQueryEngine(navigator=navigator)
         return engine.query_actions(
