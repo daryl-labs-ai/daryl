@@ -310,11 +310,50 @@ def test_legitimate_writers_nonempty():
         "LEGITIMATE_WRITERS suspiciously small — check the scan"
 
 
-def test_known_reader_violations_drained_toward_zero():
-    """Documentation test: KNOWN_READER_VIOLATIONS should shrink over time,
-    not grow. If this assertion ever fails because new entries were added,
-    the CI surface this as a review requirement."""
+def test_known_reader_violations_capped_at_5():
+    """Cap test: KNOWN_READER_VIOLATIONS must not exceed its initial count of 5.
+
+    Note on semantics: this is a CAP, not a strict monotonic decrease. If
+    a reader is removed (migration done, e.g. count 5 → 4) then a new
+    reader is accidentally introduced (count back to 5), this test still
+    passes. True anti-growth would require an external baseline file.
+    The cap catches the common case (net growth) and is simple enough to
+    maintain without extra infra.
+
+    Initial count after V3-A introduction: 5. Should only shrink via
+    successive Phase 7b migrations."""
     import scripts.forbid_storage_access as lint_module
-    # Initial count after V3-A introduction: 5. Should never grow, only shrink.
     assert len(lint_module.KNOWN_READER_VIOLATIONS) <= 5, \
-        "KNOWN_READER_VIOLATIONS has grown — new readers should use RR, not be added here"
+        "KNOWN_READER_VIOLATIONS has grown past 5 — new readers should use RR, not be added here"
+
+
+def test_listed_files_exist_in_repo():
+    """Every path in LEGITIMATE_WRITERS and KNOWN_READER_VIOLATIONS must
+    point to an actually existing file.
+
+    Without this check, a typo like 'sovereigntyyy.py' would silently slip
+    through: the stale-check only fires on files present in the scan (by
+    design, to support running the lint from a subdirectory or against
+    a tmp_path test repo), so a mistyped entry simply becomes invisible.
+
+    This test runs against the real repo root (not a tmp_path) and catches
+    the typo class."""
+    from pathlib import Path
+    import scripts.forbid_storage_access as lint_module
+
+    repo_root = Path(__file__).resolve().parents[1]
+    missing = []
+
+    for path_str in sorted(lint_module.LEGITIMATE_WRITERS):
+        if not (repo_root / path_str).is_file():
+            missing.append(f"LEGITIMATE_WRITERS: {path_str}")
+
+    for path_str in sorted(lint_module.KNOWN_READER_VIOLATIONS):
+        if not (repo_root / path_str).is_file():
+            missing.append(f"KNOWN_READER_VIOLATIONS: {path_str}")
+
+    assert not missing, (
+        "These entries don't match any real file — likely a typo or a "
+        "file was deleted without updating the list:\n  "
+        + "\n  ".join(missing)
+    )
