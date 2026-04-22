@@ -59,17 +59,65 @@ WHITELIST_PREFIXES = (
     "scripts/",
 )
 
-# Files grandfathered from the rule. Each entry is a repo-relative path that
-# CURRENTLY imports dsm.core.storage.Storage directly. Every migration in
-# Phase 7b must REMOVE a line from this list when it eliminates the direct
-# import from the corresponding file.
+# Files that legitimately construct Storage to WRITE entries.
+# Per ADR-0001, RR is the only allowed READ path — but writers must still
+# build Storage to append entries to shards. These files are not a debt;
+# their presence is correct by design. The list is explicit (not a pattern)
+# so that adding a new writer requires an architectural decision.
+LEGITIMATE_WRITERS: frozenset[str] = frozenset({
+    "src/dsm/__init__.py",
+    "src/dsm/agent.py",
+    "src/dsm/block_layer/manager.py",
+    "src/dsm/cli.py",
+    "src/dsm/cold_storage.py",
+    "src/dsm/collective.py",
+    "src/dsm/exchange.py",
+    "src/dsm/identity/identity_guard.py",
+    "src/dsm/identity/identity_manager.py",
+    "src/dsm/identity/identity_registry.py",
+    "src/dsm/identity/identity_replay.py",
+    "src/dsm/lanes.py",
+    "src/dsm/lifecycle.py",
+    "src/dsm/orchestrator.py",
+    "src/dsm/policy_adapter.py",
+    "src/dsm/sovereignty.py",
+    "src/dsm/verify.py",
+})
+
+# Known READER files that currently bypass RR — tracked debt under active
+# migration (ADR-0001 Phase 7b). Each entry is a file that READS Storage
+# directly and should instead route through RRQueryEngine or equivalent.
 #
-# A file listed here that no longer violates is ALSO a failure — the list
-# must stay in sync with reality.
+# Workflow:
+#   - A file is added here ONLY during the initial lint introduction. No new
+#     entries should be added during normal development.
+#   - A file is REMOVED from this set when its direct Storage read access
+#     has been replaced by an RR-backed path.
+#   - If a file listed here no longer violates (has no direct Storage import),
+#     the lint FAILS and asks you to remove the stale entry. This keeps the
+#     set synchronized with reality.
 #
-# Intentionally empty for now. Will be populated with the violations
-# discovered by running the lint on main.
-KNOWN_VIOLATIONS: frozenset[str] = frozenset()
+# The goal is to drain this set to frozenset() via Phase 7b migrations and
+# subsequent cleanup.
+KNOWN_READER_VIOLATIONS: frozenset[str] = frozenset({
+    "src/dsm/context/builder.py",
+    "src/dsm/provenance/builder.py",
+    "src/dsm/recall/search.py",
+    "src/dsm/session/session_graph.py",
+    "src/dsm/session/session_index.py",
+})
+
+
+def is_legitimate_writer(rel_path: str) -> bool:
+    """Check if a repo-relative path is a documented legitimate Storage writer."""
+    normalized = rel_path.replace("\\", "/")
+    return normalized in LEGITIMATE_WRITERS
+
+
+def is_known_reader_violation(rel_path: str) -> bool:
+    """Check if a repo-relative path is a tracked reader-bypass debt."""
+    normalized = rel_path.replace("\\", "/")
+    return normalized in KNOWN_READER_VIOLATIONS
 
 FORBIDDEN_MODULE = "dsm.core.storage"
 FORBIDDEN_SYMBOL = "Storage"
@@ -99,18 +147,18 @@ def format_violation(v: Violation) -> str:
 
 FAIL_EPILOGUE = """\
 RR (Read Relay) is the ONLY allowed read path per ADR-0001.
-Allowed locations for direct Storage access:
-  - src/dsm/core/
-  - src/dsm/rr/
-  - tests/
-  - benchmarks/
-  - demo/
-  - scripts/
 
-Fix: use RRQueryEngine (src/dsm/rr/query/) instead of direct Storage access.
-If this file has a legitimate reason to bypass RR, add its path prefix to
-WHITELIST_PREFIXES in scripts/forbid_storage_access.py AND document the
-reason in the commit message. No per-line escape hatches are supported.
+If this is a legitimate WRITER (module that appends entries to shards):
+  Add the path to LEGITIMATE_WRITERS in scripts/forbid_storage_access.py
+  and document the reason in the commit message.
+
+If this is a READER (should fetch data via RR):
+  Replace the direct Storage import with RRQueryEngine or equivalent. See
+  src/dsm/rr/query/ for the available read API.
+
+No per-line escape hatches (# noqa: forbid-storage) are supported. Every
+exception must be an explicit entry in LEGITIMATE_WRITERS (permanent) or
+KNOWN_READER_VIOLATIONS (tracked debt, drains to empty via Phase 7b).
 """
 
 
@@ -131,6 +179,56 @@ class _ImportVisitor(ast.NodeVisitor):
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
         module = node.module or ""
+
+        # Relative imports: we can't fully resolve without the file's package
+        # context, but we can flag the patterns that semantically equal an
+        # import of dsm.core.storage.Storage regardless of how many `..` dots
+        # are used. The key insight: for any relative import, the tail of
+        # `module` after the implicit package prefix is what matters.
+        if node.level > 0:
+            # Case 1: from ..core.storage import Storage  (module == "core.storage")
+            # Case 2: from ...parent.core.storage import Storage (module == "parent.core.storage")
+            # We match any module path that ENDS in "core.storage".
+            if module == "core.storage" or module.endswith(".core.storage"):
+                for alias in node.names:
+                    if alias.name == FORBIDDEN_SYMBOL:
+                        self.violations.append(Violation(
+                            file=self.file_path,
+                            line=node.lineno,
+                            col=node.col_offset,
+                            source=self._src(node.lineno),
+                            reason=f"relative import of {FORBIDDEN_MODULE}.{FORBIDDEN_SYMBOL} "
+                                   f"(level={node.level}, module='{module}')",
+                        ))
+
+            # Case 3: from ..core import storage  (sub-module)
+            # Case 4: from ..core import Storage  (re-exported class, bypass via core/__init__.py)
+            elif module == "core" or module.endswith(".core"):
+                for alias in node.names:
+                    if alias.name == "storage":
+                        self.violations.append(Violation(
+                            file=self.file_path,
+                            line=node.lineno,
+                            col=node.col_offset,
+                            source=self._src(node.lineno),
+                            reason=f"relative indirect access: `from {module} import storage` "
+                                   f"(level={node.level})",
+                        ))
+                    elif alias.name == FORBIDDEN_SYMBOL:
+                        # Re-exported class bypass — core/__init__.py exports Storage
+                        self.violations.append(Violation(
+                            file=self.file_path,
+                            line=node.lineno,
+                            col=node.col_offset,
+                            source=self._src(node.lineno),
+                            reason=f"relative re-export bypass: `from {module} import Storage` "
+                                   f"(level={node.level})",
+                        ))
+
+            self.generic_visit(node)
+            return
+
+        # Absolute imports (unchanged behavior)
         if module == FORBIDDEN_MODULE:
             for alias in node.names:
                 if alias.name == FORBIDDEN_SYMBOL:
@@ -151,6 +249,16 @@ class _ImportVisitor(ast.NodeVisitor):
                         source=self._src(node.lineno),
                         reason=f"indirect access via `from {PARENT_MODULE} import storage`",
                     ))
+                elif alias.name == FORBIDDEN_SYMBOL:
+                    # Absolute re-export bypass
+                    self.violations.append(Violation(
+                        file=self.file_path,
+                        line=node.lineno,
+                        col=node.col_offset,
+                        source=self._src(node.lineno),
+                        reason=f"absolute re-export bypass: `from {PARENT_MODULE} import Storage`",
+                    ))
+
         self.generic_visit(node)
 
     def visit_Import(self, node: ast.Import) -> None:
@@ -173,11 +281,6 @@ class _ImportVisitor(ast.NodeVisitor):
 def is_whitelisted(rel_path: str) -> bool:
     normalized = rel_path.replace("\\", "/")
     return any(normalized.startswith(prefix) for prefix in WHITELIST_PREFIXES)
-
-
-def is_known_violation(rel_path: str) -> bool:
-    normalized = rel_path.replace("\\", "/")
-    return normalized in KNOWN_VIOLATIONS
 
 
 def scan_file(path: Path, repo_root: Path) -> list[Violation]:
@@ -227,32 +330,45 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     active_violations: list[Violation] = []
-    stale_known: list[str] = []
+    stale_writers: list[str] = []
+    stale_readers: list[str] = []
     files_with_violations: set[str] = set()
+    all_scanned_rel: set[str] = set()
     scanned = 0
 
     try:
         for path in iter_python_files(repo_root):
             scanned += 1
+            rel_this = path.relative_to(repo_root).as_posix()
+            all_scanned_rel.add(rel_this)
             violations = scan_file(path, repo_root)
             if not violations:
                 continue
-            rel = path.relative_to(repo_root).as_posix()
-            files_with_violations.add(rel)
-            if is_known_violation(rel):
-                continue
+            files_with_violations.add(rel_this)
+            if is_legitimate_writer(rel_this):
+                continue  # documented writer, OK
+            if is_known_reader_violation(rel_this):
+                continue  # tracked debt, OK for now
             active_violations.extend(violations)
     except RuntimeError as e:
         print(f"ERROR: {e}", file=sys.stderr)
         return 2
 
-    for known in KNOWN_VIOLATIONS:
-        if known not in files_with_violations:
-            stale_known.append(known)
+    # Detect stale entries in either list (file EXISTS in the scan but no
+    # longer violates). A file that isn't in the scanned tree at all is
+    # out-of-scope, not stale — this matters for unit tests that run the
+    # lint on minimal tmp_path repos, and for linting from a subdirectory.
+    for w in LEGITIMATE_WRITERS:
+        if w in all_scanned_rel and w not in files_with_violations:
+            stale_writers.append(w)
+    for r in KNOWN_READER_VIOLATIONS:
+        if r in all_scanned_rel and r not in files_with_violations:
+            stale_readers.append(r)
 
-    if not active_violations and not stale_known:
-        print(f"OK: {scanned} files scanned, no violations "
-              f"(grandfathered: {len(KNOWN_VIOLATIONS)}).")
+    if not active_violations and not stale_writers and not stale_readers:
+        print(f"OK: {scanned} files scanned, no unauthorized violations "
+              f"(legitimate writers: {len(LEGITIMATE_WRITERS)}, "
+              f"tracked reader debt: {len(KNOWN_READER_VIOLATIONS)}).")
         return 0
 
     if active_violations:
@@ -262,11 +378,19 @@ def main(argv: list[str] | None = None) -> int:
             print(format_violation(v), file=sys.stderr)
         print(FAIL_EPILOGUE, file=sys.stderr)
 
-    if stale_known:
-        print(f"FAIL: {len(stale_known)} file(s) listed in KNOWN_VIOLATIONS "
-              f"but no longer violate — remove them from the list:",
+    if stale_writers:
+        print(f"FAIL: {len(stale_writers)} file(s) listed in LEGITIMATE_WRITERS "
+              f"but no longer import Storage — remove from the list:",
               file=sys.stderr)
-        for f in sorted(stale_known):
+        for f in sorted(stale_writers):
+            print(f"  - {f}", file=sys.stderr)
+        print("", file=sys.stderr)
+
+    if stale_readers:
+        print(f"FAIL: {len(stale_readers)} file(s) listed in KNOWN_READER_VIOLATIONS "
+              f"but no longer import Storage — migration complete, remove from the list:",
+              file=sys.stderr)
+        for f in sorted(stale_readers):
             print(f"  - {f}", file=sys.stderr)
         print("", file=sys.stderr)
 
