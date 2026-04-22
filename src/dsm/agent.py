@@ -28,6 +28,9 @@ from .receipts import make_receipt
 from .session.session_graph import SessionGraph
 from .session.session_index import SessionIndex
 from .session.session_limits_manager import SessionLimitsManager
+from .rr.index import RRIndexBuilder
+from .rr.navigator import RRNavigator
+from .rr.query import RRQueryEngine
 from .exchange import (
     TaskReceipt,
     issue_receipt as issue_receipt_fn,
@@ -56,6 +59,50 @@ from .lanes import LaneGroup, LaneTip, MergeEntry, LaneWriteResult
 from .shard_families import ShardFamily, classify_shard, list_shards_by_family
 
 logger = logging.getLogger("dsm.agent")
+
+
+def _build_session_summary(records: list, session_id: str) -> dict:
+    """Aggregate RR index records into a SessionIndex-compatible session summary.
+
+    Contract parity (must match SessionIndex.find_session):
+      session_id, source, start_time, end_time, entry_count, entry_ids, actions
+
+    `actions` is a List[Dict[{"name", "count"}]] — list order follows first-
+    appearance order in the records (matches dict-insertion order in Python 3.7+,
+    which is what SessionIndex.find_session produced).
+    """
+    from datetime import datetime, timezone
+
+    if not records:
+        return {
+            "session_id": session_id,
+            "source": "",
+            "start_time": "",
+            "end_time": "",
+            "entry_count": 0,
+            "entry_ids": [],
+            "actions": [],
+        }
+
+    def _ts_to_iso(ts: float) -> str:
+        return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat().replace("+00:00", "Z")
+
+    timestamps = [r["timestamp"] for r in records if r.get("timestamp") is not None]
+    action_counts: dict = {}
+    for r in records:
+        name = r.get("action_name")
+        if name:  # None for non-action entries
+            action_counts[name] = action_counts.get(name, 0) + 1
+
+    return {
+        "session_id": session_id,
+        "source": records[0].get("agent", ""),  # RR renames entry.source → "agent"
+        "start_time": _ts_to_iso(min(timestamps)) if timestamps else "",
+        "end_time": _ts_to_iso(max(timestamps)) if timestamps else "",
+        "entry_count": len(records),
+        "entry_ids": [r.get("entry_id", "") for r in records],
+        "actions": [{"name": k, "count": v} for k, v in action_counts.items()],
+    }
 
 
 class DarylAgent:
@@ -623,9 +670,19 @@ class DarylAgent:
         return index.build_from_storage(self._storage)
 
     def find_session(self, session_id: str) -> Optional[dict]:
-        """Quick O(1) lookup for session metadata via index."""
-        index = SessionIndex(self._index_dir, shard_id=self.shard)
-        return index.find_session(session_id)
+        """Quick session summary lookup via RR index (ADR-0001 Phase 7b).
+
+        Contract preserved: returns same dict shape as SessionIndex.find_session,
+        or None if session is not indexed.
+        """
+        builder = RRIndexBuilder(storage=self._storage, index_dir=str(self._index_dir))
+        builder.ensure_index()
+        if not builder.session_index:
+            builder.build()
+        records = builder.session_index.get(session_id)
+        if not records:
+            return None
+        return _build_session_summary(records, session_id)
 
     def query_actions(
         self,
@@ -634,9 +691,16 @@ class DarylAgent:
         end_time: Optional[str] = None,
         limit: int = 100,
     ) -> list:
-        """Query actions across sessions using index."""
-        index = SessionIndex(self._index_dir, shard_id=self.shard)
-        return index.get_actions(
+        """Query actions across sessions via RR (ADR-0001 Phase 7b)."""
+        builder = RRIndexBuilder(storage=self._storage, index_dir=str(self._index_dir))
+        builder.ensure_index()
+        # Defensive fallback: if ensure_index() is a no-op or fails to populate,
+        # force a build. Avoids silent empty-result bugs.
+        if not builder.session_index:
+            builder.build()
+        navigator = RRNavigator(index_builder=builder, storage=self._storage)
+        engine = RRQueryEngine(navigator=navigator)
+        return engine.query_actions(
             action_name=action_name,
             start_time=start_time,
             end_time=end_time,
