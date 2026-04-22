@@ -31,7 +31,7 @@ entries = bm.read("sessions", limit=100)
 Compare classic (one append per entry) vs block mode:
 
 ```bash
-PYTHONPATH=src python3 -m dsm.block_layer.benchmark
+python3 benchmarks/bench_block_layer.py
 ```
 
 Example output: block size 32 can be ~20x faster than classic for 500 appends, depending on hardware.

@@ -74,7 +74,6 @@ omit = [
     "src/dsm/skills/anthropic_parser.py",
     "src/dsm/ans/ans_test.py",
     "src/dsm/ans/cli.py",
-    "src/dsm/block_layer/benchmark.py",
     "src/dsm/moltbook_home_client.py",
     "src/dsm/moltbook_home_normalizer.py",
     "src/dsm/moltbook/__init__.py",

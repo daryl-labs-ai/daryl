@@ -135,7 +135,7 @@ prov = build_provenance(
 
 ## Example Flow
 
-The `demo_consumption_layer.py` script at the repo root demonstrates the full pipeline:
+The `demo_consumption_layer.py` script in the `demo/` directory demonstrates the full pipeline:
 
 1. **Setup** — creates three sessions spanning 45 days. Session 1 records "use REST for the API." Session 2 records "use gRPC for the API" (superseding Session 1). Session 3 is the current active session.
 
@@ -146,7 +146,7 @@ The `demo_consumption_layer.py` script at the repo root demonstrates the full pi
 4. **Provenance** — `build_provenance(verify=True)` verifies the hash chain of the `sessions` shard. Reports `integrity=OK`, `trust=verified`, `broken_chains=0`.
 
 ```bash
-python demo_consumption_layer.py
+python demo/demo_consumption_layer.py
 ```
 
 ---
