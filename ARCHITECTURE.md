@@ -1,8 +1,10 @@
 # Daryl Architecture
 
-> **Version:** 0.8.0 · **Kernel:** frozen since March 2026 · **Tests:** 769 passing
+> **Version:** 0.8.0 · **Kernel:** frozen since March 2026 · **Tests:** 769 passing (v0.8.0 scope, pre-dating Phase 7 measurement chain — see ADR 0001 §Success criteria item 6 for repo-wide harmonisation plan)
 
 This document describes the architecture of Daryl (DSM). The **kernel is frozen** — see [docs/architecture/DSM_KERNEL_FREEZE_2026_03.md](docs/architecture/DSM_KERNEL_FREEZE_2026_03.md). All v0.8.0 additions (pillars A→E) are above the freeze line.
+
+The canonical read path is governed by **ADR 0001** ([docs/architecture/ADR_0001_CANONICAL_CONSUMPTION_PATH.md](docs/architecture/ADR_0001_CANONICAL_CONSUMPTION_PATH.md), Accepted 2026-04-20). ADR 0001 is authoritative for any claim in this document about read path, RR, SessionIndex, or Consumption Layer ; this document reflects that ADR and does not redefine it. In case of divergence of formulation, read the ADR.
 
 ---
 
@@ -194,6 +196,20 @@ All extension modules are untouched in v0.8.0. Their APIs and tests are preserve
 
 ---
 
+## Canonical Consumption Path
+
+The canonical read path for agent-facing consumers is governed by [ADR 0001](docs/architecture/ADR_0001_CANONICAL_CONSUMPTION_PATH.md) (Accepted 2026-04-20, status authoritative).
+
+- **Option C retained by ADR 0001** : RR is **designated** by ADR 0001 as the canonical read backend over `Storage`. The Consumption Layer (`src/dsm/recall/`, `src/dsm/context/`, `src/dsm/provenance/`) is reoriented to read through RR. Designation is governance, not a statement about current code state — consumer rebinding across `DarylAgent`, CLI, and MCP is scoped to **Phase 7b** of the ADR 0001 migration plan and is not yet executed ; until Phase 7b completes, SessionIndex and RR coexist operationally.
+- **SessionIndex** (`src/dsm/session/session_index.py`) : classified `duplicative` by [ADR_0001_SESSIONINDEX_CLASSIFICATION.md](docs/architecture/ADR_0001_SESSIONINDEX_CLASSIFICATION.md) on 2026-04-19. It continues to serve its 8 live consumers (`DarylAgent.index_sessions` / `find_session` / `query_actions`, CLI `dsm session-*` commands, MCP `dsm_search`) until Phase 7b rebinds them. Its classification is not weakened by this coexistence ; deprecation is scoped, not imminent.
+- **Storage layout — Acceptance condition 1 of ADR 0001** : production deployments use **segmented** layout, produced automatically by `Storage.append()` via `ShardSegmentManager`. Phase 7a.5 measured a FAIL on a monolithic fixture ; that verdict applies to monolithic-layout deployments only and is not retracted. The Acceptance of ADR 0001 is conditional on segmented layout — any deployment that bypasses segmentation is outside the scope of that Acceptance and should re-check against `ADR_0001_PHASE_7A_5_VERDICT.md`.
+- **RR action_name index** : the extension promoting `metadata["action_name"]` to a first-class RR index key has been **validated on the proto branch** `proto/phase-7a-rr-action-name-index` at commit `58d7789` (Phase 7a PASS architectural, Phase 7a.5-bis PASS on gates (i) and (iii) under segmented, Phase N+1A PASS on gate (ii) top after the navigator fix at commit `e570841`). It is part of the Accepted target architecture. Merge into `main` is a Phase 7b prerequisite and has not been performed ; a consumer of `main` does not yet see this extension.
+- **RR navigator `navigate_action` limit kwarg** (Phase N+1A fix) : validated on the proto branch at commit `e570841`. Part of the Accepted target architecture. Not present in `main`.
+
+For the full chain of measurement verdicts and Acceptance conditions, see [ADR 0001](docs/architecture/ADR_0001_CANONICAL_CONSUMPTION_PATH.md) `Reconciliation of phase verdicts` and `Condition Satisfaction Map` sections.
+
+---
+
 ## Repository layout
 
 ```
@@ -223,7 +239,11 @@ src/dsm/
   policy_adapter.py      # OPA/Inkog adapters
   status.py              # Status enums (including A→E)
 
-tests/                   # 769 tests — 0 failures
+tests/                   # 769 tests — 0 failures (v0.8.0 scope count — repo-wide
+                         # harmonisation of test counts across README.md,
+                         # docs/CONSUMPTION_LAYER.md, and this file is a scheduled
+                         # Phase 6 deliverable of the ADR 0001 migration plan,
+                         # not executed by the current Acceptance)
 docs/architecture/       # DSM_PILLARS_A_TO_E.md, kernel freeze doc
 ```
 

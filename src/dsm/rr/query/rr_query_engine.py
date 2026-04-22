@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional, Union
 
 from ...core.models import Entry
 from ..navigator import RRNavigator
+from .. import _profiler as _prof
 
 
 def _normalize_timestamp(value: Any) -> float:
@@ -24,6 +25,26 @@ def _normalize_timestamp(value: Any) -> float:
         return float(value)
     except (TypeError, ValueError):
         return 0.0
+
+
+def _coerce_to_numeric(value: Any) -> Optional[float]:
+    """
+    Coerce a value to a numeric Unix timestamp or return None when no bound is requested.
+    Accepts None, datetime, float/int, or ISO 8601 string (for SessionIndex.get_actions
+    compatibility — see src/dsm/session/session_index.py:174).
+    """
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.timestamp()
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
+        except ValueError:
+            return None
+    return None
 
 
 class RRQueryEngine:
@@ -113,6 +134,71 @@ class RRQueryEngine:
         if resolve:
             return self._navigator.resolve_entries(records, limit=limit)
         return records
+
+    def query_actions(
+        self,
+        action_name: Optional[str] = None,
+        session_id: Optional[str] = None,
+        start_time: Optional[Union[datetime, float, int, str]] = None,
+        end_time: Optional[Union[datetime, float, int, str]] = None,
+        limit: int = 100,
+    ) -> List[Dict[str, Any]]:
+        """
+        Query actions with optional filters, signature-compatible with SessionIndex.get_actions
+        (src/dsm/session/session_index.py:156).
+
+        When action_name is provided, uses action_index (O(k) dict lookup) to pull the bucket,
+        which is already sorted by timestamp ascending. When action_name is None, iterates over
+        every bucket. AND-filters by session_id, start_time, end_time. start_time / end_time may
+        be ISO strings (for SessionIndex wire-compat) or datetime / numeric timestamps (normalized
+        to float).
+        Early-exit on limit. Does not call Storage.read().
+        """
+        with _prof.Timed("query_actions:total"):
+            start_ts = _coerce_to_numeric(start_time)
+            end_ts = _coerce_to_numeric(end_time)
+
+            # Phase N+1A : when the caller has no post-bucket filter active, the
+            # early-exit in the slice_or_filter loop below would stop at `limit`
+            # regardless — so passing `limit` down to navigate_action lets it skip
+            # the full-bucket copy and only materialise the first `limit` records
+            # (which, by the build-time sort invariant, are the earliest by
+            # timestamp — the same records pre-fix code would have iterated first).
+            #
+            # We do NOT pass `limit` down when a filter is active, because the
+            # filter may reject many records before the caller has collected
+            # `limit` matches. Slicing the bucket to `limit` before the filter
+            # runs would produce a strictly smaller result than the pre-fix code
+            # (which iterates the full bucket until `limit` matches accumulate).
+            has_post_bucket_filter = bool(
+                session_id or (start_ts is not None) or (end_ts is not None)
+            )
+            nav_limit = None if has_post_bucket_filter else limit
+
+            if action_name is not None:
+                # navigate_action records its own bucket_lookup + list_copy timings.
+                buckets: List[List[Dict[str, Any]]] = [
+                    self._navigator.navigate_action(action_name, limit=nav_limit)
+                ]
+            else:
+                action_index = getattr(self._navigator.index_builder, "action_index", {}) or {}
+                buckets = [list(bucket) for bucket in action_index.values()]
+
+            with _prof.Timed("query_actions:slice_or_filter"):
+                results: List[Dict[str, Any]] = []
+                for bucket in buckets:
+                    for act in bucket:
+                        if session_id and act.get("session_id") != session_id:
+                            continue
+                        ts = act.get("timestamp")
+                        if start_ts is not None and (ts is None or ts < start_ts):
+                            continue
+                        if end_ts is not None and (ts is None or ts > end_ts):
+                            continue
+                        results.append(act)
+                        if len(results) >= limit:
+                            return results
+            return results
 
     def _intersect_by_entry_id(
         self,
