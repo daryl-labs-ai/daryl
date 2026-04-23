@@ -310,21 +310,21 @@ def test_legitimate_writers_nonempty():
         "LEGITIMATE_WRITERS suspiciously small — check the scan"
 
 
-def test_known_reader_violations_capped_at_5():
-    """Cap test: KNOWN_READER_VIOLATIONS must not exceed its initial count of 5.
+def test_known_reader_violations_capped_at_4():
+    """Cap test: KNOWN_READER_VIOLATIONS must not exceed its current count of 4.
 
     Note on semantics: this is a CAP, not a strict monotonic decrease. If
-    a reader is removed (migration done, e.g. count 5 → 4) then a new
-    reader is accidentally introduced (count back to 5), this test still
+    a reader is removed (migration done, e.g. count 4 → 3) then a new
+    reader is accidentally introduced (count back to 4), this test still
     passes. True anti-growth would require an external baseline file.
     The cap catches the common case (net growth) and is simple enough to
     maintain without extra infra.
 
-    Initial count after V3-A introduction: 5. Should only shrink via
-    successive Phase 7b migrations."""
+    Count after PR #12 (session_graph reclassified as writer): 4.
+    Should only shrink via successive Phase 7b migrations."""
     import scripts.forbid_storage_access as lint_module
-    assert len(lint_module.KNOWN_READER_VIOLATIONS) <= 5, \
-        "KNOWN_READER_VIOLATIONS has grown past 5 — new readers should use RR, not be added here"
+    assert len(lint_module.KNOWN_READER_VIOLATIONS) <= 4, \
+        "KNOWN_READER_VIOLATIONS has grown past 4 — new readers should use RR, not be added here"
 
 
 def test_listed_files_exist_in_repo():
