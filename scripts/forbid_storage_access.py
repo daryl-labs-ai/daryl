@@ -80,6 +80,10 @@ LEGITIMATE_WRITERS: frozenset[str] = frozenset({
     "src/dsm/lifecycle.py",
     "src/dsm/orchestrator.py",
     "src/dsm/policy_adapter.py",
+    # session_graph is a pure Storage WRITER (uses only storage.append()).
+    # Initially misclassified as reader debt in V3-A; moved here after
+    # code review confirmed no read paths.
+    "src/dsm/session/session_graph.py",
     "src/dsm/sovereignty.py",
     "src/dsm/verify.py",
 })
@@ -103,7 +107,6 @@ KNOWN_READER_VIOLATIONS: frozenset[str] = frozenset({
     "src/dsm/context/builder.py",
     "src/dsm/provenance/builder.py",
     "src/dsm/recall/search.py",
-    "src/dsm/session/session_graph.py",
     "src/dsm/session/session_index.py",
 })
 

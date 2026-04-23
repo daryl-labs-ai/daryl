@@ -15,6 +15,7 @@ from .core.signing import Signing
 from .core.session import SessionTracker
 from .core.security import SecurityLayer
 from .agent import DarylAgent
+from .rr.helpers import get_populated_rr_builder, build_session_summary
 from .session.session_graph import SessionGraph
 from .witness import ShardWitness
 from .anchor import AnchorLog, verify_commitment, verify_all_commitments
@@ -581,28 +582,31 @@ def _cmd_session_index(args) -> int:
 
 
 def _cmd_session_find(args) -> int:
-    """dsm session-find: look up session by ID."""
+    """dsm session-find: look up session by ID (via RR, ADR-0001 Phase 7b)."""
     data_dir = getattr(args, "data_dir", None) or "data"
-    shard_id = getattr(args, "shard", None) or "sessions"
-    from .session.session_index import SessionIndex
+    storage = _get_storage(data_dir)
     index_dir = str(Path(data_dir) / "index")
-    index = SessionIndex(index_dir, shard_id=shard_id)
-    sess = index.find_session(args.session_id)
-    if not sess:
+    builder = get_populated_rr_builder(storage, index_dir)
+    records = builder.session_index.get(args.session_id)
+    if not records:
         print(f"Session {args.session_id} not found. Run 'dsm session-index' first.", file=sys.stderr)
         return 1
-    print(json.dumps(sess, indent=2, ensure_ascii=False))
+    summary = build_session_summary(records, args.session_id)
+    print(json.dumps(summary, indent=2, ensure_ascii=False))
     return 0
 
 
 def _cmd_session_query(args) -> int:
-    """dsm session-query: query actions with optional filters."""
+    """dsm session-query: query actions with optional filters (via RR, ADR-0001 Phase 7b)."""
+    from .rr.navigator import RRNavigator
+    from .rr.query import RRQueryEngine
     data_dir = getattr(args, "data_dir", None) or "data"
-    shard_id = getattr(args, "shard", None) or "sessions"
-    from .session.session_index import SessionIndex
+    storage = _get_storage(data_dir)
     index_dir = str(Path(data_dir) / "index")
-    index = SessionIndex(index_dir, shard_id=shard_id)
-    actions = index.get_actions(
+    builder = get_populated_rr_builder(storage, index_dir)
+    navigator = RRNavigator(index_builder=builder, storage=storage)
+    engine = RRQueryEngine(navigator=navigator)
+    actions = engine.query_actions(
         action_name=getattr(args, "action_name", None),
         start_time=getattr(args, "start", None),
         end_time=getattr(args, "end", None),
@@ -618,17 +622,28 @@ def _cmd_session_query(args) -> int:
 
 
 def _cmd_session_list(args) -> int:
-    """dsm session-list: list sessions."""
+    """dsm session-list: list sessions (via RR, ADR-0001 Phase 7b).
+
+    Inline aggregation from RRIndexBuilder.session_index (Dict[sid, List[record]]).
+    Equivalent to SessionIndex.list_sessions but with records from RR.
+    """
     data_dir = getattr(args, "data_dir", None) or "data"
-    shard_id = getattr(args, "shard", None) or "sessions"
-    from .session.session_index import SessionIndex
+    storage = _get_storage(data_dir)
     index_dir = str(Path(data_dir) / "index")
-    index = SessionIndex(index_dir, shard_id=shard_id)
-    sessions = index.list_sessions(limit=getattr(args, "limit", 20))
-    if not sessions:
+    builder = get_populated_rr_builder(storage, index_dir)
+    if not builder.session_index:
         print("No sessions indexed. Run 'dsm session-index' first.")
         return 0
-    for s in sessions:
+
+    # Aggregate each session into a summary, sorted by end_time desc
+    summaries = []
+    for sid, records in builder.session_index.items():
+        summary = build_session_summary(records, sid)
+        summaries.append(summary)
+    summaries.sort(key=lambda s: s.get("end_time", ""), reverse=True)
+
+    limit = getattr(args, "limit", 20)
+    for s in summaries[:limit]:
         print(f"  {s['session_id']}  entries={s['entry_count']}  {s['start_time']} → {s['end_time']}")
     return 0
 
