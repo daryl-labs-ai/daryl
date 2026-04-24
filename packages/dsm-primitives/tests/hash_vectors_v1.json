@@ -1,0 +1,91 @@
+[
+  {
+    "name": "empty_dict",
+    "input": {},
+    "expected_hash": "v1:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+  },
+  {
+    "name": "single_string_ascii",
+    "input": {
+      "s": "hello"
+    },
+    "expected_hash": "v1:aa2a66ada1633cb40b81191752d22a004787247afec983bfaabc99e7b1397639"
+  },
+  {
+    "name": "single_string_accent_nfc",
+    "input": {
+      "s": "café"
+    },
+    "expected_hash": "v1:339df16d5c73b968aaca8134185e0ae503d071e5b2aac45b1bc567b8f8a89053"
+  },
+  {
+    "name": "single_string_combining_nfd",
+    "input": {
+      "s": "café"
+    },
+    "expected_hash": "v1:216013e9aad1f4fb632c082a8af8125063b201c5c54eba60c9cb3c7f067f2ca1"
+  },
+  {
+    "name": "single_string_emoji",
+    "input": {
+      "s": "🎉"
+    },
+    "expected_hash": "v1:36243e5c82e48863bce6f40260b46b4f2aaf3b854d743af697c90082ab0858f7"
+  },
+  {
+    "name": "line_separator_unicode",
+    "input": {
+      "s": "line1 line2"
+    },
+    "expected_hash": "v1:752e09f1d00f3cf674727376343b737124ef572d7b9f69363d93aea49d69145f"
+  },
+  {
+    "name": "nested_dicts",
+    "input": {
+      "a": {
+        "b": {
+          "c": 1
+        }
+      }
+    },
+    "expected_hash": "v1:23b7fe02eabd305fc16aa735008b290c197a7e0514c2a4a31f2fe2d68825394e"
+  },
+  {
+    "name": "mixed_types",
+    "input": {
+      "s": "x",
+      "i": 1,
+      "f": 1.5,
+      "b": true,
+      "n": null
+    },
+    "expected_hash": "v1:e93ff795d5d64f2dfa06e07eada3f944d30faf16cb656c26ae3c565aa455e924"
+  },
+  {
+    "name": "list_mixed_types",
+    "input": {
+      "items": [
+        1,
+        "two",
+        3.0,
+        null,
+        false
+      ]
+    },
+    "expected_hash": "v1:705f165390da0fc4fb89fd34aa768c7dbca24cd8431ca5cf51a7b493ddaf0fa8"
+  },
+  {
+    "name": "prev_hash_none",
+    "input": {
+      "prev_hash": null
+    },
+    "expected_hash": "v1:bed3750968f2c8520ae20a929b18f0f6b0caee9ddbdcf1c0cc983b36541b8bb3"
+  },
+  {
+    "name": "prev_hash_v1_reference",
+    "input": {
+      "prev_hash": "v1:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+    },
+    "expected_hash": "v1:aecd26956d611fb8b70731919fc8405ee5e1fec499aa0b7aba1b521339ad4172"
+  }
+]
