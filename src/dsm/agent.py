@@ -26,7 +26,6 @@ from .core.models import Entry
 from .core.storage import Storage
 from .receipts import make_receipt
 from .session.session_graph import SessionGraph
-from .session.session_index import SessionIndex
 from .session.session_limits_manager import SessionLimitsManager
 from .rr.index import RRIndexBuilder
 from .rr.navigator import RRNavigator
@@ -622,15 +621,16 @@ class DarylAgent:
         return self._artifact_store.verify_artifact(artifact_hash)
 
     def index_sessions(self) -> dict:
-        """Build or rebuild session index for this agent's shard."""
-        index = SessionIndex(self._index_dir, shard_id=self.shard)
-        return index.build_from_storage(self._storage)
+        """Build or rebuild session index for this agent's shard, via RR (ADR-0001)."""
+        builder = RRIndexBuilder(storage=self._storage, index_dir=str(self._index_dir))
+        return builder.build()
 
     def find_session(self, session_id: str) -> Optional[dict]:
         """Look up a session summary by session_id, via RR index (ADR-0001 Phase 7b).
 
-        Returns the same dict shape as SessionIndex.find_session, or None if
-        the session has no entries in the current index.
+        Returns a session summary dict (session_id, source, start_time, end_time,
+        entry_count, entry_ids, actions), or None if the session has no entries
+        in the current index.
 
         Complexity: O(1) dict lookup once the index is loaded. First call may
         trigger an index build (O(N) in the number of entries) if no persisted

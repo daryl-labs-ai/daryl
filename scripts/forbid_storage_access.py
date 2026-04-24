@@ -107,7 +107,6 @@ KNOWN_READER_VIOLATIONS: frozenset[str] = frozenset({
     "src/dsm/context/builder.py",
     "src/dsm/provenance/builder.py",
     "src/dsm/recall/search.py",
-    "src/dsm/session/session_index.py",
 })
 
 

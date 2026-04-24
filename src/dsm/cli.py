@@ -569,14 +569,13 @@ def _cmd_artifact_verify(args) -> int:
 
 
 def _cmd_session_index(args) -> int:
-    """dsm session-index: build/rebuild session index."""
+    """dsm session-index: build/rebuild session index via RR (ADR-0001)."""
+    from .rr.index import RRIndexBuilder
     data_dir = getattr(args, "data_dir", None) or "data"
-    shard_id = getattr(args, "shard", None) or "sessions"
     storage = _get_storage(data_dir)
-    from .session.session_index import SessionIndex
     index_dir = str(Path(data_dir) / "index")
-    index = SessionIndex(index_dir, shard_id=shard_id)
-    result = index.build_from_storage(storage)
+    builder = RRIndexBuilder(storage=storage, index_dir=index_dir)
+    result = builder.build()
     print(f"✓ Indexed {result['entries_indexed']} entries from {result['sessions_found']} sessions in {result['duration_seconds']}s")
     return 0
 
