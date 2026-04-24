@@ -31,7 +31,12 @@ from dsm.core.models import Entry
 from dsm.rr.index import RRIndexBuilder
 from dsm.rr.navigator import RRNavigator
 from dsm.rr.query import RRQueryEngine
-from dsm.session.session_index import SessionIndex
+
+pytestmark = pytest.mark.skip(
+    reason="Historical parity test — RR is now the sole index system, "
+           "SessionIndex was removed in V4-D cleanup. This file is preserved "
+           "as documentation of the Phase 7a parity contract."
+)
 
 
 BASE_TS = datetime(2026, 1, 1, tzinfo=timezone.utc)

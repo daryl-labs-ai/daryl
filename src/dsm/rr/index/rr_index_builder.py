@@ -15,6 +15,7 @@ import json
 import logging
 import os
 import tempfile
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -139,7 +140,7 @@ class RRIndexBuilder:
         """DSM Storage (read-only)."""
         return self._storage
 
-    def build(self) -> None:
+    def build(self) -> dict:
         """
         Scan all DSM shards and build in-memory indexes, then persist to index_dir.
 
@@ -155,7 +156,15 @@ class RRIndexBuilder:
         accumulated via :mod:`dsm.rr._profiler` for Phase 7a.5 root-cause
         decomposition (ADR 0001). The profiler is a no-op when disabled, so this
         method's production-path behaviour is unchanged.
+
+        Returns:
+            A status dict with keys ``status``, ``entries_indexed``,
+            ``sessions_found``, ``duration_seconds``. Byte-compatible with the
+            former ``SessionIndex.build_from_storage`` contract so the CLI
+            subcommand and ``DarylAgent.index_sessions`` can delegate here
+            without changing their wire shape.
         """
+        _t0 = time.monotonic()
         with _prof.Timed("build:total"):
             with _prof.Timed("build:clear"):
                 self.session_index.clear()
@@ -227,6 +236,13 @@ class RRIndexBuilder:
             with _prof.Timed("build:write_files"):
                 self._index_dir.mkdir(parents=True, exist_ok=True)
                 self._write_index_files()
+
+        return {
+            "status": "OK",
+            "entries_indexed": len(self.timeline_index),
+            "sessions_found": len(self.session_index),
+            "duration_seconds": round(time.monotonic() - _t0, 4),
+        }
 
     def _write_index_files(self) -> None:
         """Write in-memory indexes to JSON files under index_dir. Uses atomic rename."""
