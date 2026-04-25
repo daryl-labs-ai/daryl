@@ -33,7 +33,7 @@ jobs:
         run: pip install -e packages/dsm-primitives
 
       - name: Install agent-mesh (peer package)
-        run: pip install -e agent-mesh/
+        run: pip install -e "agent-mesh/[dev]"
 
       - name: Install dependencies
         run: |
