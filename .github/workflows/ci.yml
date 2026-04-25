@@ -32,6 +32,9 @@ jobs:
       - name: Install dsm-primitives (peer package)
         run: pip install -e packages/dsm-primitives
 
+      - name: Install agent-mesh (peer package)
+        run: pip install -e agent-mesh/
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -50,6 +53,9 @@ jobs:
 
       - name: Run tests with coverage
         run: python -m pytest tests/ -v --tb=short --cov=src/dsm --cov-report=term-missing --cov-report=html
+
+      - name: Run agent-mesh tests
+        run: python -m pytest agent-mesh/tests/ -v --tb=short
 
       - name: Upload coverage report
         if: matrix.python-version == '3.12'

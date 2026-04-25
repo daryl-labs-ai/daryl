@@ -113,7 +113,13 @@ def _now_iso() -> str:
 
 
 def _sha256_of_bytes(data: bytes) -> str:
-    return "sha256:" + hashlib.sha256(data).hexdigest()
+    """Compute v1 hash of canonical bytes (ADR-0002).
+
+    Migrated to 'v1:' prefix in V4-A.3 to align with worker/server
+    chain. Byte-identical to dsm_primitives.hash_canonical(payload)
+    when called as _sha256_of_bytes(canonicalize_payload(payload)).
+    """
+    return "v1:" + hashlib.sha256(data).hexdigest()
 
 
 # ── Server helpers ─────────────────────────────────────────────────────────────

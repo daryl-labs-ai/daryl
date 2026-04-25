@@ -41,8 +41,13 @@ def test_canonicalize_no_spaces():
 
 
 def test_canonicalize_unicode():
-    out = canonicalize_payload({"name": "ünïcódé"}).decode()
-    assert "ünïcódé" in out
+    """Unicode strings are escaped (ensure_ascii=True per ADR-0002)."""
+    result = canonicalize_payload({"name": "ünïcódé"})
+    # ensure_ascii=True: non-ASCII chars are \uXXXX escaped
+    assert b"\\u00fc" in result  # ü
+    assert b"\\u00e9" in result  # é
+    # Should NOT contain raw UTF-8 bytes anymore
+    assert "ünïcódé".encode("utf-8") not in result
 
 
 def test_canonicalize_nested():
@@ -62,33 +67,23 @@ def test_canonicalize_list_values():
 # ---------- compute_content_hash ----------
 
 def test_content_hash_prefix():
-    h = compute_content_hash({"x": 1})
-    assert h.startswith("sha256:")
+    h = compute_content_hash({"a": 1})
+    assert h.startswith("v1:")
 
 
 def test_content_hash_dict_deterministic():
     assert compute_content_hash({"a": 1, "b": 2}) == compute_content_hash({"b": 2, "a": 1})
 
 
-def test_content_hash_string():
-    assert compute_content_hash("hello").startswith("sha256:")
-
-
-def test_content_hash_bytes():
-    assert compute_content_hash(b"hello").startswith("sha256:")
-
-
-def test_content_hash_str_matches_expected():
-    import hashlib
-    expected = "sha256:" + hashlib.sha256(b"hello").hexdigest()
-    assert compute_content_hash("hello") == expected
-
-
 def test_content_hash_dict_matches_canonical():
-    import hashlib
-    d = {"a": 1, "b": 2}
-    expected = "sha256:" + hashlib.sha256(canonicalize_payload(d)).hexdigest()
-    assert compute_content_hash(d) == expected
+    """compute_content_hash output equals dsm_primitives.hash_canonical."""
+    from dsm_primitives import hash_canonical
+    payload = {"foo": "bar", "n": 42}
+    expected = hash_canonical(payload)
+    actual = compute_content_hash(payload)
+    assert actual == expected
+    assert actual.startswith("v1:")
+    assert len(actual) == 67
 
 
 def test_content_hash_different_inputs_differ():
@@ -96,8 +91,21 @@ def test_content_hash_different_inputs_differ():
 
 
 def test_content_hash_hex_length():
-    h = compute_content_hash("x")
-    assert len(h) == len("sha256:") + 64
+    h = compute_content_hash({"x": 1})
+    # "v1:" prefix (3 chars) + 64 hex chars = 67
+    assert len(h) == 67
+
+
+def test_compute_content_hash_rejects_non_dict():
+    """Per ADR-0002 strict schema, only dict is accepted."""
+    with pytest.raises(TypeError):
+        compute_content_hash("a string")
+    with pytest.raises(TypeError):
+        compute_content_hash(b"bytes")
+    with pytest.raises(TypeError):
+        compute_content_hash(123)
+    with pytest.raises(TypeError):
+        compute_content_hash(None)
 
 
 # ---------- generate_keypair ----------

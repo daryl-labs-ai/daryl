@@ -456,8 +456,8 @@ def test_run_worker_bounded_single_task():
     r = results[0]
     assert r.agent_id == "agent_a"
     assert r.content == "fake answer A"
-    assert r.content_hash.startswith("sha256:")
-    assert r.payload_hash.startswith("sha256:")
+    assert r.content_hash.startswith("v1:")
+    assert r.payload_hash.startswith("v1:")
     assert len(r.signature) > 10
     assert len(fake.submissions) == 1
     assert fake.submissions[0]["agent_id"] == "agent_a"
@@ -501,8 +501,8 @@ def test_run_e2e_two_workers_two_tasks():
     # Every recorded result has the expected fields populated.
     for r in results:
         assert r.content
-        assert r.content_hash.startswith("sha256:")
-        assert r.payload_hash.startswith("sha256:")
+        assert r.content_hash.startswith("v1:")
+        assert r.payload_hash.startswith("v1:")
         assert isinstance(r.signature, str) and len(r.signature) > 10
 
     # Fake server received mission + task events.

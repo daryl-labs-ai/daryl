@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import json
 from dataclasses import dataclass
 
 from nacl import signing as nacl_signing
@@ -13,19 +12,28 @@ from nacl.exceptions import BadSignatureError
 # ---------- Primitives ----------
 
 def canonicalize_payload(d: dict) -> bytes:
-    return json.dumps(d, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    """Canonical UTF-8 byte serialization of a dict.
+
+    Per ADR-0002, delegates to dsm_primitives.canonical_json.
+    Note: output now uses ensure_ascii=True (was False before V4-A.3).
+    Breaking change vs pre-V4-A.3 mesh; intentional per ADR-0002.
+    """
+    from dsm_primitives import canonical_json
+    return canonical_json(d)
 
 
-def compute_content_hash(content) -> str:
-    if isinstance(content, dict):
-        data = canonicalize_payload(content)
-    elif isinstance(content, str):
-        data = content.encode("utf-8")
-    elif isinstance(content, (bytes, bytearray)):
-        data = bytes(content)
-    else:
-        raise TypeError(f"unsupported content type: {type(content)}")
-    return "sha256:" + hashlib.sha256(data).hexdigest()
+def compute_content_hash(content: dict) -> str:
+    """Compute the canonical content hash of a dict.
+
+    Per ADR-0002, delegates to dsm_primitives.hash_canonical and returns
+    'v1:<hex>'. Strict dict input only.
+    """
+    from dsm_primitives import hash_canonical
+    if not isinstance(content, dict):
+        raise TypeError(
+            f"content must be a dict (per ADR-0002 strict schema); got {type(content)}"
+        )
+    return hash_canonical(content)
 
 
 def generate_keypair() -> tuple[str, str]:
