@@ -19,13 +19,14 @@ Append/Read/List with JSONL format (append-only) - Monolithic Mode
 """
 
 import contextlib
-import hashlib
 import json
 import os
 from collections import deque
 from pathlib import Path
 from typing import List, Optional
 from datetime import datetime, timezone
+
+from dsm_primitives import hash_canonical
 
 from ._compat import portable_lock
 from .models import Entry, ShardMeta
@@ -34,11 +35,17 @@ from .models import Entry, ShardMeta
 from .shard_segments import ShardSegmentManager
 
 
-def _compute_canonical_entry_hash(entry: Entry, prev_hash: Optional[str]) -> str:
-    """Compute SHA-256 over full entry (session_id, source, timestamp, metadata, content, prev_hash).
-    Used for chain integrity; deterministic serialization for replay/verification.
+def _build_canonical_entry(entry: Entry, prev_hash: Optional[str]) -> dict:
+    """Build the canonical dict representation of an entry for hashing.
+
+    Single source of truth for the canonical entry shape, shared by the
+    write path (_compute_canonical_entry_hash) and verify paths
+    (verify.py, core/signing.py). Per ADR-0002 schema.
+
+    Any change to this function is a breaking schema change requiring a
+    new hash version (v2+).
     """
-    canonical_entry = {
+    return {
         "session_id": entry.session_id,
         "source": entry.source,
         "timestamp": entry.timestamp.isoformat() if hasattr(entry.timestamp, "isoformat") else str(entry.timestamp),
@@ -46,8 +53,19 @@ def _compute_canonical_entry_hash(entry: Entry, prev_hash: Optional[str]) -> str
         "content": entry.content,
         "prev_hash": prev_hash,
     }
-    serialized = json.dumps(canonical_entry, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def _compute_canonical_entry_hash(entry: Entry, prev_hash: Optional[str]) -> str:
+    """Compute the canonical hash of an entry.
+
+    Returns the current canonical hash version (v1) per ADR-0002.
+    Delegates to dsm_primitives.hash_canonical via _build_canonical_entry.
+
+    Backward compatibility for entries created before V4-A.2 (v0 bare
+    hex) is handled by callers via dsm_primitives.verify_hash, which
+    routes by prefix detection.
+    """
+    return hash_canonical(_build_canonical_entry(entry, prev_hash))
 
 
 class Storage:
