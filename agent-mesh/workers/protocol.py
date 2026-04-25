@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import json
 import logging
 import time
 from dataclasses import dataclass
@@ -35,13 +34,27 @@ logger = logging.getLogger(__name__)
 def _b64(data: bytes) -> str:
     return base64.b64encode(data).decode("ascii")
 
-def _sha256(content: str | bytes) -> str:
-    if isinstance(content, str):
-        content = content.encode("utf-8")
-    return "sha256:" + hashlib.sha256(content).hexdigest()
+def _sha256(content: bytes) -> str:
+    """Compute v1 hash of canonical bytes.
+
+    Returns 'v1:<hex>'. Type signature tightened from 'str | bytes' to
+    'bytes' alone — workers always pass output of _canonical (bytes).
+    The function is byte-identical to dsm_primitives.hash_canonical
+    when called as _sha256(_canonical(payload)); the indirection is
+    preserved because workers also need the canonical bytes for signing,
+    not just for hashing.
+    """
+    return "v1:" + hashlib.sha256(content).hexdigest()
+
 
 def _canonical(payload: dict) -> bytes:
-    return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    """Canonical UTF-8 byte serialization (ADR-0002 v1).
+
+    Per ADR-0002, delegates to dsm_primitives.canonical_json. Output
+    uses ensure_ascii=True; was False before V4-A.3 (Unicode bug).
+    """
+    from dsm_primitives import canonical_json
+    return canonical_json(payload)
 
 def _sign(canonical_bytes: bytes, private_key_b64: str) -> str:
     sk = SigningKey(base64.b64decode(private_key_b64))
