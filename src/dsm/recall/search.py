@@ -11,10 +11,12 @@ import math
 import re
 import time
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Iterable, Iterator, Optional
 
 from ..core.models import Entry
 from ..core.storage import Storage
+from ..rr.helpers import get_populated_rr_builder
 from ..rr.relay import DSMReadRelay
 
 __all__ = [
@@ -189,31 +191,40 @@ def list_sessions(
     data_dir: str = DEFAULT_DATA_DIR,
     shard_ids: Optional[list[str]] = None,
 ) -> list[str]:
-    """Return every distinct ``session_id`` observed across daryl shards.
+    """Enumerate all session_ids present across shards.
 
-    Parameters
-    ----------
-    storage:
-        Optional :class:`Storage` instance. Created from ``data_dir`` if None.
-    data_dir:
-        Used only when ``storage`` is None.
-    shard_ids:
-        Optional list of shards to scan. When None, scans every shard
-        returned by ``storage.list_shards()``.
+    Reads via RR (Phase 7c.1). Preserves the original contract:
+    - shard_ids=None: returns all session_ids known to RR (sorted,
+      distinct, non-empty)
+    - shard_ids=[...]: returns session_ids that appear in at least
+      one of the listed shards
+
+    Empty session_ids and the placeholder "none" key are excluded.
     """
     if storage is None:
         storage = Storage(data_dir=data_dir)
+    # Derive index_dir from storage.data_dir (not the parameter), so a
+    # caller that passes a custom Storage instance gets indexes under
+    # that storage's data_dir, not under DEFAULT_DATA_DIR.
+    index_dir = str(Path(storage.data_dir) / "index")
+    builder = get_populated_rr_builder(storage, index_dir)
+
     if shard_ids is None:
-        shard_ids = [s.shard_id for s in storage.list_shards()]
+        # Whole-repo enumeration: session_index keys are exactly the
+        # set of session_ids RR has seen.
+        return sorted(
+            sid for sid in builder.session_index.keys()
+            if sid and sid != "none"
+        )
+
+    # Filtered enumeration: collect session_ids appearing in records
+    # of the listed shards.
     sessions: set[str] = set()
-    for sid in shard_ids:
-        try:
-            entries = storage.read(sid, limit=100_000)
-        except Exception:
-            continue
-        for entry in entries:
-            if entry.session_id:
-                sessions.add(entry.session_id)
+    for shard_id in shard_ids:
+        for record in builder.shard_index.get(shard_id, []):
+            sid = record.get("session_id")
+            if sid and sid != "none":
+                sessions.add(sid)
     return sorted(sessions)
 
 
@@ -221,24 +232,27 @@ def current_session_id(
     storage: Optional[Storage] = None,
     data_dir: str = DEFAULT_DATA_DIR,
 ) -> Optional[str]:
-    """Resolve the most recent session from daryl's session graph.
+    """Return the session_id of the most recent entry in the 'sessions'
+    shard, or None if the shard is empty or missing.
 
-    V0: returns the ``session_id`` of the entry with the highest
-    timestamp in the ``sessions`` shard. Returns None when that shard
-    is empty or missing. Callers that need a stronger guarantee should
-    pass ``session_id`` explicitly.
+    Reads via RR (Phase 7c.1). Preserves the original contract:
+    'most recent' = max timestamp among entries in shard 'sessions'.
     """
     if storage is None:
         storage = Storage(data_dir=data_dir)
-    try:
-        entries = storage.read("sessions", limit=100_000)
-    except Exception:
+    # Derive index_dir from storage.data_dir (not the parameter), so a
+    # caller that passes a custom Storage instance gets indexes under
+    # that storage's data_dir, not under DEFAULT_DATA_DIR.
+    index_dir = str(Path(storage.data_dir) / "index")
+    builder = get_populated_rr_builder(storage, index_dir)
+
+    sessions_records = builder.shard_index.get("sessions", [])
+    if not sessions_records:
         return None
-    latest: Optional[Entry] = None
-    for e in entries:
-        if e.session_id and (latest is None or e.timestamp > latest.timestamp):
-            latest = e
-    return latest.session_id if latest else None
+
+    latest = max(sessions_records, key=lambda r: r["timestamp"])
+    sid = latest.get("session_id")
+    return sid if sid else None
 
 
 # ---------------------------------------------------------------------------
