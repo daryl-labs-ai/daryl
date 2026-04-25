@@ -194,3 +194,76 @@ def test_no_crash_on_end_without_start(tmp_path):
     agent = DarylAgent(agent_id="test-agent", data_dir=str(tmp_path))
     out = agent.end()
     assert out is None
+
+
+class TestRRBuilderMemoization:
+    """V4-C: in-process cache of RRIndexBuilder with mtime invalidation."""
+
+    def test_first_call_populates_cache(self, tmp_path):
+        """First call to _get_cached_rr_builder builds and caches."""
+        agent = DarylAgent(agent_id="test-agent", data_dir=str(tmp_path))
+        agent.start()
+        agent.snapshot({"context": "hello"})
+
+        assert agent._rr_builder_cache is None
+        assert agent._rr_idx_mtime is None
+
+        builder = agent._get_cached_rr_builder()
+
+        assert agent._rr_builder_cache is builder
+        assert agent._rr_idx_mtime is not None
+
+    def test_second_call_returns_same_instance(self, tmp_path):
+        """Cache hit: second call returns same builder when mtimes unchanged."""
+        agent = DarylAgent(agent_id="test-agent", data_dir=str(tmp_path))
+        agent.start()
+        agent.snapshot({"context": "hello"})
+
+        b1 = agent._get_cached_rr_builder()
+        b2 = agent._get_cached_rr_builder()
+
+        assert b1 is b2, "cache hit must return same instance"
+
+    def test_mtime_change_invalidates_cache(self, tmp_path):
+        """If a .idx file mtime changes, cache is invalidated."""
+        import time
+        from pathlib import Path
+
+        agent = DarylAgent(agent_id="test-agent", data_dir=str(tmp_path))
+        agent.start()
+        agent.snapshot({"context": "hello"})
+
+        b1 = agent._get_cached_rr_builder()
+        assert agent._rr_idx_mtime is not None
+
+        idx_path = Path(agent._index_dir) / "sessions.idx"
+        assert idx_path.exists()
+        time.sleep(0.01)  # mtime granularity safety
+        idx_path.touch()
+
+        b2 = agent._get_cached_rr_builder()
+
+        assert b1 is not b2, "cache must invalidate on mtime change"
+
+    def test_idx_deletion_invalidates_and_rebuilds(self, tmp_path):
+        """If a .idx file is deleted, _compute_idx_mtime returns None,
+        cache is invalidated, builder is rebuilt (not just reloaded)."""
+        from pathlib import Path
+
+        agent = DarylAgent(agent_id="test-agent", data_dir=str(tmp_path))
+        agent.start()
+        agent.snapshot({"context": "hello"})
+
+        b1 = agent._get_cached_rr_builder()
+
+        idx_path = Path(agent._index_dir) / "sessions.idx"
+        if idx_path.exists():
+            idx_path.unlink()
+
+        assert agent._compute_idx_mtime() is None
+
+        b2 = agent._get_cached_rr_builder()
+
+        assert b1 is not b2, "cache must invalidate when .idx is missing"
+        assert agent._rr_idx_mtime is not None, \
+            "after rebuild, mtime should be re-captured"

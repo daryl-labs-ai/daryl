@@ -9,7 +9,7 @@ import json
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, List, Optional, Set, Union
+from typing import Any, List, Optional, Set, Tuple, Union
 from uuid import uuid4
 
 from .anchor import AnchorLog, pre_commit, post_commit, capture_environment, verify_all_commitments
@@ -126,6 +126,13 @@ class DarylAgent:
         )
         self._anchor_log = AnchorLog(str(self.data_dir / "anchors"))
         self._index_dir = str(self.data_dir / "index")
+
+        # V4-C: in-process cache for RRIndexBuilder.
+        # Invalidated by mtime check on .idx files (covers cross-process
+        # writes that rebuild indexes). Transparent to callers.
+        self._rr_builder_cache = None
+        self._rr_idx_mtime: Optional[Tuple[int, ...]] = None
+
         self._pending_commitments = {}  # intent_id -> commitment_hash
         self._signing = None
         if signing_dir is not False:
@@ -625,6 +632,56 @@ class DarylAgent:
         builder = RRIndexBuilder(storage=self._storage, index_dir=str(self._index_dir))
         return builder.build()
 
+    def _compute_idx_mtime(self) -> Optional[Tuple[int, ...]]:
+        """Compute a cache key from .idx file mtimes.
+
+        Returns a tuple of st_mtime_ns for all 5 RR index files,
+        or None if any file is missing (forces a rebuild path).
+        Used to detect when indexes have been modified by any process
+        (intra or inter) so the cached builder can be invalidated.
+        """
+        from pathlib import Path
+        idx_files = (
+            "sessions.idx",
+            "agents.idx",
+            "timeline.idx",
+            "shards.idx",
+            "actions.idx",
+        )
+        mtimes = []
+        index_path = Path(self._index_dir)
+        for name in idx_files:
+            f = index_path / name
+            if not f.exists():
+                return None
+            mtimes.append(f.stat().st_mtime_ns)
+        return tuple(mtimes)
+
+    def _get_cached_rr_builder(self):
+        """Return a cached RRIndexBuilder, invalidating on mtime change.
+
+        First call (or after invalidation) loads/builds via
+        get_populated_rr_builder. Subsequent calls return the cached
+        instance unless any .idx file mtime has changed.
+
+        Per V4-C: gain is `(N-1) × load_cost` for an agent session
+        making N index queries. Invalidation is a 5-stat() syscall
+        (sub-ms) at each access.
+        """
+        current_mtime = self._compute_idx_mtime()
+        if (
+            self._rr_builder_cache is None
+            or current_mtime is None
+            or self._rr_idx_mtime != current_mtime
+        ):
+            self._rr_builder_cache = get_populated_rr_builder(
+                self._storage, self._index_dir
+            )
+            # Re-read mtime AFTER build to capture any rebuild-induced
+            # mtime change (build() writes .idx files atomically).
+            self._rr_idx_mtime = self._compute_idx_mtime()
+        return self._rr_builder_cache
+
     def find_session(self, session_id: str) -> Optional[dict]:
         """Look up a session summary by session_id, via RR index (ADR-0001 Phase 7b).
 
@@ -636,7 +693,7 @@ class DarylAgent:
         trigger an index build (O(N) in the number of entries) if no persisted
         index is present.
         """
-        builder = get_populated_rr_builder(self._storage, self._index_dir)
+        builder = self._get_cached_rr_builder()
         records = builder.session_index.get(session_id)
         if not records:
             return None
@@ -650,7 +707,7 @@ class DarylAgent:
         limit: int = 100,
     ) -> list:
         """Query actions across sessions via RR (ADR-0001 Phase 7b)."""
-        builder = get_populated_rr_builder(self._storage, self._index_dir)
+        builder = self._get_cached_rr_builder()
         navigator = RRNavigator(index_builder=builder, storage=self._storage)
         engine = RRQueryEngine(navigator=navigator)
         return engine.query_actions(
