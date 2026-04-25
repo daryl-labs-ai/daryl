@@ -2,12 +2,15 @@
 DSM hash-chain verification.
 
 Uses storage.segment_manager.iter_shard_events() for chronological order
-and storage._entry_from_event_data() + _compute_canonical_entry_hash from core.
+and storage._entry_from_event_data() + storage._build_canonical_entry
++ dsm_primitives.verify_hash for prefix-aware (v0/v1) hash routing.
 """
 
 from typing import Dict, List, Any
 
-from .core.storage import Storage, _compute_canonical_entry_hash
+from dsm_primitives import verify_hash
+
+from .core.storage import Storage, _build_canonical_entry
 from .status import VerifyStatus
 
 
@@ -48,8 +51,8 @@ def verify_shard(storage: Storage, shard_id: str) -> Dict[str, Any]:
             hash_ok = False
         else:
             try:
-                recomputed = _compute_canonical_entry_hash(entry, entry.prev_hash)
-                hash_ok = recomputed == entry.hash
+                canonical_entry = _build_canonical_entry(entry, entry.prev_hash)
+                hash_ok = verify_hash(canonical_entry, entry.hash)
                 if not hash_ok:
                     tampered += 1
             except Exception:

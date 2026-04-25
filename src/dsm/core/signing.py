@@ -26,7 +26,9 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-from .storage import _compute_canonical_entry_hash
+from dsm_primitives import verify_hash
+
+from .storage import _build_canonical_entry
 
 
 class Signing:
@@ -62,8 +64,8 @@ class Signing:
 
             if entry.hash:
                 try:
-                    recalculated = _compute_canonical_entry_hash(entry, entry.prev_hash)
-                    if recalculated != entry.hash:
+                    canonical_entry = _build_canonical_entry(entry, entry.prev_hash)
+                    if not verify_hash(canonical_entry, entry.hash):
                         tampering_detected += 1
                 except Exception as e:
                     logger.debug("core signing skipped: %s", e)

@@ -29,6 +29,9 @@ jobs:
           path: ~/.cache/pip
           key: ${{ runner.os }}-pip-${{ hashFiles('pyproject.toml') }}
 
+      - name: Install dsm-primitives (peer package)
+        run: pip install -e packages/dsm-primitives
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
