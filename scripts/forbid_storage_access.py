@@ -104,7 +104,6 @@ LEGITIMATE_WRITERS: frozenset[str] = frozenset({
 # The goal is to drain this set to frozenset() via Phase 7b migrations and
 # subsequent cleanup.
 KNOWN_READER_VIOLATIONS: frozenset[str] = frozenset({
-    "src/dsm/context/builder.py",
     "src/dsm/provenance/builder.py",
     "src/dsm/recall/search.py",
 })
@@ -173,13 +172,47 @@ class _ImportVisitor(ast.NodeVisitor):
         self.file_path = file_path
         self.source_lines = source_lines
         self.violations: list[Violation] = []
+        # Phase 7c.3 (B3): track when we are inside an `if TYPE_CHECKING:`
+        # block. Imports nested in such blocks are type-only and never
+        # executed at runtime, so they don't constitute a Storage access.
+        self._in_type_checking: int = 0
 
     def _src(self, lineno: int) -> str:
         if 1 <= lineno <= len(self.source_lines):
             return self.source_lines[lineno - 1].strip()
         return ""
 
+    def visit_If(self, node: ast.If) -> None:
+        """Track when we enter an `if TYPE_CHECKING:` block.
+
+        Imports nested inside such blocks are type-only and never
+        executed at runtime, so they don't constitute a Storage
+        access. Per ADR-0001 lint refinement (Phase 7c.3, B3).
+        """
+        is_typing_block = False
+        # Pattern 1: bare `TYPE_CHECKING` (from `from typing import TYPE_CHECKING`)
+        if isinstance(node.test, ast.Name) and node.test.id == "TYPE_CHECKING":
+            is_typing_block = True
+        # Pattern 2: `typing.TYPE_CHECKING` (qualified)
+        elif (
+            isinstance(node.test, ast.Attribute)
+            and node.test.attr == "TYPE_CHECKING"
+            and isinstance(node.test.value, ast.Name)
+            and node.test.value.id == "typing"
+        ):
+            is_typing_block = True
+
+        if is_typing_block:
+            self._in_type_checking += 1
+            self.generic_visit(node)
+            self._in_type_checking -= 1
+        else:
+            self.generic_visit(node)
+
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        if self._in_type_checking > 0:
+            # Type-only import — does not constitute a runtime access.
+            return
         module = node.module or ""
 
         # Relative imports: we can't fully resolve without the file's package
@@ -264,6 +297,9 @@ class _ImportVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
     def visit_Import(self, node: ast.Import) -> None:
+        if self._in_type_checking > 0:
+            # Type-only import — does not constitute a runtime access.
+            return
         for alias in node.names:
             if alias.name == FORBIDDEN_MODULE:
                 self.violations.append(Violation(

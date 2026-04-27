@@ -16,9 +16,17 @@ inline in :func:`_trim_to_budget` and :func:`_bucket_matches`.
 from __future__ import annotations
 
 import time
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
-from ..core.storage import Storage
+if TYPE_CHECKING:
+    # Phase 7c.3 (B2): Storage is referenced ONLY for type annotations
+    # in the public API (build_context, build_prompt_context). No runtime
+    # use — instantiation is delegated to downstream readers
+    # (search_memory, build_provenance), which receive `data_dir` and
+    # handle the fallback themselves. The lint (B3) is TYPE_CHECKING-aware
+    # and does not flag this import.
+    from ..core.storage import Storage
+
 from ..provenance import build_provenance
 from ..recall import (
     STATUS_OUTDATED,
@@ -161,6 +169,7 @@ def _trim_to_budget(
     buckets: dict[str, list[dict[str, Any]]],
     include_provenance: bool,
     storage: Optional[Storage],
+    data_dir: str,
     max_tokens: int,
     now_seconds: float,
 ) -> tuple[dict[str, list[dict[str, Any]]], Optional[dict[str, Any]], int, bool]:
@@ -174,6 +183,7 @@ def _trim_to_budget(
         return build_provenance(
             items=_all_items(trimmed),
             storage=storage,
+            data_dir=data_dir,
             verify=False,
             now=now_seconds,
         )
@@ -222,12 +232,20 @@ def build_context(
     """
     now_seconds = float(now) if now is not None else time.time()
 
-    if storage is None:
-        storage = Storage(data_dir=data_dir)
+    # Phase 7c.3 (B2): Storage instantiation is delegated to downstream
+    # readers (search_memory, build_provenance). Both already perform the
+    # `if storage is None: storage = Storage(data_dir=data_dir)` fallback
+    # internally, so we propagate `data_dir` alongside `storage`. When
+    # `storage` is None, this may result in two Storage instances per call
+    # (one in search_memory, one in build_provenance) — but they share the
+    # same data_dir and remain functionally equivalent. This trade-off
+    # eliminates the runtime Storage import from context/builder.py and
+    # lets it leave KNOWN_READER_VIOLATIONS.
 
     recall_result = search_memory(
         query,
         storage=storage,
+        data_dir=data_dir,
         session_id=session_id,
         shard_ids=shard_ids,
         across_sessions=True,
@@ -242,6 +260,7 @@ def build_context(
         buckets,
         include_provenance=include_provenance,
         storage=storage,
+        data_dir=data_dir,
         max_tokens=max_tokens,
         now_seconds=now_seconds,
     )

@@ -303,6 +303,76 @@ def test_both_lists_are_disjoint():
     assert not overlap, f"Files in both sets: {overlap}"
 
 
+def test_lint_ignores_type_checking_imports(tmp_path):
+    """An import under `if TYPE_CHECKING:` is type-only and must not
+    be flagged as a Storage reader.
+
+    Per Phase 7c.3 (B3): the lint distinguishes between runtime usage
+    of Storage (which is what we want to track) and type-only imports
+    (which are never executed at runtime and don't constitute access).
+    """
+    _mkrepo(tmp_path)
+    target = tmp_path / "src/dsm/other/type_only_module.py"
+    target.write_text(
+        "from typing import TYPE_CHECKING\n"
+        "\n"
+        "if TYPE_CHECKING:\n"
+        "    from dsm.core.storage import Storage\n"
+        "\n"
+        "def my_reader(storage: 'Storage') -> None:\n"
+        "    pass\n",
+        encoding="utf-8",
+    )
+    result = _run_lint(tmp_path)
+    assert result.returncode == 0, (
+        f"TYPE_CHECKING import should not trigger violation. "
+        f"stderr: {result.stderr}"
+    )
+    assert "OK" in result.stdout
+
+
+def test_lint_ignores_typing_module_type_checking_imports(tmp_path):
+    """`if typing.TYPE_CHECKING:` (qualified form) is also type-only."""
+    _mkrepo(tmp_path)
+    target = tmp_path / "src/dsm/other/qualified_type_only.py"
+    target.write_text(
+        "import typing\n"
+        "\n"
+        "if typing.TYPE_CHECKING:\n"
+        "    from dsm.core.storage import Storage\n"
+        "\n"
+        "def my_reader(storage: 'Storage') -> None:\n"
+        "    pass\n",
+        encoding="utf-8",
+    )
+    result = _run_lint(tmp_path)
+    assert result.returncode == 0, (
+        f"`typing.TYPE_CHECKING` import should not trigger violation. "
+        f"stderr: {result.stderr}"
+    )
+    assert "OK" in result.stdout
+
+
+def test_lint_still_catches_runtime_storage_import(tmp_path):
+    """Sanity: a regular runtime import of Storage is still flagged."""
+    _mkrepo(tmp_path)
+    target = tmp_path / "src/dsm/other/runtime_reader.py"
+    target.write_text(
+        "from dsm.core.storage import Storage\n"
+        "\n"
+        "def runtime_reader(data_dir: str):\n"
+        "    storage = Storage(data_dir=data_dir)\n"
+        "    return storage\n",
+        encoding="utf-8",
+    )
+    result = _run_lint(tmp_path)
+    assert result.returncode == 1, (
+        "Runtime import of Storage must still be flagged. "
+        f"stdout: {result.stdout}"
+    )
+    assert "src/dsm/other/runtime_reader.py" in result.stderr
+
+
 def test_legitimate_writers_nonempty():
     """Sanity check: LEGITIMATE_WRITERS is populated (not accidentally cleared)."""
     import scripts.forbid_storage_access as lint_module
@@ -310,22 +380,22 @@ def test_legitimate_writers_nonempty():
         "LEGITIMATE_WRITERS suspiciously small — check the scan"
 
 
-def test_known_reader_violations_capped_at_3():
-    """Cap test: KNOWN_READER_VIOLATIONS must not exceed its current count of 3.
+def test_known_reader_violations_capped_at_2():
+    """Cap test: KNOWN_READER_VIOLATIONS must not exceed its current count of 2.
 
     Note on semantics: this is a CAP, not a strict monotonic decrease. If
-    a reader is removed (migration done, e.g. count 3 → 2) then a new
-    reader is accidentally introduced (count back to 3), this test still
+    a reader is removed (migration done, e.g. count 2 → 1) then a new
+    reader is accidentally introduced (count back to 2), this test still
     passes. True anti-growth would require an external baseline file.
     The cap catches the common case (net growth) and is simple enough to
     maintain without extra infra.
 
-    Count after V4-D cleanup (SessionIndex retired): 3.
-    Remaining: context/builder, provenance/builder, recall/search.
-    Should only shrink via successive Phase 7b migrations."""
+    Count after Phase 7c.3 (context/builder.py retired via TYPE_CHECKING + B2): 2.
+    Remaining: provenance/builder, recall/search.
+    Should only shrink via successive Phase 7b/7c migrations."""
     import scripts.forbid_storage_access as lint_module
-    assert len(lint_module.KNOWN_READER_VIOLATIONS) <= 3, \
-        "KNOWN_READER_VIOLATIONS has grown past 3 — new readers should use RR, not be added here"
+    assert len(lint_module.KNOWN_READER_VIOLATIONS) <= 2, \
+        "KNOWN_READER_VIOLATIONS has grown past 2 — new readers should use RR, not be added here"
 
 
 def test_listed_files_exist_in_repo():
