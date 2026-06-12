@@ -31,9 +31,27 @@ def create_app(config: Config | None = None) -> FastAPI:
     logging.basicConfig(level=getattr(logging, cfg.log_level.upper(), logging.INFO))
     log = logging.getLogger("agent_mesh")
 
+    # C2: never serve a production deployment unauthenticated. The mesh drives
+    # billable LLM calls and an append-only log; an unauthenticated public bind
+    # is a fail-closed condition.
+    if getattr(cfg, "app_env", "development") == "production" and not getattr(cfg, "api_key", None):
+        raise RuntimeError(
+            "Refusing to start: APP_ENV=production but AGENT_MESH_API_KEY is not set. "
+            "Set an API key (see server/auth.py) before exposing the mesh."
+        )
+    if not getattr(cfg, "api_key", None):
+        log.warning(
+            "agent-mesh starting WITHOUT api-key authentication "
+            "(dev mode). Set AGENT_MESH_API_KEY before any non-local deploy."
+        )
+
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        writer = DSMWriter(cfg.data_dir)
+        writer = DSMWriter(
+            cfg.data_dir,
+            max_event_bytes=getattr(cfg, "max_event_bytes", 0),
+            max_log_bytes=getattr(cfg, "max_log_bytes", 0),
+        )
         index_db = IndexDB(cfg.data_dir)
         await index_db.init()
         state = AppState(
