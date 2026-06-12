@@ -1,13 +1,15 @@
 """HTTP routes."""
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, Response
 from ulid import ULID
 
 from ..adapters.daryl_adapter.signing import compute_content_hash
+from .auth import require_api_key
 from ..dsm import factory as ev_factory
 from ..models.agent import Agent
 from ..models.task import Task
@@ -56,7 +58,7 @@ async def list_agents(request: Request):
     ]
 
 
-@router.get("/debug/tasks", tags=["diagnostic"])
+@router.get("/debug/tasks", tags=["diagnostic"], dependencies=[Depends(require_api_key)])
 async def debug_tasks(request: Request):
     state = _state(request)
     return [
@@ -73,7 +75,7 @@ async def debug_tasks(request: Request):
     ]
 
 
-@router.post("/agents/register", status_code=201)
+@router.post("/agents/register", status_code=201, dependencies=[Depends(require_api_key)])
 async def register_agent(body: RegisterAgentRequest, request: Request) -> RegisterAgentResponse:
     state = _state(request)
     if state.registry.get(body.agent_id) is not None:
@@ -115,7 +117,7 @@ async def register_agent(body: RegisterAgentRequest, request: Request) -> Regist
     )
 
 
-@router.post("/missions", status_code=201)
+@router.post("/missions", status_code=201, dependencies=[Depends(require_api_key)])
 async def create_mission(body: CreateMissionRequest, request: Request) -> CreateMissionResponse:
     state = _state(request)
     mission_id = str(ULID())
@@ -147,7 +149,7 @@ async def create_mission(body: CreateMissionRequest, request: Request) -> Create
     return CreateMissionResponse(mission_id=mission_id, event_id=event["event_id"], created_at=created_at)
 
 
-@router.post("/tasks", status_code=201)
+@router.post("/tasks", status_code=201, dependencies=[Depends(require_api_key)])
 async def create_task(body: CreateTaskRequest, request: Request) -> CreateTaskResponse:
     state = _state(request)
     if body.mission_id not in state.missions:
@@ -212,7 +214,7 @@ async def create_task(body: CreateTaskRequest, request: Request) -> CreateTaskRe
     )
 
 
-@router.get("/tasks/next")
+@router.get("/tasks/next", dependencies=[Depends(require_api_key)])
 async def get_next_task(
     request: Request,
     agent_id: str = Query(...),
@@ -236,7 +238,7 @@ async def get_next_task(
     )
 
 
-@router.post("/tasks/{task_id}/result", status_code=201)
+@router.post("/tasks/{task_id}/result", status_code=201, dependencies=[Depends(require_api_key)])
 async def submit_task_result(
     task_id: str, body: SubmitTaskResultRequest, request: Request
 ) -> SubmitTaskResultResponse:
@@ -248,6 +250,19 @@ async def submit_task_result(
     key_id = state.signing_adapter._key_ids.get(body.agent_id)
     if key_id is None:
         raise HTTPException(status_code=422, detail="agent_unknown")
+
+    # H6: a result may only be submitted by the agent the task is assigned to.
+    # A valid Ed25519 signature proves authorship of the payload, but on an
+    # open keyring it does not prove authorization for THIS task — without this
+    # check any registered agent could inject a "signature_verified" result for
+    # another agent's task.
+    if task.assigned_to is None or body.agent_id != task.assigned_to:
+        raise HTTPException(status_code=403, detail="agent_not_assignee")
+
+    # H7: bound the attacker-controllable content before it is hashed/persisted.
+    cfg = state.config
+    if len(json.dumps(body.content, default=str)) > cfg.max_result_content_bytes:
+        raise HTTPException(status_code=413, detail="result_content_too_large")
 
     content_hash = compute_content_hash(body.content)
     canonical_payload = {
@@ -326,7 +341,7 @@ async def submit_task_result(
 # ---------- Bridge ----------
 
 
-@router.get("/bridge/context", tags=["bridge"])
+@router.get("/bridge/context", tags=["bridge"], dependencies=[Depends(require_api_key)])
 async def get_context(
     request: Request,
     consumer_agent_id: str = Query(...),
