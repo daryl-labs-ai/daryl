@@ -9,8 +9,8 @@
 </p>
 
 <p align="center">
-<em>Cryptographic proof of every decision an agent makes.</em><br>
-<em>Not logs. Not traces. Evidence.</em>
+<em>Tamper-evident, hash-chained execution trails for AI agents.</em><br>
+<em>Designed for auditability — an experimental proof layer, not a legal guarantee.</em>
 </p>
 
 <p align="center">
@@ -22,8 +22,8 @@ Created by <strong>Mohamed Azizi</strong> · <a href="https://www.daryl.md">dary
 <img src="https://img.shields.io/badge/python-3.10%2B-blue">
 <img src="https://img.shields.io/badge/license-MIT-green">
 <img src="https://img.shields.io/badge/coverage-90%25-brightgreen">
-<img src="https://img.shields.io/badge/tests-1230%20passing-brightgreen">
-<img src="https://img.shields.io/badge/kernel-frozen%20%C2%B7%20stable-blueviolet">
+<img src="https://img.shields.io/badge/tests-1500%2B%20passing-brightgreen">
+<img src="https://img.shields.io/badge/kernel-stable-blueviolet">
 <img src="https://img.shields.io/badge/demo-60s%20tamper%20detection-black">
 </p>
 
@@ -41,7 +41,7 @@ Logs tell you *that* something ran. Observability dashboards tell you *how long*
 - Vector databases reconstruct context probabilistically — they don't preserve decisions.
 - Agent frameworks track tool calls, not verifiable proof of execution.
 
-When a regulator, an auditor, or your own CTO asks *"prove this agent did X and not Y"*, none of these tools can answer. You need a **notary**, not a logger.
+When a regulator, an auditor, or your own CTO asks *"prove this agent did X and not Y"*, none of these tools can answer. DSM is built to provide **tamper-evidence** for that history. It detects post-hoc modification, reordering, and truncation of a recorded trail; strong append-only guarantees against a fully privileged adversary additionally require external anchoring (see [Threat model & limitations](#threat-model--limitations)).
 
 ## The Solution
 
@@ -79,7 +79,7 @@ DSM does not replace your logs or your vector database. It sits alongside them a
 | Semantic search | - | Yes | - | - |
 | Real-time dashboards | Yes | - | Yes | - |
 
-DSM is not a replacement for observability. It is the layer that makes your agent's history **admissible as evidence**.
+DSM is not a replacement for observability. It is the layer designed to make your agent's history **auditable and tamper-evident**. (Legal admissibility depends on jurisdiction and process and is not something a library can assert on its own.)
 
 ## Architecture
 
@@ -108,7 +108,7 @@ SessionGraph              ← lifecycle: start, act, confirm, end
 │  E ShardLifecycle      — drain / seal / archive      │
 └──────────────────────────────────────────────────────┘
     ↓
-DSM Core (frozen since March 2026)
+DSM Core (stable; evolves only via the kernel process)
     ← append-only storage, hash chain, segments
 ```
 
@@ -219,9 +219,25 @@ prov = build_provenance(storage, source_shards=["sessions"],
 
 ## Core Guarantees
 
-- **Frozen kernel** — the core storage engine (`src/dsm/core/`) has been frozen since March 2026. Zero modifications since. Everything above it uses the public API.
+- **Stable kernel** — the core storage engine (`src/dsm/core/`) is change-controlled: it evolves only through the documented kernel process (see `CONTRIBUTING.md`), and most work happens in the layers above it via the public API. (A prior version of this README claimed the kernel was "frozen since March 2026 with zero modifications"; that was inaccurate and has been corrected — security fixes to the kernel are recorded in `docs/security/`.)
 - **Crash-safe writes** — the WAL (write-ahead log) pattern ensures that if a process crashes between `execute_action` and `confirm_action`, the incomplete intent is detectable on replay. No silent data loss.
-- **Deterministic verification** — `verify_shard` recomputes every hash from raw data in chronological order. The result is binary: the chain is intact, or it isn't.
+- **Deterministic verification** — `verify_shard` recomputes every hash from raw data in chronological order and compares the observed tip and entry count against the pinned tip. It detects in-place modification, reordering, and **trailing truncation** (deletion of the most recent entries). A shard with no integrity pin is reported as `UNPINNED` rather than a silent `OK`.
+
+## Threat model & limitations
+
+DSM is honest about what it does and does not prove.
+
+**What DSM detects (single-host integrity):**
+- In-place modification of any recorded field (hash mismatch).
+- Reordering or insertion of entries (broken `prev_hash` chain).
+- Trailing truncation of recent entries (observed tip/count vs the pinned tip).
+
+**What DSM does *not* prove on its own:**
+- That the original data was truthful, or that the agent's computation was correct (that needs TEEs).
+- Strong append-only against a **fully privileged adversary** who can rewrite both the shard *and* the local integrity pin in the same step. The pin raises the bar (truncation is detected, and `reconcile` refuses to shrink it without an explicit, audited `allow_truncation` flag), but a local-only pin shares the same trust boundary as the data. Defeating this requires **external anchoring** — signed checkpoints, independent witnesses, or on-chain anchoring — which is on the roadmap (see `docs/security/P0_REMEDIATION.md`).
+- Non-equivocation (an operator showing different histories to different verifiers) — also addressed by external witnessing.
+
+In short: DSM today is a strong **tamper-evidence** layer for honest-but-curious and partially-malicious settings, and an explicit work-in-progress toward cryptographically anchored, third-party-verifiable proofs.
 
 ## Advanced Capabilities
 
@@ -229,7 +245,7 @@ prov = build_provenance(storage, source_shards=["sessions"],
 
 *Module: `dsm.exchange`*
 
-When Agent B completes work for Agent A, it issues a **TaskReceipt** — a portable, self-contained proof of work. The receipt includes the entry hash, shard tip hash, and entry count at the time of issuance. A third party can verify the receipt against Agent B's shard without trusting either agent.
+When Agent B completes work for Agent A, it issues a **TaskReceipt** — a portable proof-of-work token. The receipt includes the entry hash, shard tip hash, and entry count at the time of issuance. A third party can check the receipt against Agent B's shard to confirm the entry exists and the hashes match. (Note: this binds the receipt to a shard *state*; it does not by itself prevent a later truncation of that shard — see [Threat model & limitations](#threat-model--limitations). Anchored, fully third-party-verifiable receipts are on the roadmap.)
 
 ```python
 from dsm.exchange import issue_receipt, verify_receipt, verify_receipt_against_storage
@@ -332,9 +348,9 @@ result = verify_seal(registry, "old_sessions")
 
 ## Why It Matters
 
-**EU AI Act (2026)**: High-risk AI systems must maintain logs that allow traceability of decisions. DSM provides a hash-chained, tamper-evident audit trail that satisfies this requirement by design.
+**EU AI Act (2026)**: High-risk AI systems must maintain logs that allow traceability of decisions. DSM provides a hash-chained, tamper-evident audit trail **designed to support** this kind of traceability requirement. It is a building block, not a certification: it does not by itself make a system compliant, and it is not a substitute for a legal compliance review.
 
-**Legal accountability**: When an agent makes a consequential decision — approving a loan, triaging a patient, executing a trade — the organization must be able to reconstruct exactly what happened. DSM makes the reconstruction verifiable, not just plausible.
+**Accountability**: When an agent makes a consequential decision — approving a loan, triaging a patient, executing a trade — the organization must be able to reconstruct what happened. DSM is designed to make that reconstruction verifiable rather than merely plausible, within the limits described below.
 
 **Internal governance**: For teams running multi-agent systems, DSM provides the infrastructure to answer "which agent did what, when, and was it authorized?" — with cryptographic proof, not log grep.
 
@@ -347,7 +363,7 @@ result = verify_seal(registry, "old_sessions")
 - Multi-agent governance — identity, sovereignty, orchestration, collective, lifecycle
 - Parallel shard lanes, cold storage, Read Relay query layer
 - CLI tools, Goose MCP integration
-- 1230 tests
+- 1500+ tests (DSM core + agent-mesh)
 
 **Private extensions (not in this repo)**:
 - Hosted verification API
@@ -370,7 +386,7 @@ Daryl aims to become the standard for verifiable agent execution — the equival
 git clone https://github.com/daryl-labs-ai/daryl
 cd daryl
 pip install -e .[dev]
-python -m pytest tests/ -v   # 1230 tests, 0 failures
+python -m pytest tests/ -v   # DSM core suite
 ```
 
 ## Contributing

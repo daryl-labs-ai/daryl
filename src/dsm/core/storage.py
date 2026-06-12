@@ -1,17 +1,21 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-DSM Kernel — Frozen Module
+DSM Kernel — Change-Controlled Module
 
-This file is part of the DSM storage kernel freeze (March 2026).
+This file is the DSM storage kernel. It is stable and change-controlled:
+modifications must follow the DSM kernel evolution process and should not be
+changed casually. It is NOT immutable — security fixes to the integrity
+guarantees are applied here when required and recorded under docs/security/.
 
-The kernel is considered stable and audited.
-
-Modifications must follow the DSM kernel evolution process
-and should not be changed casually.
+History note: an earlier header described this kernel as "frozen since March
+2026 with zero modifications". That was inaccurate. The P0 tamper-evidence
+remediation (truncation detection in verify + reconcile, caller-hash
+hardening) modifies this file deliberately; see docs/security/P0_REMEDIATION.md.
 
 See:
 docs/architecture/DSM_KERNEL_FREEZE_2026_03.md
+docs/security/P0_REMEDIATION.md
 """
 """
 DSM v2 - Storage Operations
