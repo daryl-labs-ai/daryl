@@ -517,16 +517,31 @@ class Storage:
                         count += 1
         return count
 
-    def reconcile_shard(self, shard_id: str) -> dict:
+    def reconcile_shard(self, shard_id: str, allow_truncation: bool = False) -> dict:
         """
         Reconcile segment content with integrity metadata after a crash.
 
-        Reads ONLY the last entry from the last segment (O(1) seek-from-end),
-        compares its hash with what last_hash.json reports.
-        If they differ, recalculates entry_count and updates metadata.
+        Reads the last entry from the last segment, compares its hash with what
+        last_hash.json reports. Divergence is classified by direction:
+
+          * FORWARD (segment has MORE entries than the pin): the legitimate
+            crash window (K-2) — an entry was written but the pin not yet
+            committed. The pin is advanced. This is safe by default.
+
+          * NON-FORWARD (segment has the SAME or FEWER entries than the pin,
+            but a different tip): the data lost or replaced committed entries —
+            i.e. trailing truncation or tail tampering. In the default (safe)
+            mode this is REFUSED: the pin is left untouched and a divergence
+            report is written. Rewriting the pin here would launder the
+            truncation (audit finding C1 / reconcile).
+
+        Recovery from a genuinely truncated state requires the explicit
+        ``allow_truncation=True`` flag, which quarantines the superseded pin,
+        logs an audit signal, and only then advances the pin.
 
         Returns:
-            dict: reconciled (bool), old_hash, new_hash, entry_count (if reconciled)
+            dict: reconciled (bool) and, depending on outcome, old_hash,
+            new_hash, entry_count, status, report_path, quarantine_path.
         """
         stored_hash = self._get_last_hash(shard_id)
         last_event = self._read_last_segment_tail(shard_id)
@@ -543,6 +558,68 @@ class Storage:
             }
 
         entry_count = self._count_shard_entries(shard_id)
+
+        # --- C1: classify the divergence direction before touching the pin ---
+        last_hash_file = self.integrity_dir / f"{shard_id}_last_hash.json"
+        pinned_count = None
+        if last_hash_file.exists():
+            try:
+                with open(last_hash_file, "r", encoding="utf-8") as f:
+                    pinned_count = json.load(f).get("entry_count")
+            except (OSError, json.JSONDecodeError):
+                pinned_count = None
+
+        # Non-forward = entries were lost or a committed tip was replaced.
+        is_non_forward = pinned_count is not None and entry_count <= pinned_count
+
+        if is_non_forward and not allow_truncation:
+            # Safe mode: refuse, write a divergence report, leave the pin intact.
+            ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+            report_path = self.integrity_dir / f"{shard_id}_divergence.{ts}.json"
+            report = {
+                "shard_id": shard_id,
+                "detected_at": datetime.now(timezone.utc).isoformat(),
+                "kind": "TRUNCATION" if entry_count < pinned_count else "TAIL_TAMPER",
+                "pinned_last_hash": stored_hash,
+                "observed_last_hash": last_hash_on_disk,
+                "pinned_entry_count": pinned_count,
+                "observed_entry_count": entry_count,
+                "action": "REFUSED — pin left untouched; "
+                          "rerun with allow_truncation=True to accept (audited)",
+            }
+            with open(report_path, "w", encoding="utf-8") as f:
+                json.dump(report, f, indent=2, ensure_ascii=False)
+                f.flush()
+                os.fsync(f.fileno())
+            _logger.warning(
+                "reconcile_shard(%r): NON-FORWARD divergence refused "
+                "(pinned_count=%s observed_count=%s); report=%s",
+                shard_id, pinned_count, entry_count, report_path.name,
+            )
+            return {
+                "reconciled": False,
+                "status": "DIVERGENCE_REFUSED",
+                "old_hash": stored_hash,
+                "disk_hash": last_hash_on_disk,
+                "expected_entry_count": pinned_count,
+                "observed_entry_count": entry_count,
+                "report_path": str(report_path),
+            }
+
+        if is_non_forward and allow_truncation:
+            # Recovery mode: preserve the superseded pin, then advance.
+            ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+            quarantine_path = self.integrity_dir / f"{shard_id}_last_hash.quarantine.{ts}.json"
+            if last_hash_file.exists():
+                quarantine_path.write_text(
+                    last_hash_file.read_text(encoding="utf-8"), encoding="utf-8"
+                )
+            _logger.warning(
+                "reconcile_shard(%r): TRUNCATION ACCEPTED under allow_truncation "
+                "(pinned_count=%s -> observed_count=%s); superseded pin quarantined at %s",
+                shard_id, pinned_count, entry_count, quarantine_path.name,
+            )
+
         first_ts = None
         segments = self.segment_manager.get_segment_files_ordered(shard_id)
         for seg in segments:
@@ -581,12 +658,16 @@ class Storage:
             os.fsync(f.fileno())
         os.replace(tmp_path, last_hash_file)
 
-        return {
+        result = {
             "reconciled": True,
             "old_hash": stored_hash,
             "new_hash": last_hash_on_disk,
             "entry_count": entry_count,
         }
+        if is_non_forward and allow_truncation:
+            result["status"] = "TRUNCATION_ACCEPTED"
+            result["quarantine_path"] = str(quarantine_path)
+        return result
 
     def reconcile_all(self) -> List[dict]:
         """Reconcile all known shards. Call at startup. O(1) detection per shard."""
