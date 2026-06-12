@@ -20,6 +20,7 @@ Append/Read/List with JSONL format (append-only) - Monolithic Mode
 
 import contextlib
 import json
+import logging
 import os
 from collections import deque
 from pathlib import Path
@@ -33,6 +34,8 @@ from .models import Entry, ShardMeta
 
 # Import du gestionnaire de segmentation
 from .shard_segments import ShardSegmentManager
+
+_logger = logging.getLogger("dsm.core.storage")
 
 
 def _build_canonical_entry(entry: Entry, prev_hash: Optional[str]) -> dict:
@@ -115,8 +118,19 @@ class Storage:
                 prev_hash = self._get_last_hash(shard)
                 entry.prev_hash = prev_hash
 
-                if not entry.hash:
-                    entry.hash = _compute_canonical_entry_hash(entry, prev_hash)
+                # H5 fix: the stored hash is ALWAYS the hash DSM computes over
+                # the canonical entry. A caller-supplied hash is never trusted —
+                # accepting it would let a producer commit an entry whose stored
+                # hash does not match its content. A non-empty mismatching hash
+                # is dropped and logged (audit signal), never persisted.
+                computed_hash = _compute_canonical_entry_hash(entry, prev_hash)
+                if entry.hash and entry.hash != computed_hash:
+                    _logger.warning(
+                        "append: ignoring caller-supplied hash for shard %r "
+                        "(supplied=%s… computed=%s…)",
+                        shard, str(entry.hash)[:12], computed_hash[:12],
+                    )
+                entry.hash = computed_hash
 
                 entry_dict = {
                     "id": entry.id,
