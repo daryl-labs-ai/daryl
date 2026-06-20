@@ -276,6 +276,24 @@ answer can be backed by local tamper-evident DSM entries; it does not prove
 truthfulness of the original facts or strong resistance to fully privileged
 local rewrite without future witness / anchoring.
 
+### Agent Memory CLI
+
+```bash
+dsm memory explain <decision_hash> --data-dir data
+dsm memory explain <decision_hash> --json
+```
+
+The command reconstructs a recorded decision's Agent Memory chain: decision,
+direct inference dependencies, supporting facts and hypotheses, DSM hashes, and
+verifiable `source_refs`. To verify the shard hash chain directly, run:
+
+```bash
+dsm verify --shard agent_memory --data-dir data
+```
+
+This is local tamper-evidence in local trust. It does not yet provide external
+witness, MMR/STH, or anchoring proof against a fully privileged local rewrite.
+
 ## Core Guarantees
 
 - **Stable kernel** — the core storage engine (`src/dsm/core/`) is change-controlled: it evolves only through the documented kernel process (see `CONTRIBUTING.md`), and most work happens in the layers above it via the public API. (A prior version of this README claimed the kernel was "frozen since March 2026 with zero modifications"; that was inaccurate and has been corrected — security fixes to the kernel are recorded in `docs/security/`.)

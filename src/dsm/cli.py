@@ -895,6 +895,122 @@ def _cmd_coverage(args) -> int:
     return 0 if result["status"] in ("FULLY_COVERED", "PARTIAL_COVERAGE") else 1
 
 
+def _memory_record_line(record: dict) -> str:
+    kind = record.get("kind", "entry")
+    statement = record.get("statement", "")
+    entry_hash = record.get("entry_hash", "")
+    confidence = record.get("confidence")
+    suffix = f" | confidence: {confidence}" if confidence is not None else ""
+    return f"  - {kind}: {statement}\n    hash: {entry_hash}{suffix}"
+
+
+def _memory_source_ref_lines(records: list[dict]) -> list[str]:
+    lines = []
+    seen = set()
+    for record in records:
+        owner = record.get("entry_hash", "")
+        for ref in record.get("source_refs", []) or []:
+            shard = ref.get("shard", "")
+            entry_hash = ref.get("entry_hash", "")
+            key = (owner, shard, entry_hash)
+            if key in seen:
+                continue
+            seen.add(key)
+            lines.append(f"  - from {record.get('kind', 'entry')} {owner}: shard={shard} entry_hash={entry_hash}")
+    return lines or ["  - none"]
+
+
+def _print_memory_explanation(explanation: dict, local_status: str = "UNKNOWN") -> None:
+    decision = explanation["decision"]
+    dependencies = explanation.get("dependencies", [])
+    supporting = explanation.get("supporting_entries", [])
+    missing = explanation.get("missing_dependencies", [])
+    verification = explanation.get("verification", {})
+    shard_id = verification.get("shard_id", "agent_memory")
+    hint = verification.get("hint", f"dsm verify --shard {shard_id}")
+
+    print("Decision:")
+    print(f"  statement: {decision.get('statement', '')}")
+    print(f"  hash: {decision.get('entry_hash', '')}")
+
+    print("")
+    print("Depends on:")
+    if dependencies:
+        for record in dependencies:
+            print(f"  - {record.get('kind', 'entry')}: {record.get('entry_hash', '')}")
+    else:
+        print("  - none")
+
+    print("")
+    print("Supporting chain:")
+    for title, kind in (("Fact(s)", "fact"), ("Hypothesis", "hypothesis"), ("Inference(s)", "inference")):
+        print(f"{title}:")
+        records = [record for record in supporting if record.get("kind") == kind]
+        if not records:
+            print("  - none")
+            continue
+        for record in records:
+            print(_memory_record_line(record))
+
+    print("")
+    print("Source refs:")
+    for line in _memory_source_ref_lines([decision, *supporting]):
+        print(line)
+
+    if missing:
+        print("")
+        print("Missing dependencies:")
+        for ref in missing:
+            print(f"  - {ref}")
+
+    print("")
+    print("DSM hashes:")
+    print(f"  decision: {decision.get('entry_hash', '')}")
+    for record in supporting:
+        print(f"  {record.get('kind', 'entry')}: {record.get('entry_hash', '')}")
+
+    print("")
+    print("Verification:")
+    print(f"  shard: {shard_id}")
+    print(f"  local_status: {local_status}")
+    print(f"  hint: {hint}")
+    print("  scope: local tamper-evident in local trust; not external anchoring")
+
+
+def _cmd_memory_explain(args) -> int:
+    """dsm memory explain <decision_hash>: explain an Agent Memory decision."""
+    from .memory import explain_decision
+
+    data_dir = getattr(args, "data_dir", None)
+    shard = getattr(args, "shard", None) or "agent_memory"
+    storage = _get_storage(data_dir)
+
+    try:
+        explanation = explain_decision(
+            args.decision_hash,
+            storage=storage,
+            shard=shard,
+            max_depth=getattr(args, "depth", 2),
+        )
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+    if getattr(args, "json", False):
+        print(json.dumps(explanation, indent=2, sort_keys=True))
+        return 0
+
+    try:
+        verify_result = dsm_verify.verify_shard(storage, shard)
+        status = verify_result.get("status", "UNKNOWN")
+        local_status = status.value if hasattr(status, "value") else str(status)
+    except Exception as e:
+        local_status = f"UNKNOWN ({e})"
+
+    _print_memory_explanation(explanation, local_status=local_status)
+    return 0
+
+
 def _cmd_tail(args) -> None:
     """dsm tail <shard_id>: continuously display new entries (like tail -f), poll Storage.read."""
     storage = _get_storage(args.data_dir)
@@ -1133,6 +1249,17 @@ def main_dsm() -> None:
     p_session_list.add_argument("--limit", type=int, default=20, help="Max sessions to list")
     p_session_list.add_argument("--shard", default="sessions", help="Shard ID")
     p_session_list.set_defaults(func=_cmd_session_list)
+
+    # dsm memory explain <decision_hash>
+    p_memory = subparsers.add_parser("memory", help="Agent Memory commands")
+    p_memory_subparsers = p_memory.add_subparsers(dest="memory_command", required=True)
+    p_memory_explain = p_memory_subparsers.add_parser("explain", help="Explain an Agent Memory decision")
+    p_memory_explain.add_argument("decision_hash", help="Decision entry hash or ID")
+    p_memory_explain.add_argument("--data-dir", default=None, help="DSM data directory (default: data)")
+    p_memory_explain.add_argument("--shard", default="agent_memory", help="Agent Memory shard (default: agent_memory)")
+    p_memory_explain.add_argument("--depth", type=int, default=2, help="Dependency traversal depth (default: 2)")
+    p_memory_explain.add_argument("--json", action="store_true", help="Print structured JSON")
+    p_memory_explain.set_defaults(func=_cmd_memory_explain)
 
     # dsm audit-report (P8)
     p_audit_report = subparsers.add_parser("audit-report", help="Generate audit report from external policy")
