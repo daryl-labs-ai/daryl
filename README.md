@@ -229,7 +229,9 @@ prov = build_provenance(storage, source_shards=["sessions"],
 
 Daryl also includes a minimal agent-facing memory layer above the DSM kernel.
 It records four reasoning item types only: `fact`, `hypothesis`, `inference`,
-and `decision`.
+and `decision`. `source_refs` are DSM references shaped as
+`{"shard": "...", "entry_hash": "..."}`; `depends_on` uses stable DSM entry
+hashes; optional `confidence` is a float from `0.0` to `1.0`.
 
 ```python
 from dsm.memory import (

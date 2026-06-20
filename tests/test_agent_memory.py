@@ -27,9 +27,12 @@ def _payload(entry):
 
 
 def test_record_fact_writes_fact_entry(storage):
+    source = record_fact("DSM can provide a verifiable source entry.", storage=storage)
+    source_ref = {"shard": source.shard, "entry_hash": source.hash}
+
     entry = record_fact(
         "The package imports dsm_primitives at runtime.",
-        source_refs=["src/dsm/core/storage.py"],
+        source_refs=[source_ref],
         confidence=0.9,
         session_id="s1",
         storage=storage,
@@ -37,9 +40,10 @@ def test_record_fact_writes_fact_entry(storage):
 
     payload = _payload(entry)
     assert payload["schema"] == MEMORY_SCHEMA_VERSION
+    assert payload["schema_version"] == MEMORY_SCHEMA_VERSION
     assert payload["kind"] == "fact"
     assert payload["statement"] == "The package imports dsm_primitives at runtime."
-    assert payload["source_refs"] == ["src/dsm/core/storage.py"]
+    assert payload["source_refs"] == [source_ref]
     assert payload["confidence"] == 0.9
     assert entry.metadata["event_type"] == "agent_memory"
     assert entry.metadata["memory_kind"] == "fact"
@@ -126,6 +130,32 @@ def test_explain_decision_returns_minimal_chain(storage):
 
     verdict = verify_shard(storage, DEFAULT_MEMORY_SHARD)
     assert verdict["status"] == VerifyStatus.OK
+
+
+def test_source_refs_must_be_verifiable_shard_entry_hash_refs(storage):
+    fact = record_fact("DSM source reference target.", storage=storage)
+    entry = record_hypothesis(
+        "Hypothesis backed by a DSM entry ref.",
+        source_refs=[{"shard": fact.shard, "entry_hash": fact.hash}],
+        storage=storage,
+    )
+    payload = _payload(entry)
+    assert payload["source_refs"] == [{"shard": fact.shard, "entry_hash": fact.hash}]
+
+    with pytest.raises(ValueError, match="source_refs entries must be dicts"):
+        record_fact("bad ref", source_refs=["free text"], storage=storage)
+    with pytest.raises(ValueError, match="entry_hash"):
+        record_fact("missing hash", source_refs=[{"shard": fact.shard}], storage=storage)
+
+
+def test_confidence_must_be_between_zero_and_one(storage):
+    assert _payload(record_fact("low", confidence=0.0, storage=storage))["confidence"] == 0.0
+    assert _payload(record_fact("high", confidence=1.0, storage=storage))["confidence"] == 1.0
+
+    with pytest.raises(ValueError, match="between 0.0 and 1.0"):
+        record_fact("too high", confidence=1.5, storage=storage)
+    with pytest.raises(ValueError, match="between 0.0 and 1.0"):
+        record_fact("too low", confidence=-0.1, storage=storage)
 
 
 def test_agent_memory_module_is_outside_kernel():

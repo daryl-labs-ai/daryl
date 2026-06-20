@@ -16,17 +16,18 @@ from ..core.models import Entry
 from ..core.storage import Storage
 from ..rr.relay import DSMReadRelay
 
-MEMORY_SCHEMA_VERSION = "dsm.agent_memory.v1"
+MEMORY_SCHEMA_VERSION = "agent_memory.v1"
 DEFAULT_MEMORY_SHARD = "agent_memory"
 _DEFAULT_SESSION_ID = "agent_memory"
 _DEFAULT_SOURCE = "agent_memory"
 _ALLOWED_KINDS = frozenset({"fact", "hypothesis", "inference", "decision"})
+SourceRef = dict[str, str]
 
 
 def record_fact(
     statement: str,
     *,
-    source_refs: Optional[list[Any]] = None,
+    source_refs: Optional[list[SourceRef]] = None,
     depends_on: Optional[list[str]] = None,
     confidence: Optional[float] = None,
     session_id: Optional[str] = None,
@@ -53,7 +54,7 @@ def record_fact(
 def record_hypothesis(
     statement: str,
     *,
-    source_refs: Optional[list[Any]] = None,
+    source_refs: Optional[list[SourceRef]] = None,
     depends_on: Optional[list[str]] = None,
     confidence: Optional[float] = None,
     session_id: Optional[str] = None,
@@ -81,7 +82,7 @@ def record_inference(
     statement: str,
     *,
     depends_on: Optional[list[str]] = None,
-    source_refs: Optional[list[Any]] = None,
+    source_refs: Optional[list[SourceRef]] = None,
     confidence: Optional[float] = None,
     session_id: Optional[str] = None,
     storage: Optional[Storage] = None,
@@ -108,7 +109,7 @@ def record_decision(
     statement: str,
     *,
     depends_on: Optional[list[str]] = None,
-    source_refs: Optional[list[Any]] = None,
+    source_refs: Optional[list[SourceRef]] = None,
     confidence: Optional[float] = None,
     session_id: Optional[str] = None,
     storage: Optional[Storage] = None,
@@ -204,7 +205,7 @@ def _record_memory(
     kind: str,
     statement: str,
     *,
-    source_refs: Optional[list[Any]],
+    source_refs: Optional[list[SourceRef]],
     depends_on: Optional[list[str]],
     confidence: Optional[float],
     session_id: Optional[str],
@@ -220,15 +221,17 @@ def _record_memory(
 
     storage = storage or Storage(data_dir=data_dir)
     timestamp = datetime.now(timezone.utc)
-    source_refs_list = list(source_refs or [])
+    source_refs_list = _normalize_source_refs(source_refs)
     depends_on_list = list(depends_on or [])
+    confidence_value = _normalize_confidence(confidence)
     content = {
         "schema": MEMORY_SCHEMA_VERSION,
+        "schema_version": MEMORY_SCHEMA_VERSION,
         "kind": kind,
         "statement": statement,
         "source_refs": source_refs_list,
         "depends_on": depends_on_list,
-        "confidence": confidence,
+        "confidence": confidence_value,
         "created_at": timestamp.isoformat(),
     }
     entry = Entry(
@@ -290,11 +293,12 @@ def _record_from_entry(entry: Entry) -> Optional[dict[str, Any]]:
         if hasattr(entry.timestamp, "isoformat")
         else str(entry.timestamp),
         "schema": payload["schema"],
+        "schema_version": payload.get("schema_version", payload["schema"]),
         "kind": kind,
         "statement": payload.get("statement", ""),
-        "source_refs": list(payload.get("source_refs") or []),
+        "source_refs": _normalize_source_refs(payload.get("source_refs") or []),
         "depends_on": list(payload.get("depends_on") or []),
-        "confidence": payload.get("confidence"),
+        "confidence": _normalize_confidence(payload.get("confidence")),
         "created_at": payload.get("created_at"),
         "verification": {
             "shard_id": entry.shard,
@@ -337,3 +341,29 @@ def _resolve_refs(
         else:
             resolved.append(record)
     return resolved
+
+
+def _normalize_source_refs(source_refs: Optional[list[SourceRef]]) -> list[SourceRef]:
+    refs: list[SourceRef] = []
+    for ref in source_refs or []:
+        if not isinstance(ref, dict):
+            raise ValueError("source_refs entries must be dicts with shard and entry_hash")
+        shard = ref.get("shard")
+        entry_hash = ref.get("entry_hash")
+        if not isinstance(shard, str) or not shard:
+            raise ValueError("source_refs entries require non-empty shard")
+        if not isinstance(entry_hash, str) or not entry_hash:
+            raise ValueError("source_refs entries require non-empty entry_hash")
+        refs.append({"shard": shard, "entry_hash": entry_hash})
+    return refs
+
+
+def _normalize_confidence(confidence: Optional[float]) -> Optional[float]:
+    if confidence is None:
+        return None
+    if not isinstance(confidence, (int, float)):
+        raise ValueError("confidence must be a float between 0.0 and 1.0")
+    value = float(confidence)
+    if not 0.0 <= value <= 1.0:
+        raise ValueError("confidence must be between 0.0 and 1.0")
+    return value
