@@ -78,6 +78,7 @@ LEGITIMATE_WRITERS: frozenset[str] = frozenset({
     "src/dsm/identity/identity_replay.py",
     "src/dsm/lanes.py",
     "src/dsm/lifecycle.py",
+    "src/dsm/memory/agent_memory.py",
     "src/dsm/orchestrator.py",
     "src/dsm/policy_adapter.py",
     # session_graph is a pure Storage WRITER (uses only storage.append()).

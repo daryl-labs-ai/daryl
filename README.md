@@ -225,6 +225,42 @@ prov = build_provenance(storage, source_shards=["sessions"],
 
 → Full walkthrough: [`demo_consumption_layer.py`](demo/demo_consumption_layer.py)
 
+## Agent Memory API V1
+
+Daryl also includes a minimal agent-facing memory layer above the DSM kernel.
+It records four reasoning item types only: `fact`, `hypothesis`, `inference`,
+and `decision`.
+
+```python
+from dsm.memory import (
+    explain_decision,
+    record_decision,
+    record_fact,
+    record_hypothesis,
+    record_inference,
+)
+
+fact = record_fact("DSM entries are hash-chained.", storage=storage)
+hypothesis = record_hypothesis("The answer needs a local-trust caveat.", storage=storage)
+inference = record_inference(
+    "The response should cite DSM verification limits.",
+    depends_on=[fact.hash, hypothesis.hash],
+    storage=storage,
+)
+decision = record_decision(
+    "Answer with a verifiable DSM-backed justification.",
+    depends_on=[inference.hash],
+    storage=storage,
+)
+
+explanation = explain_decision(decision.hash, storage=storage)
+```
+
+This layer is outside `src/dsm/core/`: it writes normal append-only DSM entries
+and can be verified with `dsm verify --shard agent_memory`. It is not a vector
+database and does not change DSM's hash or storage format. Strong proof against
+a fully privileged local rewrite still requires future witness / anchoring work.
+
 ## Core Guarantees
 
 - **Stable kernel** — the core storage engine (`src/dsm/core/`) is change-controlled: it evolves only through the documented kernel process (see `CONTRIBUTING.md`), and most work happens in the layers above it via the public API. (A prior version of this README claimed the kernel was "frozen since March 2026 with zero modifications"; that was inaccurate and has been corrected — security fixes to the kernel are recorded in `docs/security/`.)
