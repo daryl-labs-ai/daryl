@@ -263,6 +263,19 @@ and can be verified with `dsm verify --shard agent_memory`. It is not a vector
 database and does not change DSM's hash or storage format. Strong proof against
 a fully privileged local rewrite still requires future witness / anchoring work.
 
+### First justified answer demo
+
+```bash
+python demo/demo_agent_memory_justified_answer.py
+```
+
+The demo records a deterministic `fact -> hypothesis -> inference -> decision`
+chain for a simple operational question, then uses `explain_decision()` to
+reconstruct the justification and print DSM entry hashes. It proves that the
+answer can be backed by local tamper-evident DSM entries; it does not prove
+truthfulness of the original facts or strong resistance to fully privileged
+local rewrite without future witness / anchoring.
+
 ## Core Guarantees
 
 - **Stable kernel** — the core storage engine (`src/dsm/core/`) is change-controlled: it evolves only through the documented kernel process (see `CONTRIBUTING.md`), and most work happens in the layers above it via the public API. (A prior version of this README claimed the kernel was "frozen since March 2026 with zero modifications"; that was inaccurate and has been corrected — security fixes to the kernel are recorded in `docs/security/`.)
