@@ -220,7 +220,7 @@ const truncate = (s, n) => {
 
 const shortHash = s => {
   if (!s) return '—';
-  const stripped = String(s).replace('sha256:', '');
+  const stripped = String(s).replace(/^(sha256:|v1:)/, '');
   if (stripped.length <= 14) return stripped;
   return stripped.slice(0, 8) + '…' + stripped.slice(-4);
 };
@@ -397,7 +397,7 @@ function renderCompareColumn(s) {
   const contentText = typeof s.content === 'object' && s.content !== null
     ? JSON.stringify(s.content, null, 2)
     : String(s.content == null ? '' : s.content);
-  const chStripped = String(s.content_hash || '').replace('sha256:', '');
+  const chStripped = String(s.content_hash || '').replace(/^(sha256:|v1:)/, '');
   return `
     <div class="result-card">
       <div class="r-header">

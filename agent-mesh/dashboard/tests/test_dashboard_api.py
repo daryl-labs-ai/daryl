@@ -367,7 +367,7 @@ def test_mission_detail(client, sample_events):
     r1 = t1["results"][0]
     assert r1["agent_id"] == "agent_alpha"
     assert r1["signature_valid"] is True
-    assert r1["content_hash"].startswith("sha256:")
+    assert r1["content_hash"].startswith("v1:")
     assert r1["content"] == {"text": "Alpha's answer", "agent_id": "agent_alpha"}
 
     # task_002 — bogus signature
@@ -491,7 +491,7 @@ def test_reader_verify_signature_returns_none_for_unknown_agent(data_dir):
             "task_id": "t",
             "mission_id": "m",
             "contribution_id": "c",
-            "content_hash": "sha256:deadbeef",
+            "content_hash": "v1:deadbeef",
             "created_at": "2026-04-14T10:00:00Z",
         }
     )

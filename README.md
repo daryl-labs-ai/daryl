@@ -124,8 +124,16 @@ pip install daryl-dsm
 # From source
 git clone https://github.com/daryl-labs-ai/daryl
 cd daryl
-pip install -e .
+python3.12 -m venv .venv312
+source .venv312/bin/activate
+python -m pip install -U pip
+python -m pip install -e packages/dsm-primitives
+python -m pip install -e .
 ```
+
+`dsm-primitives` is a monorepo peer package used by both `daryl-dsm` and
+`agent-mesh`. Install it first when working from source; project metadata avoids
+a relative path dependency so the root package remains publishable.
 
 ### Record and verify agent actions
 
@@ -385,16 +393,25 @@ Daryl aims to become the standard for verifiable agent execution — the equival
 ```bash
 git clone https://github.com/daryl-labs-ai/daryl
 cd daryl
-pip install -e .[dev]
-python -m pytest tests/ -v   # DSM core suite
+python3.12 -m venv .venv312
+source .venv312/bin/activate
+python -m pip install -U pip
+python -m pip install -e packages/dsm-primitives
+python -m pip install -e ".[dev]"
+python -m pip install -e "agent-mesh[dev]"
+python -m pytest -q
 ```
 
 ## Contributing
 
 ```bash
 git clone https://github.com/daryl-labs-ai/daryl && cd daryl
-pip install -e .[dev]
-python -m pytest tests/
+python3.12 -m venv .venv312
+source .venv312/bin/activate
+python -m pip install -U pip
+python -m pip install -e packages/dsm-primitives
+python -m pip install -e ".[dev]"
+python -m pytest -q
 ```
 
 The kernel (`src/dsm/core/`) is frozen. Do not modify it without opening a design discussion. See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
