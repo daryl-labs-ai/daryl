@@ -1,8 +1,13 @@
 name: Publish to PyPI
 
 on:
-  release:
-    types: [published]
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Upload distributions to PyPI after build and dependency checks pass"
+        required: true
+        default: false
+        type: boolean
 
 jobs:
   publish-daryl-dsm:
@@ -24,7 +29,15 @@ jobs:
       - name: Build
         run: python -m build
 
+      - name: Check daryl-dsm runtime dependencies resolve from PyPI
+        run: |
+          python -m venv /tmp/daryl-dsm-install-check
+          /tmp/daryl-dsm-install-check/bin/python -m pip install --upgrade pip
+          /tmp/daryl-dsm-install-check/bin/python -m pip install dist/daryl_dsm-*.whl
+          /tmp/daryl-dsm-install-check/bin/python -c "import dsm; import dsm_primitives"
+
       - name: Publish to PyPI
+        if: ${{ inputs.publish }}
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           skip-existing: true
@@ -51,6 +64,7 @@ jobs:
         run: python -m build
 
       - name: Publish dsm-mcp to PyPI
+        if: ${{ inputs.publish }}
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: packages/dsm-mcp/dist/

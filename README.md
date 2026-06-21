@@ -132,8 +132,11 @@ python -m pip install -e .
 ```
 
 `dsm-primitives` is a monorepo peer package used by both `daryl-dsm` and
-`agent-mesh`. Install it first when working from source; project metadata avoids
-a relative path dependency so the root package remains publishable.
+`agent-mesh`. The root package declares it as a runtime dependency for honest
+wheel metadata. Install it first when working from source; project metadata
+uses a package dependency instead of a relative path dependency so the root
+package remains publishable. A public `daryl-dsm` PyPI release requires
+`dsm-primitives` to be resolvable from the package index first.
 
 ### Record and verify agent actions
 
