@@ -267,6 +267,7 @@ a fully privileged local rewrite still requires future witness / anchoring work.
 
 ```bash
 python demo/demo_agent_memory_justified_answer.py
+python demo/demo_agent_memory_justified_answer.py --data-dir /tmp/daryl-agent-memory-demo
 ```
 
 The demo records a deterministic `fact -> hypothesis -> inference -> decision`
@@ -275,6 +276,13 @@ reconstruct the justification and print DSM entry hashes. It proves that the
 answer can be backed by local tamper-evident DSM entries; it does not prove
 truthfulness of the original facts or strong resistance to fully privileged
 local rewrite without future witness / anchoring.
+
+The demo prints the `Data dir`, `Decision hash`, and a ready-to-run CLI command
+for rendering the same decision as a Markdown audit report:
+
+```bash
+python -m dsm memory explain <decision_hash> --data-dir /tmp/daryl-agent-memory-demo --shard agent_memory --markdown
+```
 
 ### Agent Memory CLI
 
