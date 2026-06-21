@@ -284,6 +284,25 @@ for rendering the same decision as a Markdown audit report:
 python -m dsm memory explain <decision_hash> --data-dir /tmp/daryl-agent-memory-demo --shard agent_memory --markdown
 ```
 
+### Omari lead-capture dogfood demo
+
+```bash
+python demo/demo_agent_memory_omari_lead_capture.py --data-dir /tmp/daryl-omari-agent-memory
+python -m dsm memory explain <decision_hash> --data-dir /tmp/daryl-omari-agent-memory --shard agent_memory --markdown
+```
+
+This demo records a deterministic Omari AI prioritization decision:
+fix a lead-capture interruption before adding new sales features. It writes two
+facts, one hypothesis, one inference, and one decision to the `agent_memory`
+shard, then prints the `Data dir`, `Decision hash`, and a ready-to-run
+Markdown explain command.
+
+Known V1 limitation: external evidence such as logs/tickets is not yet
+represented as first-class `source_refs` unless imported into DSM first.
+The demo therefore references only DSM entries already written by the scenario.
+The resulting report is local tamper-evident only; it does not prove factual
+truth, reasoning validity, or external anchoring.
+
 ### Agent Memory CLI
 
 ```bash
