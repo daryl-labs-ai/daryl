@@ -428,3 +428,28 @@ def test_listed_files_exist_in_repo():
         "file was deleted without updating the list:\n  "
         + "\n  ".join(missing)
     )
+
+
+def test_agent_memory_writer_exception_is_exact_file_only():
+    """Agent Memory may import Storage only via its explicit writer file."""
+    import scripts.forbid_storage_access as lint_module
+
+    memory_entries = sorted(
+        path
+        for path in lint_module.LEGITIMATE_WRITERS
+        if path.startswith("src/dsm/memory/") or "agent_memory" in path
+    )
+    assert memory_entries == ["src/dsm/memory/agent_memory.py"]
+    assert "src/dsm/memory/" not in lint_module.LEGITIMATE_WRITERS
+    assert "src/dsm/memory" not in lint_module.LEGITIMATE_WRITERS
+
+
+def test_agent_memory_writer_exception_is_append_only():
+    """The Agent Memory Storage exception is for append writes, not direct reads."""
+    repo_root = Path(__file__).resolve().parents[1]
+    source = (repo_root / "src/dsm/memory/agent_memory.py").read_text(encoding="utf-8")
+
+    assert "storage.append(" in source
+    assert "storage.read(" not in source
+    assert "Storage.read(" not in source
+    assert ".list_shards(" not in source

@@ -1,0 +1,77 @@
+{
+  "decision": {
+    "confidence": 0.8,
+    "depends_on": [
+      "v1:<hash>"
+    ],
+    "entry_hash": "v1:<hash>",
+    "kind": "decision",
+    "shard": "agent_memory",
+    "source_refs": [],
+    "statement": "Recommend replacing the board immediately."
+  },
+  "query": {
+    "decision_hash": "v1:<hash>",
+    "depth": 2,
+    "shard": "agent_memory"
+  },
+  "schema_version": "agent_memory.explain.v1",
+  "source_refs": [
+    {
+      "entry_hash": "v1:<hash>",
+      "owner_entry_hash": "v1:<hash>",
+      "owner_kind": "hypothesis",
+      "shard": "agent_memory"
+    }
+  ],
+  "status": "ok",
+  "supporting_chain": {
+    "facts": [
+      {
+        "confidence": 1.0,
+        "depends_on": [],
+        "entry_hash": "v1:<hash>",
+        "kind": "fact",
+        "shard": "agent_memory",
+        "source_refs": [],
+        "statement": "Downtime costs $50,000 per day."
+      }
+    ],
+    "hypotheses": [
+      {
+        "confidence": 0.7,
+        "depends_on": [],
+        "entry_hash": "v1:<hash>",
+        "kind": "hypothesis",
+        "shard": "agent_memory",
+        "source_refs": [
+          {
+            "entry_hash": "v1:<hash>",
+            "shard": "agent_memory"
+          }
+        ],
+        "statement": "The used board can be sourced and installed quickly."
+      }
+    ],
+    "inferences": [
+      {
+        "confidence": 0.85,
+        "depends_on": [
+          "v1:<hash>",
+          "v1:<hash>"
+        ],
+        "entry_hash": "v1:<hash>",
+        "kind": "inference",
+        "shard": "agent_memory",
+        "source_refs": [],
+        "statement": "Immediate replacement is economically justified if service resumes within one day."
+      }
+    ]
+  },
+  "verification": {
+    "hint": "dsm verify --shard agent_memory",
+    "local_status": "OK",
+    "scope": "local tamper-evident; not external anchoring"
+  },
+  "warnings": []
+}

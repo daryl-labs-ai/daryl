@@ -124,8 +124,16 @@ pip install daryl-dsm
 # From source
 git clone https://github.com/daryl-labs-ai/daryl
 cd daryl
-pip install -e .
+python3.12 -m venv .venv312
+source .venv312/bin/activate
+python -m pip install -U pip
+python -m pip install -e packages/dsm-primitives
+python -m pip install -e .
 ```
+
+`dsm-primitives` is a monorepo peer package used by both `daryl-dsm` and
+`agent-mesh`. Install it first when working from source; project metadata avoids
+a relative path dependency so the root package remains publishable.
 
 ### Record and verify agent actions
 
@@ -216,6 +224,158 @@ prov = build_provenance(storage, source_shards=["sessions"],
 ```
 
 → Full walkthrough: [`demo_consumption_layer.py`](demo/demo_consumption_layer.py)
+
+## Agent Memory API V1
+
+Daryl also includes a minimal agent-facing memory layer above the DSM kernel.
+It records four reasoning item types only: `fact`, `hypothesis`, `inference`,
+and `decision`. `source_refs` are DSM references shaped as
+`{"shard": "...", "entry_hash": "..."}`; `depends_on` uses stable DSM entry
+hashes; optional `confidence` is a float from `0.0` to `1.0`.
+
+```python
+from dsm.memory import (
+    explain_decision,
+    record_decision,
+    record_fact,
+    record_hypothesis,
+    record_inference,
+)
+
+fact = record_fact("DSM entries are hash-chained.", storage=storage)
+hypothesis = record_hypothesis("The answer needs a local-trust caveat.", storage=storage)
+inference = record_inference(
+    "The response should cite DSM verification limits.",
+    depends_on=[fact.hash, hypothesis.hash],
+    storage=storage,
+)
+decision = record_decision(
+    "Answer with a verifiable DSM-backed justification.",
+    depends_on=[inference.hash],
+    storage=storage,
+)
+
+explanation = explain_decision(decision.hash, storage=storage)
+```
+
+This layer is outside `src/dsm/core/`: it writes normal append-only DSM entries
+and can be verified with `dsm verify --shard agent_memory`. It is not a vector
+database and does not change DSM's hash or storage format. Strong proof against
+a fully privileged local rewrite still requires future witness / anchoring work.
+
+### First justified answer demo
+
+```bash
+python demo/demo_agent_memory_justified_answer.py
+```
+
+The demo records a deterministic `fact -> hypothesis -> inference -> decision`
+chain for a simple operational question, then uses `explain_decision()` to
+reconstruct the justification and print DSM entry hashes. It proves that the
+answer can be backed by local tamper-evident DSM entries; it does not prove
+truthfulness of the original facts or strong resistance to fully privileged
+local rewrite without future witness / anchoring.
+
+### Agent Memory CLI
+
+```bash
+dsm memory explain <decision_hash> --data-dir data
+dsm memory explain <decision_hash> --json
+```
+
+The command reconstructs a recorded decision's Agent Memory chain: decision,
+direct inference dependencies, supporting facts and hypotheses, DSM hashes, and
+verifiable `source_refs`. To verify the shard hash chain directly, run:
+
+```bash
+dsm verify --shard agent_memory --data-dir data
+```
+
+This is local tamper-evidence in local trust. It does not yet provide external
+witness, MMR/STH, or anchoring proof against a fully privileged local rewrite.
+
+### Agent Memory explain JSON contract
+
+```bash
+dsm memory explain <decision_hash> --data-dir data --json
+```
+
+The JSON output is versioned as `agent_memory.explain.v1` and is intended for
+agents, dashboards, comparison tools, and human audit reports. Minimal shape:
+
+```json
+{
+  "schema_version": "agent_memory.explain.v1",
+  "status": "ok",
+  "query": {
+    "decision_hash": "v1:...",
+    "shard": "agent_memory",
+    "depth": 2
+  },
+  "decision": {
+    "kind": "decision",
+    "statement": "...",
+    "entry_hash": "v1:...",
+    "depends_on": ["v1:..."]
+  },
+  "supporting_chain": {
+    "facts": [],
+    "hypotheses": [],
+    "inferences": []
+  },
+  "source_refs": [],
+  "verification": {
+    "local_status": "OK",
+    "hint": "dsm verify --shard agent_memory",
+    "scope": "local tamper-evident; not external anchoring"
+  },
+  "warnings": []
+}
+```
+
+Field semantics:
+
+- `verification.local_status` is a convenience local status reported by
+  `memory explain` for the target shard. It does not prove that facts are true,
+  does not prove that the agent reasoned correctly, and does not replace an
+  explicit `dsm verify` run.
+- `verification.hint` is the command or operator hint for local DSM
+  verification, for example `dsm verify --shard agent_memory`.
+- `verification.scope` states the trust boundary: local tamper-evident status,
+  not external anchoring.
+- `warnings` is a list of non-blocking resolution anomalies. Current warning
+  codes include `missing_dependency`, `depth_limit_reached`, and
+  `cycle_detected` when observable by the bounded traversal. Future resolvers
+  may also report unresolved `source_refs`.
+
+For `--json` failures, the command returns `status: "error"` with a stable
+`error.code` such as `decision_not_found`. The contract reports local
+tamper-evidence status and a verification hint; it does not claim external
+anchoring or third-party witness evidence.
+
+### Agent Memory Markdown audit report
+
+```bash
+dsm memory explain <decision_hash> --data-dir data --markdown
+```
+
+The Markdown report is a human audit view rendered from the
+`agent_memory.explain.v1` JSON contract. It shows the query, decision,
+supporting facts, hypotheses, inferences, source references, warnings,
+confidence self-estimates, and local verification fields.
+Each report includes a stable header with `Contract: agent_memory.explain.v1`
+and `Status: ok` or `Status: error`.
+
+The renderer is a pure JSON-to-Markdown transform: it does not read DSM storage,
+does not rebuild the chain, and does not enrich the report from disk. It is
+useful for reviews, audit notes, and handoff documents that need a stable,
+readable explanation of one recorded decision.
+
+The report is local tamper-evident only. It does not prove factual truth, does
+not prove reasoning validity, and does not replace `dsm verify`. Local
+tamper-evidence means the local shard can be checked for consistency inside
+the local trust boundary. External anchoring would require a separate witness,
+MMR/STH, or anchoring mechanism; this report does not provide that.
 
 ## Core Guarantees
 
@@ -385,16 +545,25 @@ Daryl aims to become the standard for verifiable agent execution — the equival
 ```bash
 git clone https://github.com/daryl-labs-ai/daryl
 cd daryl
-pip install -e .[dev]
-python -m pytest tests/ -v   # DSM core suite
+python3.12 -m venv .venv312
+source .venv312/bin/activate
+python -m pip install -U pip
+python -m pip install -e packages/dsm-primitives
+python -m pip install -e ".[dev]"
+python -m pip install -e "agent-mesh[dev]"
+python -m pytest -q
 ```
 
 ## Contributing
 
 ```bash
 git clone https://github.com/daryl-labs-ai/daryl && cd daryl
-pip install -e .[dev]
-python -m pytest tests/
+python3.12 -m venv .venv312
+source .venv312/bin/activate
+python -m pip install -U pip
+python -m pip install -e packages/dsm-primitives
+python -m pip install -e ".[dev]"
+python -m pytest -q
 ```
 
 The kernel (`src/dsm/core/`) is frozen. Do not modify it without opening a design discussion. See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
