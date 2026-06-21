@@ -13,6 +13,7 @@ from dsm.memory import (
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+FIXTURES_DIR = REPO_ROOT / "tests" / "fixtures"
 KERNEL_FILES = [
     "src/dsm/core/storage.py",
     "src/dsm/core/shard_segments.py",
@@ -23,6 +24,20 @@ KERNEL_FILES = [
     "src/dsm/core/KERNEL_VERSION",
 ]
 EXPLAIN_SCHEMA_VERSION = "agent_memory.explain.v1"
+
+
+def _load_fixture(name: str):
+    return json.loads((FIXTURES_DIR / name).read_text(encoding="utf-8"))
+
+
+def _normalize_contract(value):
+    if isinstance(value, dict):
+        return {key: _normalize_contract(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_normalize_contract(item) for item in value]
+    if isinstance(value, str) and value.startswith("v1:"):
+        return "v1:<hash>"
+    return value
 
 
 def _run_dsm(*args):
@@ -146,6 +161,7 @@ def test_agent_memory_explain_cli_outputs_json(tmp_path):
     assert payload["verification"]["scope"] == "local tamper-evident; not external anchoring"
     assert payload["verification"]["hint"] == "dsm verify --shard agent_memory"
     assert payload["warnings"] == []
+    assert _normalize_contract(payload) == _load_fixture("agent_memory_explain_v1_ok.json")
 
 
 def test_agent_memory_explain_unknown_decision_fails_cleanly(tmp_path):
@@ -174,20 +190,74 @@ def test_agent_memory_explain_unknown_decision_outputs_json_error(tmp_path):
 
     assert result.returncode == 1
     payload = json.loads(result.stdout)
-    assert payload == {
-        "schema_version": EXPLAIN_SCHEMA_VERSION,
-        "status": "error",
-        "error": {
-            "code": "decision_not_found",
-            "message": "Decision not found",
-        },
-        "query": {
-            "decision_hash": "v1:missing",
-            "shard": "agent_memory",
-            "depth": 2,
-        },
-    }
+    assert _normalize_contract(payload) == _load_fixture("agent_memory_explain_v1_error.json")
     assert "traceback" not in result.stderr.lower()
+
+
+def test_agent_memory_explain_json_warns_on_missing_dependency(tmp_path):
+    data_dir = tmp_path / "data"
+    storage = Storage(data_dir=str(data_dir))
+    missing_ref = "v1:missing-dependency"
+    decision = record_decision(
+        "Make a decision with one dangling dependency.",
+        depends_on=[missing_ref],
+        storage=storage,
+    )
+
+    result = _run_dsm(
+        "memory",
+        "explain",
+        decision.hash,
+        "--data-dir",
+        str(data_dir),
+        "--json",
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "ok"
+    assert payload["warnings"] == [
+        {
+            "code": "missing_dependency",
+            "message": f"Dependency not found: {missing_ref}",
+            "ref": missing_ref,
+        }
+    ]
+    assert payload["supporting_chain"]["facts"] == []
+    assert payload["supporting_chain"]["hypotheses"] == []
+    assert payload["supporting_chain"]["inferences"] == []
+
+
+def test_agent_memory_explain_json_warns_when_depth_limit_reached(tmp_path):
+    data_dir = tmp_path / "data"
+    chain = _build_memory_chain(data_dir)
+
+    result = _run_dsm(
+        "memory",
+        "explain",
+        chain["decision"].hash,
+        "--data-dir",
+        str(data_dir),
+        "--depth",
+        "1",
+        "--json",
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["query"]["depth"] == 1
+    assert payload["supporting_chain"]["facts"] == []
+    assert payload["supporting_chain"]["hypotheses"] == []
+    assert [entry["entry_hash"] for entry in payload["supporting_chain"]["inferences"]] == [
+        chain["inference"].hash
+    ]
+    assert payload["warnings"] == [
+        {
+            "code": "depth_limit_reached",
+            "message": "Traversal stopped at depth 1; some dependencies may remain unexplored.",
+            "entry_hashes": [chain["inference"].hash],
+        }
+    ]
 
 
 def test_agent_memory_cli_does_not_modify_kernel_files():

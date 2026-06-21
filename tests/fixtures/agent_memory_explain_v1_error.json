@@ -1,0 +1,13 @@
+{
+  "error": {
+    "code": "decision_not_found",
+    "message": "Decision not found"
+  },
+  "query": {
+    "decision_hash": "v1:<hash>",
+    "depth": 2,
+    "shard": "agent_memory"
+  },
+  "schema_version": "agent_memory.explain.v1",
+  "status": "error"
+}

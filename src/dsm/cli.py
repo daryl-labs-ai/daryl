@@ -959,8 +959,8 @@ def _memory_local_status(storage, shard: str) -> str:
         return f"UNKNOWN ({e})"
 
 
-def _memory_explain_warnings(explanation: dict) -> list[dict]:
-    return [
+def _memory_explain_warnings(explanation: dict, query: dict) -> list[dict]:
+    warnings = [
         {
             "code": "missing_dependency",
             "message": f"Dependency not found: {ref}",
@@ -968,6 +968,34 @@ def _memory_explain_warnings(explanation: dict) -> list[dict]:
         }
         for ref in explanation.get("missing_dependencies", [])
     ]
+
+    decision_hash = explanation["decision"].get("entry_hash")
+    supporting = explanation.get("supporting_entries", [])
+    dependency_map = explanation.get("dependency_map", {})
+    if any(record.get("entry_hash") == decision_hash for record in supporting):
+        warnings.append(
+            {
+                "code": "cycle_detected",
+                "message": "Decision appears in its supporting chain; traversal stopped at requested depth.",
+                "entry_hash": decision_hash,
+            }
+        )
+
+    unexplored = [
+        record.get("entry_hash")
+        for record in supporting
+        if record.get("depends_on") and record.get("entry_hash") not in dependency_map
+    ]
+    if unexplored:
+        warnings.append(
+            {
+                "code": "depth_limit_reached",
+                "message": f"Traversal stopped at depth {query['depth']}; some dependencies may remain unexplored.",
+                "entry_hashes": unexplored,
+            }
+        )
+
+    return warnings
 
 
 def _memory_explain_contract(explanation: dict, query: dict, local_status: str) -> dict:
@@ -1004,7 +1032,7 @@ def _memory_explain_contract(explanation: dict, query: dict, local_status: str) 
             "hint": hint,
             "scope": _AGENT_MEMORY_EXPLAIN_SCOPE,
         },
-        "warnings": _memory_explain_warnings(explanation),
+        "warnings": _memory_explain_warnings(explanation, query),
     }
 
 

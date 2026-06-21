@@ -333,10 +333,25 @@ agents, dashboards, comparison tools, and human audit reports. Minimal shape:
 }
 ```
 
+Field semantics:
+
+- `verification.local_status` is a convenience local status reported by
+  `memory explain` for the target shard. It does not prove that facts are true,
+  does not prove that the agent reasoned correctly, and does not replace an
+  explicit `dsm verify` run.
+- `verification.hint` is the command or operator hint for local DSM
+  verification, for example `dsm verify --shard agent_memory`.
+- `verification.scope` states the trust boundary: local tamper-evident status,
+  not external anchoring.
+- `warnings` is a list of non-blocking resolution anomalies. Current warning
+  codes include `missing_dependency`, `depth_limit_reached`, and
+  `cycle_detected` when observable by the bounded traversal. Future resolvers
+  may also report unresolved `source_refs`.
+
 For `--json` failures, the command returns `status: "error"` with a stable
 `error.code` such as `decision_not_found`. The contract reports local
 tamper-evidence status and a verification hint; it does not claim external
-anchoring or third-party witness proof.
+anchoring or third-party witness evidence.
 
 ## Core Guarantees
 
