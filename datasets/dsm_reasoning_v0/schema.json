@@ -8,16 +8,69 @@
     "label",
     "question",
     "context",
-    "facts",
-    "hypotheses",
-    "inferences",
-    "decision",
-    "expected_json",
-    "expected_markdown",
     "known_limits",
     "notes"
   ],
+  "allOf": [
+    {
+      "if": {
+        "anyOf": [
+          {
+            "not": {
+              "required": [
+                "record_kind"
+              ]
+            }
+          },
+          {
+            "required": [
+              "record_kind"
+            ],
+            "properties": {
+              "record_kind": {
+                "const": "reasoning_trace"
+              }
+            }
+          }
+        ]
+      },
+      "then": {
+        "required": [
+          "facts",
+          "hypotheses",
+          "inferences",
+          "decision",
+          "expected_json",
+          "expected_markdown"
+        ]
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "record_kind"
+        ],
+        "properties": {
+          "record_kind": {
+            "const": "skill_memory_entry"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "entry_type",
+          "epistemic_status"
+        ]
+      }
+    }
+  ],
   "properties": {
+    "record_kind": {
+      "enum": [
+        "reasoning_trace",
+        "skill_memory_entry"
+      ]
+    },
     "id": {
       "type": "string",
       "pattern": "^[a-z0-9][a-z0-9-]*$"
@@ -35,6 +88,78 @@
     "context": {
       "type": "string",
       "minLength": 1
+    },
+    "user_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "domain": {
+      "type": "string",
+      "minLength": 1
+    },
+    "skill_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "user_skill_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "task_type": {
+      "type": "string",
+      "minLength": 1
+    },
+    "required_checks": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "entry_type": {
+      "enum": [
+        "case",
+        "rule",
+        "correction",
+        "preference",
+        "outcome",
+        "evidence_ref"
+      ]
+    },
+    "epistemic_status": {
+      "enum": [
+        "observed",
+        "hypothesis",
+        "candidate_rule",
+        "validated_rule"
+      ]
+    },
+    "rule_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "feedback": {
+      "type": "object"
+    },
+    "outcome": {
+      "type": [
+        "object",
+        "string",
+        "null"
+      ]
+    },
+    "correction": {
+      "type": [
+        "object",
+        "string",
+        "null"
+      ]
+    },
+    "skill_rule_updates": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
     },
     "facts": {
       "type": "array",
