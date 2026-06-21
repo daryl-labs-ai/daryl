@@ -22,6 +22,7 @@ KERNEL_FILES = [
     "src/dsm/core/security.py",
     "src/dsm/core/KERNEL_VERSION",
 ]
+EXPLAIN_SCHEMA_VERSION = "agent_memory.explain.v1"
 
 
 def _run_dsm(*args):
@@ -117,13 +118,34 @@ def test_agent_memory_explain_cli_outputs_json(tmp_path):
 
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)
+    assert payload["schema_version"] == EXPLAIN_SCHEMA_VERSION
+    assert payload["status"] == "ok"
+    assert payload["query"]["decision_hash"] == chain["decision"].hash
+    assert payload["query"]["shard"] == "agent_memory"
+    assert payload["query"]["depth"] == 2
     assert payload["decision"]["entry_hash"] == chain["decision"].hash
     assert payload["decision"]["kind"] == "decision"
-    assert payload["dependencies"][0]["entry_hash"] == chain["inference"].hash
-    supporting_hashes = {entry["entry_hash"] for entry in payload["supporting_entries"]}
-    assert {chain["fact"].hash, chain["hypothesis"].hash, chain["inference"].hash}.issubset(
-        supporting_hashes
-    )
+    assert payload["decision"]["depends_on"] == [chain["inference"].hash]
+
+    supporting_chain = payload["supporting_chain"]
+    assert [entry["entry_hash"] for entry in supporting_chain["facts"]] == [chain["fact"].hash]
+    assert [entry["entry_hash"] for entry in supporting_chain["hypotheses"]] == [
+        chain["hypothesis"].hash
+    ]
+    assert [entry["entry_hash"] for entry in supporting_chain["inferences"]] == [
+        chain["inference"].hash
+    ]
+    assert payload["source_refs"] == [
+        {
+            "owner_kind": "hypothesis",
+            "owner_entry_hash": chain["hypothesis"].hash,
+            "shard": "agent_memory",
+            "entry_hash": chain["fact"].hash,
+        }
+    ]
+    assert payload["verification"]["scope"] == "local tamper-evident; not external anchoring"
+    assert payload["verification"]["hint"] == "dsm verify --shard agent_memory"
+    assert payload["warnings"] == []
 
 
 def test_agent_memory_explain_unknown_decision_fails_cleanly(tmp_path):
@@ -137,6 +159,34 @@ def test_agent_memory_explain_unknown_decision_fails_cleanly(tmp_path):
 
     assert result.returncode == 1
     assert "decision not found" in result.stderr.lower()
+    assert "traceback" not in result.stderr.lower()
+
+
+def test_agent_memory_explain_unknown_decision_outputs_json_error(tmp_path):
+    result = _run_dsm(
+        "memory",
+        "explain",
+        "v1:missing",
+        "--data-dir",
+        str(tmp_path / "data"),
+        "--json",
+    )
+
+    assert result.returncode == 1
+    payload = json.loads(result.stdout)
+    assert payload == {
+        "schema_version": EXPLAIN_SCHEMA_VERSION,
+        "status": "error",
+        "error": {
+            "code": "decision_not_found",
+            "message": "Decision not found",
+        },
+        "query": {
+            "decision_hash": "v1:missing",
+            "shard": "agent_memory",
+            "depth": 2,
+        },
+    }
     assert "traceback" not in result.stderr.lower()
 
 

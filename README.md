@@ -294,6 +294,50 @@ dsm verify --shard agent_memory --data-dir data
 This is local tamper-evidence in local trust. It does not yet provide external
 witness, MMR/STH, or anchoring proof against a fully privileged local rewrite.
 
+### Agent Memory explain JSON contract
+
+```bash
+dsm memory explain <decision_hash> --data-dir data --json
+```
+
+The JSON output is versioned as `agent_memory.explain.v1` and is intended for
+agents, dashboards, comparison tools, and human audit reports. Minimal shape:
+
+```json
+{
+  "schema_version": "agent_memory.explain.v1",
+  "status": "ok",
+  "query": {
+    "decision_hash": "v1:...",
+    "shard": "agent_memory",
+    "depth": 2
+  },
+  "decision": {
+    "kind": "decision",
+    "statement": "...",
+    "entry_hash": "v1:...",
+    "depends_on": ["v1:..."]
+  },
+  "supporting_chain": {
+    "facts": [],
+    "hypotheses": [],
+    "inferences": []
+  },
+  "source_refs": [],
+  "verification": {
+    "local_status": "OK",
+    "hint": "dsm verify --shard agent_memory",
+    "scope": "local tamper-evident; not external anchoring"
+  },
+  "warnings": []
+}
+```
+
+For `--json` failures, the command returns `status: "error"` with a stable
+`error.code` such as `decision_not_found`. The contract reports local
+tamper-evidence status and a verification hint; it does not claim external
+anchoring or third-party witness proof.
+
 ## Core Guarantees
 
 - **Stable kernel** — the core storage engine (`src/dsm/core/`) is change-controlled: it evolves only through the documented kernel process (see `CONTRIBUTING.md`), and most work happens in the layers above it via the public API. (A prior version of this README claimed the kernel was "frozen since March 2026 with zero modifications"; that was inaccurate and has been corrected — security fixes to the kernel are recorded in `docs/security/`.)

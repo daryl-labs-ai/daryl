@@ -40,6 +40,8 @@ _ANSI_CYAN = "\033[36m"
 _ANSI_YELLOW = "\033[33m"
 _ANSI_RED = "\033[31m"
 _ANSI_RESET = "\033[0m"
+_AGENT_MEMORY_EXPLAIN_SCHEMA_VERSION = "agent_memory.explain.v1"
+_AGENT_MEMORY_EXPLAIN_SCOPE = "local tamper-evident; not external anchoring"
 
 
 def _entry_event_type(e: Entry) -> str:
@@ -904,6 +906,131 @@ def _memory_record_line(record: dict) -> str:
     return f"  - {kind}: {statement}\n    hash: {entry_hash}{suffix}"
 
 
+def _memory_contract_record(record: dict) -> dict:
+    return {
+        "kind": record.get("kind"),
+        "statement": record.get("statement", ""),
+        "entry_hash": record.get("entry_hash", ""),
+        "shard": record.get("shard", ""),
+        "depends_on": list(record.get("depends_on") or []),
+        "source_refs": list(record.get("source_refs") or []),
+        "confidence": record.get("confidence"),
+    }
+
+
+def _memory_contract_source_refs(records: list[dict]) -> list[dict]:
+    refs = []
+    seen = set()
+    for record in records:
+        owner_hash = record.get("entry_hash", "")
+        owner_kind = record.get("kind", "entry")
+        for ref in record.get("source_refs", []) or []:
+            shard = ref.get("shard", "")
+            entry_hash = ref.get("entry_hash", "")
+            key = (owner_hash, owner_kind, shard, entry_hash)
+            if key in seen:
+                continue
+            seen.add(key)
+            refs.append(
+                {
+                    "owner_kind": owner_kind,
+                    "owner_entry_hash": owner_hash,
+                    "shard": shard,
+                    "entry_hash": entry_hash,
+                }
+            )
+    return refs
+
+
+def _memory_explain_query(args, shard: str, depth: int) -> dict:
+    return {
+        "decision_hash": args.decision_hash,
+        "shard": shard,
+        "depth": depth,
+    }
+
+
+def _memory_local_status(storage, shard: str) -> str:
+    try:
+        verify_result = dsm_verify.verify_shard(storage, shard)
+        status = verify_result.get("status", "UNKNOWN")
+        return status.value if hasattr(status, "value") else str(status)
+    except Exception as e:
+        return f"UNKNOWN ({e})"
+
+
+def _memory_explain_warnings(explanation: dict) -> list[dict]:
+    return [
+        {
+            "code": "missing_dependency",
+            "message": f"Dependency not found: {ref}",
+            "ref": ref,
+        }
+        for ref in explanation.get("missing_dependencies", [])
+    ]
+
+
+def _memory_explain_contract(explanation: dict, query: dict, local_status: str) -> dict:
+    decision = explanation["decision"]
+    supporting = explanation.get("supporting_entries", [])
+    verification = explanation.get("verification", {})
+    hint = verification.get("hint", f"dsm verify --shard {query['shard']}")
+
+    return {
+        "schema_version": _AGENT_MEMORY_EXPLAIN_SCHEMA_VERSION,
+        "query": query,
+        "status": "ok",
+        "decision": _memory_contract_record(decision),
+        "supporting_chain": {
+            "facts": [
+                _memory_contract_record(record)
+                for record in supporting
+                if record.get("kind") == "fact"
+            ],
+            "hypotheses": [
+                _memory_contract_record(record)
+                for record in supporting
+                if record.get("kind") == "hypothesis"
+            ],
+            "inferences": [
+                _memory_contract_record(record)
+                for record in supporting
+                if record.get("kind") == "inference"
+            ],
+        },
+        "source_refs": _memory_contract_source_refs([decision, *supporting]),
+        "verification": {
+            "local_status": local_status,
+            "hint": hint,
+            "scope": _AGENT_MEMORY_EXPLAIN_SCOPE,
+        },
+        "warnings": _memory_explain_warnings(explanation),
+    }
+
+
+def _memory_explain_error_contract(error: ValueError, query: dict) -> dict:
+    message = str(error)
+    if message.startswith("decision not found"):
+        code = "decision_not_found"
+        public_message = "Decision not found"
+    elif "expected 'decision'" in message:
+        code = "not_a_decision"
+        public_message = "Entry is not a decision"
+    else:
+        code = "explain_failed"
+        public_message = message or "Agent Memory explain failed"
+
+    return {
+        "schema_version": _AGENT_MEMORY_EXPLAIN_SCHEMA_VERSION,
+        "status": "error",
+        "error": {
+            "code": code,
+            "message": public_message,
+        },
+        "query": query,
+    }
+
+
 def _memory_source_ref_lines(records: list[dict]) -> list[str]:
     lines = []
     seen = set()
@@ -974,7 +1101,7 @@ def _print_memory_explanation(explanation: dict, local_status: str = "UNKNOWN") 
     print(f"  shard: {shard_id}")
     print(f"  local_status: {local_status}")
     print(f"  hint: {hint}")
-    print("  scope: local tamper-evident in local trust; not external anchoring")
+    print(f"  scope: {_AGENT_MEMORY_EXPLAIN_SCOPE}")
 
 
 def _cmd_memory_explain(args) -> int:
@@ -983,6 +1110,8 @@ def _cmd_memory_explain(args) -> int:
 
     data_dir = getattr(args, "data_dir", None)
     shard = getattr(args, "shard", None) or "agent_memory"
+    depth = getattr(args, "depth", 2)
+    query = _memory_explain_query(args, shard, depth)
     storage = _get_storage(data_dir)
 
     try:
@@ -990,24 +1119,26 @@ def _cmd_memory_explain(args) -> int:
             args.decision_hash,
             storage=storage,
             shard=shard,
-            max_depth=getattr(args, "depth", 2),
+            max_depth=depth,
         )
     except ValueError as e:
+        if getattr(args, "json", False):
+            error_contract = _memory_explain_error_contract(e, query)
+            print(json.dumps(error_contract, indent=2, sort_keys=True))
+            return 1
         print(f"Error: {e}", file=sys.stderr)
         return 1
 
     if getattr(args, "json", False):
-        print(json.dumps(explanation, indent=2, sort_keys=True))
+        contract = _memory_explain_contract(
+            explanation,
+            query,
+            local_status=_memory_local_status(storage, shard),
+        )
+        print(json.dumps(contract, indent=2, sort_keys=True))
         return 0
 
-    try:
-        verify_result = dsm_verify.verify_shard(storage, shard)
-        status = verify_result.get("status", "UNKNOWN")
-        local_status = status.value if hasattr(status, "value") else str(status)
-    except Exception as e:
-        local_status = f"UNKNOWN ({e})"
-
-    _print_memory_explanation(explanation, local_status=local_status)
+    _print_memory_explanation(explanation, local_status=_memory_local_status(storage, shard))
     return 0
 
 
