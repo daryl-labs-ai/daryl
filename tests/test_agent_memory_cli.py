@@ -335,9 +335,10 @@ def test_agent_memory_explain_unknown_decision_outputs_markdown_error(tmp_path):
     assert result.returncode == 1
     output = result.stdout
     assert "# Agent Memory Audit Report" in output
+    assert "- Status: `error`" in output
     assert "## Error" in output
-    assert "- Code: `decision_not_found`" in output
-    assert "- Message: Decision not found" in output
+    assert "- Error code: `decision_not_found`" in output
+    assert "- Error message: Decision not found" in output
     assert "traceback" not in output.lower()
     assert "traceback" not in result.stderr.lower()
 

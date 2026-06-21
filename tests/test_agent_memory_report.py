@@ -28,6 +28,8 @@ def test_render_explain_markdown_matches_golden_report():
 
     assert rendered == expected
     assert "# Agent Memory Audit Report" in rendered
+    assert "- Contract: `agent_memory.explain.v1`" in rendered
+    assert "- Status: `ok`" in rendered
     assert "## Trust Model / Limitations" in rendered
     assert "local tamper-evident" in rendered
     assert "does not prove factual truth" in rendered
@@ -46,9 +48,11 @@ def test_render_explain_markdown_error_report_is_clean():
     rendered = render_explain_markdown(payload)
 
     assert "# Agent Memory Audit Report" in rendered
+    assert "- Contract: `agent_memory.explain.v1`" in rendered
+    assert "- Status: `error`" in rendered
     assert "## Error" in rendered
-    assert "- Code: `decision_not_found`" in rendered
-    assert "- Message: Decision not found" in rendered
+    assert "- Error code: `decision_not_found`" in rendered
+    assert "- Error message: Decision not found" in rendered
     assert "traceback" not in rendered.lower()
     assert "## Trust Model / Limitations" in rendered
     assert all(wording not in rendered.lower() for wording in DANGEROUS_WORDING)
@@ -92,6 +96,20 @@ def test_render_explain_markdown_confidence_none_is_explicit():
 
     assert "- Confidence: not provided" in rendered
     assert "0.8 (self-estimate, not calibrated)" not in rendered
+
+
+def test_render_explain_markdown_treats_statement_as_untrusted_text():
+    payload = _load_json_fixture("agent_memory_explain_v1_ok.json")
+    payload = copy.deepcopy(payload)
+    hostile_statement = "<script>alert(1)</script> **bold**"
+    payload["decision"]["statement"] = hostile_statement
+
+    rendered = render_explain_markdown(payload)
+
+    assert "- Statement: <script>" not in rendered
+    assert "```text" in rendered
+    assert f"  {hostile_statement}" in rendered
+    assert "  ```\n- Entry hash:" in rendered
 
 
 def test_render_explain_markdown_rejects_wrong_schema():

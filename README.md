@@ -363,6 +363,8 @@ The Markdown report is a human audit view rendered from the
 `agent_memory.explain.v1` JSON contract. It shows the query, decision,
 supporting facts, hypotheses, inferences, source references, warnings,
 confidence self-estimates, and local verification fields.
+Each report includes a stable header with `Contract: agent_memory.explain.v1`
+and `Status: ok` or `Status: error`.
 
 The renderer is a pure JSON-to-Markdown transform: it does not read DSM storage,
 does not rebuild the chain, and does not enrich the report from disk. It is

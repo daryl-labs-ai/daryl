@@ -1,12 +1,18 @@
 # Agent Memory Audit Report
 
+- Contract: `agent_memory.explain.v1`
+- Status: `ok`
+
 ## Query
 - Decision hash: `v1:<hash>`
 - Shard: `agent_memory`
 - Depth: 2
 
 ## Decision
-- Statement: Recommend replacing the board immediately.
+- Statement:
+  ```text
+  Recommend replacing the board immediately.
+  ```
 - Entry hash: `v1:<hash>`
 - Confidence: 0.8 (self-estimate, not calibrated)
 - Depends on:
@@ -16,7 +22,10 @@
 
 ## Supporting Facts
 ### Fact 1
-- Statement: Downtime costs $50,000 per day.
+- Statement:
+  ```text
+  Downtime costs $50,000 per day.
+  ```
 - Entry hash: `v1:<hash>`
 - Confidence: 1.0 (self-estimate, not calibrated)
 - Depends on:
@@ -26,7 +35,10 @@
 
 ## Hypotheses
 ### Hypothesis 1
-- Statement: The used board can be sourced and installed quickly.
+- Statement:
+  ```text
+  The used board can be sourced and installed quickly.
+  ```
 - Entry hash: `v1:<hash>`
 - Confidence: 0.7 (self-estimate, not calibrated)
 - Depends on:
@@ -36,7 +48,10 @@
 
 ## Inferences
 ### Inference 1
-- Statement: Immediate replacement is economically justified if service resumes within one day.
+- Statement:
+  ```text
+  Immediate replacement is economically justified if service resumes within one day.
+  ```
 - Entry hash: `v1:<hash>`
 - Confidence: 0.85 (self-estimate, not calibrated)
 - Depends on:

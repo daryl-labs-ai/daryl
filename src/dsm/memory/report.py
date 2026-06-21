@@ -54,9 +54,7 @@ def _render_ok_report(report: dict[str, Any]) -> list[str]:
     warnings = report.get("warnings") or []
     verification = report.get("verification") or {}
 
-    lines = [
-        "# Agent Memory Audit Report",
-        "",
+    lines = _render_header("ok") + [
         "## Query",
         f"- Decision hash: {_code(query.get('decision_hash'))}",
         f"- Shard: {_code(query.get('shard'))}",
@@ -107,22 +105,30 @@ def _render_error_report(report: dict[str, Any]) -> list[str]:
     query = report.get("query") or {}
     error = report.get("error") or {}
 
-    lines = [
-        "# Agent Memory Audit Report",
-        "",
+    lines = _render_header("error") + [
         "## Query",
         f"- Decision hash: {_code(query.get('decision_hash'))}",
         f"- Shard: {_code(query.get('shard'))}",
         f"- Depth: {query.get('depth', 'not provided')}",
         "",
         "## Error",
-        f"- Code: {_code(error.get('code'))}",
-        f"- Message: {error.get('message', 'not provided')}",
+        f"- Error code: {_code(error.get('code'))}",
+        f"- Error message: {error.get('message', 'not provided')}",
         "",
         "## Trust Model / Limitations",
     ]
     lines.extend(f"- {item}" for item in TRUST_LIMITATIONS)
     return lines
+
+
+def _render_header(status: str) -> list[str]:
+    return [
+        "# Agent Memory Audit Report",
+        "",
+        f"- Contract: {_code(EXPLAIN_REPORT_SCHEMA_VERSION)}",
+        f"- Status: {_code(status)}",
+        "",
+    ]
 
 
 def _render_record_list(records: list[dict[str, Any]], label: str) -> list[str]:
@@ -139,11 +145,11 @@ def _render_record_list(records: list[dict[str, Any]], label: str) -> list[str]:
 
 
 def _render_record_details(record: dict[str, Any]) -> list[str]:
-    lines = [
-        f"- Statement: {record.get('statement', 'not provided')}",
+    lines = _render_statement(record.get("statement"))
+    lines.extend([
         f"- Entry hash: {_code(record.get('entry_hash'))}",
         f"- Confidence: {_format_confidence(record.get('confidence'))}",
-    ]
+    ])
 
     depends_on = record.get("depends_on") or []
     lines.append("- Depends on:")
@@ -161,6 +167,15 @@ def _render_record_details(record: dict[str, Any]) -> list[str]:
             )
     else:
         lines.append("  - none")
+    return lines
+
+
+def _render_statement(statement: Any) -> list[str]:
+    text = "not provided" if statement is None or statement == "" else str(statement)
+    escaped = text.replace("```", "`\u200b``")
+    lines = ["- Statement:", "  ```text"]
+    lines.extend(f"  {line}" for line in escaped.splitlines() or [""])
+    lines.append("  ```")
     return lines
 
 
