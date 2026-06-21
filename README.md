@@ -353,6 +353,28 @@ For `--json` failures, the command returns `status: "error"` with a stable
 tamper-evidence status and a verification hint; it does not claim external
 anchoring or third-party witness evidence.
 
+### Agent Memory Markdown audit report
+
+```bash
+dsm memory explain <decision_hash> --data-dir data --markdown
+```
+
+The Markdown report is a human audit view rendered from the
+`agent_memory.explain.v1` JSON contract. It shows the query, decision,
+supporting facts, hypotheses, inferences, source references, warnings,
+confidence self-estimates, and local verification fields.
+
+The renderer is a pure JSON-to-Markdown transform: it does not read DSM storage,
+does not rebuild the chain, and does not enrich the report from disk. It is
+useful for reviews, audit notes, and handoff documents that need a stable,
+readable explanation of one recorded decision.
+
+The report is local tamper-evident only. It does not prove factual truth, does
+not prove reasoning validity, and does not replace `dsm verify`. Local
+tamper-evidence means the local shard can be checked for consistency inside
+the local trust boundary. External anchoring would require a separate witness,
+MMR/STH, or anchoring mechanism; this report does not provide that.
+
 ## Core Guarantees
 
 - **Stable kernel** — the core storage engine (`src/dsm/core/`) is change-controlled: it evolves only through the documented kernel process (see `CONTRIBUTING.md`), and most work happens in the layers above it via the public API. (A prior version of this README claimed the kernel was "frozen since March 2026 with zero modifications"; that was inaccurate and has been corrected — security fixes to the kernel are recorded in `docs/security/`.)

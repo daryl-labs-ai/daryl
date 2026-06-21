@@ -1136,6 +1136,10 @@ def _cmd_memory_explain(args) -> int:
     """dsm memory explain <decision_hash>: explain an Agent Memory decision."""
     from .memory import explain_decision
 
+    if getattr(args, "json", False) and getattr(args, "markdown", False):
+        print("Error: use either --json or --markdown, not both", file=sys.stderr)
+        return 1
+
     data_dir = getattr(args, "data_dir", None)
     shard = getattr(args, "shard", None) or "agent_memory"
     depth = getattr(args, "depth", 2)
@@ -1154,16 +1158,28 @@ def _cmd_memory_explain(args) -> int:
             error_contract = _memory_explain_error_contract(e, query)
             print(json.dumps(error_contract, indent=2, sort_keys=True))
             return 1
+        if getattr(args, "markdown", False):
+            from .memory import render_explain_markdown
+
+            error_contract = _memory_explain_error_contract(e, query)
+            print(render_explain_markdown(error_contract), end="")
+            return 1
         print(f"Error: {e}", file=sys.stderr)
         return 1
 
-    if getattr(args, "json", False):
+    if getattr(args, "json", False) or getattr(args, "markdown", False):
         contract = _memory_explain_contract(
             explanation,
             query,
             local_status=_memory_local_status(storage, shard),
         )
+    if getattr(args, "json", False):
         print(json.dumps(contract, indent=2, sort_keys=True))
+        return 0
+    if getattr(args, "markdown", False):
+        from .memory import render_explain_markdown
+
+        print(render_explain_markdown(contract), end="")
         return 0
 
     _print_memory_explanation(explanation, local_status=_memory_local_status(storage, shard))
@@ -1418,6 +1434,7 @@ def main_dsm() -> None:
     p_memory_explain.add_argument("--shard", default="agent_memory", help="Agent Memory shard (default: agent_memory)")
     p_memory_explain.add_argument("--depth", type=int, default=2, help="Dependency traversal depth (default: 2)")
     p_memory_explain.add_argument("--json", action="store_true", help="Print structured JSON")
+    p_memory_explain.add_argument("--markdown", action="store_true", help="Print a Markdown audit report")
     p_memory_explain.set_defaults(func=_cmd_memory_explain)
 
     # dsm audit-report (P8)

@@ -12,6 +12,7 @@ from .agent_memory import (
     record_hypothesis,
     record_inference,
 )
+from .report import render_explain_markdown
 
 __all__ = [
     "DEFAULT_MEMORY_SHARD",
@@ -21,4 +22,5 @@ __all__ = [
     "record_inference",
     "record_decision",
     "explain_decision",
+    "render_explain_markdown",
 ]

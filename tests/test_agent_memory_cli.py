@@ -24,6 +24,7 @@ KERNEL_FILES = [
     "src/dsm/core/KERNEL_VERSION",
 ]
 EXPLAIN_SCHEMA_VERSION = "agent_memory.explain.v1"
+DANGEROUS_MARKDOWN_WORDING = ("tamper-proof", "verified truth", "proof of truth")
 
 
 def _load_fixture(name: str):
@@ -89,6 +90,7 @@ def test_agent_memory_explain_command_exists():
     assert result.returncode == 0
     assert "decision_hash" in result.stdout
     assert "--json" in result.stdout
+    assert "--markdown" in result.stdout
 
 
 def test_agent_memory_explain_cli_outputs_justification_chain(tmp_path):
@@ -258,6 +260,86 @@ def test_agent_memory_explain_json_warns_when_depth_limit_reached(tmp_path):
             "entry_hashes": [chain["inference"].hash],
         }
     ]
+
+
+def test_agent_memory_explain_cli_outputs_markdown(tmp_path):
+    data_dir = tmp_path / "data"
+    chain = _build_memory_chain(data_dir)
+
+    result = _run_dsm(
+        "memory",
+        "explain",
+        chain["decision"].hash,
+        "--data-dir",
+        str(data_dir),
+        "--markdown",
+    )
+
+    assert result.returncode == 0, result.stderr
+    output = result.stdout
+    lower_output = output.lower()
+    assert "# Agent Memory Audit Report" in output
+    assert "## Decision" in output
+    assert "## Supporting Facts" in output
+    assert "## Hypotheses" in output
+    assert "## Inferences" in output
+    assert "## Trust Model / Limitations" in output
+    assert chain["decision"].hash in output
+    assert chain["fact"].hash in output
+    assert chain["hypothesis"].hash in output
+    assert chain["inference"].hash in output
+    assert "self-estimate, not calibrated" in output
+    assert "local tamper-evident" in output
+    assert "does not prove factual truth" in output
+    assert "not external anchoring" in output
+    assert all(wording not in lower_output for wording in DANGEROUS_MARKDOWN_WORDING)
+
+
+def test_agent_memory_explain_markdown_displays_warnings(tmp_path):
+    data_dir = tmp_path / "data"
+    storage = Storage(data_dir=str(data_dir))
+    missing_ref = "v1:missing-dependency"
+    decision = record_decision(
+        "Make a decision with one dangling dependency.",
+        depends_on=[missing_ref],
+        storage=storage,
+    )
+
+    result = _run_dsm(
+        "memory",
+        "explain",
+        decision.hash,
+        "--data-dir",
+        str(data_dir),
+        "--markdown",
+    )
+
+    assert result.returncode == 0, result.stderr
+    output = result.stdout
+    assert "## Warnings" in output
+    assert "`missing_dependency`" in output
+    assert f"Dependency not found: {missing_ref}" in output
+    assert missing_ref in output
+
+
+def test_agent_memory_explain_unknown_decision_outputs_markdown_error(tmp_path):
+    result = _run_dsm(
+        "memory",
+        "explain",
+        "v1:missing",
+        "--data-dir",
+        str(tmp_path / "data"),
+        "--markdown",
+    )
+
+    assert result.returncode == 1
+    output = result.stdout
+    assert "# Agent Memory Audit Report" in output
+    assert "## Error" in output
+    assert "- Code: `decision_not_found`" in output
+    assert "- Message: Decision not found" in output
+    assert "traceback" not in output.lower()
+    assert "traceback" not in result.stderr.lower()
 
 
 def test_agent_memory_cli_does_not_modify_kernel_files():
