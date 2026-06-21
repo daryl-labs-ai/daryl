@@ -1,0 +1,192 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DSM Reasoning Dataset v0 record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "label",
+    "question",
+    "context",
+    "facts",
+    "hypotheses",
+    "inferences",
+    "decision",
+    "expected_json",
+    "expected_markdown",
+    "known_limits",
+    "notes"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "label": {
+      "enum": [
+        "positive",
+        "negative"
+      ]
+    },
+    "question": {
+      "type": "string",
+      "minLength": 1
+    },
+    "context": {
+      "type": "string",
+      "minLength": 1
+    },
+    "facts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/fact"
+      }
+    },
+    "hypotheses": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/reasoning_node"
+      }
+    },
+    "inferences": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/reasoning_node"
+      }
+    },
+    "decision": {
+      "$ref": "#/$defs/reasoning_node"
+    },
+    "expected_json": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "status"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "agent_memory.explain.v1"
+        },
+        "status": {
+          "enum": [
+            "ok",
+            "error"
+          ]
+        }
+      }
+    },
+    "expected_markdown": {
+      "type": "string",
+      "minLength": 1
+    },
+    "known_limits": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "notes": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "$defs": {
+    "source_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "shard",
+        "entry_hash"
+      ],
+      "properties": {
+        "shard": {
+          "type": "string",
+          "minLength": 1
+        },
+        "entry_hash": {
+          "type": "string",
+          "pattern": "^<HASH_[A-Z0-9_]+>$"
+        }
+      }
+    },
+    "fact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "statement",
+        "evidence_type",
+        "source_refs",
+        "confidence"
+      ],
+      "properties": {
+        "statement": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence_type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/source_ref"
+          }
+        },
+        "confidence": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "reasoning_node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "statement",
+        "confidence"
+      ],
+      "properties": {
+        "statement": {
+          "type": "string",
+          "minLength": 1
+        },
+        "depends_on": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^<HASH_[A-Z0-9_]+>$"
+          }
+        },
+        "source_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/source_ref"
+          }
+        },
+        "confidence": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    }
+  }
+}
