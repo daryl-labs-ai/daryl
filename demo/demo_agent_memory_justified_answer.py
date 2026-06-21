@@ -7,12 +7,14 @@ entries. No LLM, no network, no external dependencies.
 
 Usage:
     python demo/demo_agent_memory_justified_answer.py
+    python demo/demo_agent_memory_justified_answer.py --data-dir /tmp/daryl-agent-memory-demo
 """
 
 from __future__ import annotations
 
+import argparse
 import json
-import shutil
+import shlex
 import tempfile
 from pathlib import Path
 from typing import Any, Optional
@@ -106,15 +108,25 @@ def render_demo(result: dict[str, Any]) -> str:
     dependency_map = explanation["dependency_map"]
     status = verification["status"]
     status_str = status.value if hasattr(status, "value") else str(status)
+    data_dir = result["data_dir"]
+    decision_hash = decision["entry_hash"]
+    cli_command = (
+        f"python -m dsm memory explain {shlex.quote(decision_hash)} "
+        f"--data-dir {shlex.quote(data_dir)} --shard {DEFAULT_MEMORY_SHARD} --markdown"
+    )
 
     lines = [
         "Daryl Agent Memory — First Justified Answer Demo",
         "",
         f"Question: {result['question']}",
+        f"Data dir: {data_dir}",
+        f"Decision hash: {decision_hash}",
+        "CLI markdown command:",
+        f"  {cli_command}",
         "",
         "Decision:",
         f"  {decision['statement']}",
-        f"  hash: {decision['entry_hash']}",
+        f"  hash: {decision_hash}",
         "",
         "Supporting facts:",
     ]
@@ -171,10 +183,9 @@ def run_demo(
     print_output: bool = True,
 ) -> dict[str, Any]:
     """Run the demo and optionally print the rendered output."""
-    owned_tmp: Optional[str] = None
     if data_dir is None:
-        owned_tmp = tempfile.mkdtemp(prefix="daryl_agent_memory_demo_")
-        data_dir = str(Path(owned_tmp) / "memory")
+        tmp_dir = tempfile.mkdtemp(prefix="daryl_agent_memory_demo_")
+        data_dir = str(Path(tmp_dir) / "memory")
 
     storage = Storage(data_dir=data_dir)
     result = build_justified_answer(storage)
@@ -184,14 +195,18 @@ def run_demo(
     if print_output:
         print(result["output"])
 
-    if owned_tmp is not None:
-        shutil.rmtree(owned_tmp, ignore_errors=True)
-
     return result
 
 
 def main() -> None:
-    run_demo()
+    parser = argparse.ArgumentParser(description="Run the deterministic Agent Memory justified-answer demo.")
+    parser.add_argument(
+        "--data-dir",
+        default=None,
+        help="DSM data directory to write; defaults to a preserved temporary directory.",
+    )
+    args = parser.parse_args()
+    run_demo(data_dir=args.data_dir)
 
 
 if __name__ == "__main__":
