@@ -122,6 +122,51 @@ def test_direct_script_execution_from_repo_root_without_pythonpath(tmp_path):
     assert data_dir.exists()
 
 
+def test_live_smoke_dry_run_contract_prints_clarified_context_without_provider(
+    monkeypatch,
+    tmp_path,
+    capsys,
+):
+    def fail_urlopen(*_args, **_kwargs):
+        raise AssertionError("dry-run contract preview must not perform network I/O")
+
+    monkeypatch.setattr(live_smoke.urllib.request, "urlopen", fail_urlopen)
+
+    code = live_smoke.main(
+        [
+            "--dry-run-contract",
+            "--data-dir",
+            str(tmp_path / "dry-run-ignored"),
+        ],
+        env={"CI": "true"},
+    )
+
+    captured = capsys.readouterr()
+    assert code == 0
+    assert live_smoke.DRY_RUN_CONTRACT_NOTICE in captured.out
+    assert not (tmp_path / "dry-run-ignored").exists()
+
+    preview = json.loads(captured.out.split("\n", 1)[1])
+    context = preview["context"]
+    contract = context["provider_contract"]
+    output = captured.out
+
+    assert "required_checks" in output
+    assert "claimed_checks" in output
+    assert "coverage" in output
+    assert "limitations" in output
+    assert "Do not assign status" in output
+    assert "Do not claim truth" in output
+    assert "DSM validates" in output
+    assert contract["expected_structured_output"]["claimed_checks"] == list(
+        LIVE_SMOKE_REQUIRED_CHECKS
+    )
+    assert {
+        item["check_id"]
+        for item in contract["expected_structured_output"]["claimed_check_coverage"]
+    } == set(LIVE_SMOKE_REQUIRED_CHECKS)
+
+
 def test_live_smoke_mock_can_use_rejected_scenario_without_truth_claim(
     tmp_path,
     capsys,
@@ -216,6 +261,22 @@ def test_alternative_phrasing_conformant_provider_reaches_accepted_for_audit(tmp
     assert "explicitly covers" not in proposal["structured_output"]["narrative"]
     assert set(proposal["structured_output"]["claimed_checks"]) == set(
         result["context"]["required_checks"]
+    )
+
+
+def test_echo_only_required_check_labels_are_not_accepted(tmp_path):
+    result = _run_conformant_provider(
+        tmp_path,
+        EchoOnlyProposalProvider(),
+        data_dir_name="echo-only",
+    )
+
+    validation = result["validation"]
+
+    assert validation["status"] != ACCEPTED_FOR_AUDIT
+    assert validation["status"] == REJECTED_BY_VALIDATOR
+    assert "required_check_not_covered_or_surfaced" in _issue_codes(
+        validation["rejections"]
     )
 
 
@@ -401,7 +462,44 @@ class ConformantProposalProvider:
             "narrative": narrative,
             "model_proposed_action": action,
             "claimed_checks": required_checks,
+            "claimed_check_coverage": [
+                {
+                    "check_id": check,
+                    "coverage": (
+                        f"The proposal accounts for {check} without claiming "
+                        "truth or final business authority."
+                    ),
+                }
+                for check in required_checks
+            ],
             "limitations": self.limitations,
+            "candidate_rule_handling": "Candidate rules remain candidate.",
+            "truth_claim": False,
+        }
+        return {
+            "raw_output": json.dumps(structured, sort_keys=True),
+            "structured_output": structured,
+        }
+
+
+class EchoOnlyProposalProvider:
+    metadata = {
+        "kind": "mock",
+        "name": "echo-only",
+        "model": "echo-only-no-network",
+        "base_url_label": "local-test",
+    }
+
+    def propose(self, context: dict) -> dict:
+        structured = {
+            "proposal": "Echo-only proposal.",
+            "claimed_checks": [
+                {"check_id": check, "coverage": check}
+                for check in context["required_checks"]
+            ],
+            "limitations": ["Labels were echoed without substantive coverage."],
+            "candidate_rule_handling": "Candidate rules remain candidate.",
+            "truth_claim": False,
         }
         return {
             "raw_output": json.dumps(structured, sort_keys=True),

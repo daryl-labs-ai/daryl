@@ -13,6 +13,7 @@ from .gateway import (
     wrap_agent_proposal,
 )
 from .providers import MockProposalProvider, OpenAICompatibleProvider, ProposalProvider
+from .providers import build_openai_compatible_payload
 
 __all__ = [
     "ACCEPTED_FOR_AUDIT",
@@ -24,6 +25,7 @@ __all__ = [
     "accepted_proposals_for_retrieval",
     "agent_proposal_to_memory_records",
     "build_agent_proposal_context",
+    "build_openai_compatible_payload",
     "persist_agent_proposal_to_memory",
     "run_agent_proposal_gateway",
     "validate_agent_proposal",

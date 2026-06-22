@@ -26,6 +26,7 @@ from .providers import MockProposalProvider, ProposalProvider
 
 AGENT_PROPOSAL_SCHEMA_VERSION = "agent_proposal.v0"
 AGENT_PROPOSAL_CONTEXT_VERSION = "agent_proposal_context.v0"
+AGENT_PROPOSAL_PROVIDER_CONTRACT_VERSION = "agent_proposal_provider_contract.v0"
 ACCEPTED_FOR_AUDIT = "accepted_for_audit"
 NEEDS_HUMAN_REVIEW = "needs_human_review"
 REJECTED_BY_VALIDATOR = "rejected_by_validator"
@@ -71,6 +72,7 @@ def build_agent_proposal_context(
     }
     skill_trace = compose_skill_trace(retrieved, query)
     trace_score = score_skill_trace(skill_trace, retrieved)
+    required_checks = [item["check"] for item in skill_trace["required_checks"]]
     context_without_hash = {
         "context_type": AGENT_PROPOSAL_CONTEXT_VERSION,
         "scope": {
@@ -79,24 +81,74 @@ def build_agent_proposal_context(
             "skill_id": skill_id,
         },
         "task_type": task_type,
-        "required_checks": [item["check"] for item in skill_trace["required_checks"]],
+        "required_checks": required_checks,
         "validated_rules": skill_trace["applied_validated_rules"],
         "candidate_rules": skill_trace["candidate_rules"],
         "supporting_cases": skill_trace["supporting_cases"],
         "trust_model": skill_trace["trust_model"],
         "skill_trace": skill_trace,
         "skill_trace_score": trace_score,
+        "provider_contract": _provider_contract(required_checks),
         "instructions": {
             "role": "untrusted_proposer",
+            "must_surface_each_required_check": True,
+            "must_fill_claimed_checks_for_substantive_coverage": True,
+            "must_include_coverage_written_by_model": True,
+            "must_include_limitations": True,
             "must_not_claim_truth": True,
             "must_not_promote_candidate_rules": True,
             "must_not_assign_validation_status": True,
+            "dsm_validates_form_and_honesty_not_truth": True,
             "proposal_not_decision": True,
         },
     }
     return {
         **context_without_hash,
         "input_context_hash": hash_canonical(context_without_hash),
+    }
+
+
+def _provider_contract(required_checks: list[str]) -> dict[str, Any]:
+    return {
+        "contract_version": AGENT_PROPOSAL_PROVIDER_CONTRACT_VERSION,
+        "provider_role": "untrusted_proposer",
+        "trust_boundary": {
+            "provider_never_assigns_status": True,
+            "claimed_checks_are_not_trusted_as_truth": True,
+            "dsm_validates": "form/honesty, not truth",
+        },
+        "must": [
+            "You must surface each required_check.",
+            "Fill claimed_checks with each required_check you substantively covered.",
+            "Each claimed_check must have model-written coverage in claimed_check_coverage.",
+            "Include limitations.",
+        ],
+        "must_not": [
+            "Do not assign status.",
+            "Do not claim truth.",
+            "Do not auto-promote candidate rules.",
+        ],
+        "required_checks": list(required_checks),
+        "expected_structured_output": {
+            "proposal": "string written by the model",
+            "claimed_checks": list(required_checks),
+            "claimed_check_coverage": [
+                {
+                    "check_id": check,
+                    "coverage": "substantive explanation written by the model",
+                }
+                for check in required_checks
+            ],
+            "limitations": ["limitation written by the model"],
+            "candidate_rule_handling": "string written by the model",
+            "truth_claim": False,
+        },
+        "notes": [
+            "Do not copy coverage text from this contract; write your own coverage.",
+            "Do not inject or infer validation_status.",
+            "DSM validates form/honesty, not truth.",
+            "Provider output is a proposal, not a business decision.",
+        ],
     }
 
 
