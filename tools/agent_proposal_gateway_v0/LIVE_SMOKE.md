@@ -227,6 +227,21 @@ their own substantive coverage. Offline tests prove the accept path remains
 reachable with a conformant mock and that echoing check labels alone is not
 accepted.
 
+## Fenced Output Normalization v0
+
+Observed with LM Studio `meta/llama-3.3-70b`: the model returned structured JSON
+inside a markdown code fence. The gateway rejected safely because the fields were
+not normalized into `structured_output`. This change adds structural
+normalization only; validation criteria remain unchanged.
+
+Normalization parses only. When `structured_output` is absent or has no
+substantive contractual fields, the gateway extracts the first balanced JSON
+object from `raw_output`, `narrative`, or `content` and hands it to the existing
+validator. A real `structured_output` always wins and is never overwritten by
+JSON found in narrative text. Parsed JSON does not imply `accepted_for_audit`:
+the validator still decides, echo-only fenced JSON is still rejected, and a
+provider self-status inside the JSON still cannot assign the DSM status.
+
 ## 5. Dogfood Artifacts
 
 Use a separate dogfood data directory. The default is:

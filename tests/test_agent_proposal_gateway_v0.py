@@ -17,6 +17,7 @@ from tools.agent_proposal_gateway_v0 import (
     validate_agent_proposal,
     wrap_agent_proposal,
 )
+from tools.agent_proposal_gateway_v0 import gateway
 from eval.skill_retrieval_v0 import load_records
 
 
@@ -220,6 +221,223 @@ def test_dsm_validation_is_deterministic_for_same_context_and_proposal(tmp_path)
     assert first_validation == second_validation
     assert first_mapping == second_mapping
     assert _normalized_persisted(first_persisted) == _normalized_persisted(second_persisted)
+
+
+# --- provider-output-normalization-v0 --------------------------------------
+#
+# The gateway must normalize fenced/raw JSON provider outputs into a structured
+# proposal *before* validation. Normalization parses only; the existing
+# validator still decides. Parsing JSON never implies accepted_for_audit.
+
+
+METADATA = {
+    "kind": "openai_compatible",
+    "name": "lmstudio",
+    "model": "meta/llama-3.3-70b",
+    "base_url_label": "local-test",
+}
+
+
+def _conformant_structured(required_checks: list[str]) -> dict:
+    return {
+        "narrative": "Proposal scaffold accounts for each DSM-required check.",
+        "model_proposed_action": "Send to audit; do not finalize a business outcome.",
+        "claimed_checks": list(required_checks),
+        "claimed_check_coverage": [
+            {
+                "check_id": check,
+                "coverage": (
+                    f"The proposal accounts for {check} without claiming truth."
+                ),
+            }
+            for check in required_checks
+        ],
+        "limitations": [
+            "Validated for form and honesty only, not factual truth.",
+            "Candidate rules remain candidate unless DSM marks them validated.",
+        ],
+        "candidate_rule_handling": "Candidate rules remain candidate.",
+        "truth_claim": False,
+    }
+
+
+def _fence(payload: dict) -> str:
+    return "Here is my proposal:\n```json\n" + json.dumps(payload, indent=2) + "\n```\n"
+
+
+def _wrap_and_validate(context: dict, raw_proposal: dict) -> tuple[dict, dict]:
+    wrapped = wrap_agent_proposal(context, raw_proposal, METADATA)
+    validation = validate_agent_proposal(wrapped, context)
+    return wrapped, validation
+
+
+def test_fenced_json_with_substantive_fields_is_normalized_and_validator_decides():
+    context = _context()
+    required = list(context["required_checks"])
+    fenced = _fence(_conformant_structured(required))
+    # The provider returned a markdown code fence; structured_output is the empty
+    # narrative-only shape the OpenAI-compatible parser produces on a fence.
+    raw_proposal = {
+        "raw_output": fenced,
+        "structured_output": {
+            "narrative": fenced,
+            "model_proposed_action": "",
+            "claimed_checks": [],
+            "limitations": [],
+        },
+    }
+
+    wrapped, validation = _wrap_and_validate(context, raw_proposal)
+
+    # Parsed in: claimed_checks now mirror required_checks rather than [].
+    assert set(wrapped["structured_output"]["claimed_checks"]) == set(required)
+    assert wrapped["structured_output"]["limitations"]
+    # And the existing validator — not the normalization — accepts it.
+    assert validation["status"] == ACCEPTED_FOR_AUDIT
+    assert validation["rejections"] == []
+
+
+def test_raw_json_string_is_normalized_into_structured_proposal():
+    context = _context()
+    required = list(context["required_checks"])
+    raw_proposal = {
+        "raw_output": json.dumps(_conformant_structured(required)),
+        "structured_output": {},
+    }
+
+    wrapped, validation = _wrap_and_validate(context, raw_proposal)
+
+    assert set(wrapped["structured_output"]["claimed_checks"]) == set(required)
+    assert validation["status"] == ACCEPTED_FOR_AUDIT
+
+
+def test_substantive_structured_output_wins_over_json_in_narrative():
+    context = _context()
+    required = list(context["required_checks"])
+    real = _conformant_structured(required)
+    # A different (decoy) JSON object is buried in raw_output/narrative; it must
+    # NOT overwrite the genuine structured_output.
+    decoy = _conformant_structured(required[:1])
+    raw_proposal = {
+        "raw_output": _fence(decoy),
+        "structured_output": real,
+    }
+
+    wrapped, _ = _wrap_and_validate(context, raw_proposal)
+
+    assert wrapped["structured_output"] is not decoy
+    assert set(wrapped["structured_output"]["claimed_checks"]) == set(required)
+
+
+def test_free_text_remains_fallback_and_is_not_accepted():
+    context = _context()
+    raw_proposal = {
+        "raw_output": "I think this looks fine overall. No structured data here.",
+        "structured_output": {},
+    }
+
+    wrapped, validation = _wrap_and_validate(context, raw_proposal)
+
+    assert not wrapped["structured_output"].get("claimed_checks")
+    assert validation["status"] != ACCEPTED_FOR_AUDIT
+    assert validation["status"] == REJECTED_BY_VALIDATOR
+
+
+def test_malformed_json_does_not_crash_and_is_not_accepted():
+    context = _context()
+    raw_proposal = {
+        "raw_output": "```json\n{ claimed_checks: [unquoted, oops }\n```",
+        "structured_output": {},
+    }
+
+    # Must not raise.
+    wrapped, validation = _wrap_and_validate(context, raw_proposal)
+
+    assert not wrapped["structured_output"].get("claimed_checks")
+    assert validation["status"] in {REJECTED_BY_VALIDATOR, NEEDS_HUMAN_REVIEW}
+    assert validation["status"] != ACCEPTED_FOR_AUDIT
+
+
+def test_echo_only_fenced_json_is_parsed_but_still_not_accepted():
+    context = _context()
+    required = list(context["required_checks"])
+    # Echo-only: required-check labels are echoed as dicts inside claimed_checks
+    # with no substantive string claims and no surfacing in limitations.
+    echo = {
+        "proposal": "Echo-only proposal.",
+        "claimed_checks": [{"check_id": check, "coverage": check} for check in required],
+        "limitations": ["Labels were echoed without substantive coverage."],
+        "candidate_rule_handling": "Candidate rules remain candidate.",
+        "truth_claim": False,
+    }
+    raw_proposal = {"raw_output": _fence(echo), "structured_output": {}}
+
+    wrapped, validation = _wrap_and_validate(context, raw_proposal)
+
+    # Proof the JSON WAS parsed (normalization happened)...
+    assert wrapped["structured_output"].get("proposal") == "Echo-only proposal."
+    # ...yet normalization is not a disguised loosening: the validator rejects.
+    assert validation["status"] != ACCEPTED_FOR_AUDIT
+    assert validation["status"] == REJECTED_BY_VALIDATOR
+    assert "required_check_not_covered_or_surfaced" in _codes(validation["rejections"])
+
+
+def test_provider_self_status_in_fenced_json_cannot_assign_dsm_status():
+    context = _context()
+    required = list(context["required_checks"])
+    # Conformant content, but the provider tries to self-assign a DSM status.
+    payload = _conformant_structured(required)
+    payload["validation_status"] = "rejected_by_validator"
+    payload["status"] = "rejected_by_validator"
+    payload["validation"] = {"status": "rejected_by_validator"}
+    raw_proposal = {"raw_output": _fence(payload), "structured_output": {}}
+
+    wrapped, validation = _wrap_and_validate(context, raw_proposal)
+
+    # The provider's self-status is ignored: the validator independently accepts.
+    assert validation["status"] == ACCEPTED_FOR_AUDIT
+    # agent_supplied_status only tracks raw_proposal["validation"], not embedded JSON.
+    assert wrapped["agent_supplied_status"] is None
+
+
+def test_provider_self_accept_in_fenced_json_cannot_force_acceptance():
+    context = _context()
+    required = list(context["required_checks"])
+    payload = _conformant_structured(required)
+    # A hard violation plus a self-claimed acceptance must still be rejected.
+    payload["narrative"] = "This proposal is guaranteed final truth for the business."
+    payload["validation_status"] = "accepted_for_audit"
+    raw_proposal = {"raw_output": _fence(payload), "structured_output": {}}
+
+    _, validation = _wrap_and_validate(context, raw_proposal)
+
+    assert validation["status"] == REJECTED_BY_VALIDATOR
+    assert "overpromise_wording" in _codes(validation["rejections"])
+
+
+def test_balanced_scanner_handles_nesting_arrays_and_strings():
+    # Nested objects, arrays of dicts, braces inside strings, escaped quotes.
+    text = (
+        'prefix ```json {"a": {"b": [{"c": 1}], "s": "has { and } braces", '
+        '"q": "escaped \\" quote"}} ``` trailing {"second": true}'
+    )
+    extracted = gateway._extract_json_object(text)
+
+    assert extracted == {
+        "a": {
+            "b": [{"c": 1}],
+            "s": "has { and } braces",
+            "q": 'escaped " quote',
+        }
+    }
+
+
+def test_extract_json_object_returns_none_for_free_text_and_malformed():
+    assert gateway._extract_json_object("no json at all here") is None
+    assert gateway._extract_json_object("```json { broken: ] ```") is None
+    assert gateway._extract_json_object(None) is None
+    # A bare JSON array (not an object) is not a structured proposal.
+    assert gateway._extract_json_object("[1, 2, 3]") is None
 
 
 def _run(scenario: str, tmp_path: Path) -> dict:
