@@ -8,6 +8,16 @@ import urllib.request
 from typing import Any, Protocol
 
 
+OPENAI_COMPATIBLE_SYSTEM_PROMPT = (
+    "You are an untrusted proposer for DSM. Return JSON only. "
+    "You must follow the provider_contract in the user message. "
+    "Surface each required_check, fill claimed_checks only for checks you "
+    "substantively covered, include model-written coverage, include limitations, "
+    "do not assign status, do not claim truth, and do not auto-promote "
+    "candidate rules. DSM validates form/honesty, not truth."
+)
+
+
 class ProposalProvider(Protocol):
     metadata: dict[str, str]
 
@@ -157,20 +167,10 @@ class OpenAICompatibleProvider:
         }
 
     def propose(self, context: dict[str, Any]) -> dict[str, Any]:
-        payload = {
-            "model": self.metadata["model"],
-            "messages": [
-                {
-                    "role": "system",
-                    "content": "You are an untrusted proposer. Return JSON only.",
-                },
-                {
-                    "role": "user",
-                    "content": json.dumps(context, sort_keys=True),
-                },
-            ],
-            "temperature": 0,
-        }
+        payload = build_openai_compatible_payload(
+            context,
+            model=self.metadata["model"],
+        )
         response = (
             self.transport(payload, self.metadata)
             if self.transport is not None
@@ -191,6 +191,27 @@ class OpenAICompatibleProvider:
         )
         with urllib.request.urlopen(request, timeout=30) as response:
             return json.loads(response.read().decode("utf-8"))
+
+
+def build_openai_compatible_payload(
+    context: dict[str, Any],
+    *,
+    model: str,
+) -> dict[str, Any]:
+    return {
+        "model": model,
+        "messages": [
+            {
+                "role": "system",
+                "content": OPENAI_COMPATIBLE_SYSTEM_PROMPT,
+            },
+            {
+                "role": "user",
+                "content": json.dumps(context, sort_keys=True),
+            },
+        ],
+        "temperature": 0,
+    }
 
 
 def _parse_openai_compatible_response(response: dict[str, Any]) -> dict[str, Any]:

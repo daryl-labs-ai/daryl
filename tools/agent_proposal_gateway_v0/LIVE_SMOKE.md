@@ -37,6 +37,31 @@ UI or API. The default `local-model` is only a placeholder.
 
 ## 3. Run the Smoke
 
+Before calling a live provider, inspect the exact provider-facing contract and
+OpenAI-compatible payload:
+
+```bash
+./.venv312/bin/python tools/agent_proposal_gateway_v0/live_smoke.py \
+  --dry-run-contract \
+  --base-url http://localhost:1234/v1 \
+  --provider-name lmstudio \
+  --model local-model
+```
+
+The dry-run does not call a provider and does not write audit data. It prints the
+DSM-composed context plus the prompt payload. The contract tells the provider:
+
+- surface each `required_check`;
+- fill `claimed_checks` only for checks substantively covered;
+- include model-written coverage for each claimed check;
+- include `limitations`;
+- do not assign status;
+- do not claim truth;
+- do not auto-promote candidate rules;
+- DSM validates form/honesty, not truth.
+
+The dry-run is an inspection aid only. It does not prove live acceptance.
+
 Run from the repository root:
 
 ```bash
@@ -184,6 +209,23 @@ Dominant hypothesis to test next:
 Do not lower the validator bar based on these observations. Future work should
 make the provider-facing contract more legible or diagnose detection behavior in
 a separate, targeted change.
+
+## Contract Legibility v0
+
+The provider-facing context now includes an explicit contract and expected
+structured output shape. This is a readability improvement only:
+
+- validation logic is unchanged;
+- status assignment is unchanged;
+- `required_checks` logic is unchanged;
+- provider claims are still untrusted;
+- `claimed_checks` are not truth claims;
+- DSM still validates form/honesty, not truth.
+
+No expected business answer or coverage text is injected. Providers must write
+their own substantive coverage. Offline tests prove the accept path remains
+reachable with a conformant mock and that echoing check labels alone is not
+accepted.
 
 ## 5. Dogfood Artifacts
 

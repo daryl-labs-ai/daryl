@@ -27,11 +27,14 @@ from eval.skill_retrieval_v0 import load_records
 from tools.agent_proposal_gateway_v0 import (
     MockProposalProvider,
     OpenAICompatibleProvider,
+    build_agent_proposal_context,
+    build_openai_compatible_payload,
     run_agent_proposal_gateway,
 )
 
 
 VALIDATION_NOTICE = "validated for form/honesty, not truth"
+DRY_RUN_CONTRACT_NOTICE = "dry-run contract preview; provider not called"
 DEFAULT_BASE_URL = "http://localhost:1234/v1"
 DEFAULT_PROVIDER_NAME = "lmstudio"
 DEFAULT_MODEL = "local-model"
@@ -46,6 +49,10 @@ DEFAULT_TASK_TYPE = "prioritization_decision"
 def main(argv: list[str] | None = None, env: Mapping[str, str] | None = None) -> int:
     environment = os.environ if env is None else env
     args = _parse_args(argv, environment)
+    if args.dry_run_contract:
+        preview = build_contract_preview(args)
+        _print_contract_preview(preview)
+        return 0
     try:
         result = run_live_smoke(args, environment)
     except RuntimeError as exc:
@@ -79,6 +86,30 @@ def run_live_smoke(args: argparse.Namespace, env: Mapping[str, str]) -> dict[str
             "interruption_detected": True,
         },
     )
+
+
+def build_contract_preview(args: argparse.Namespace) -> dict[str, Any]:
+    records = load_records(args.records_path)
+    context = build_agent_proposal_context(
+        records,
+        user_id=args.user_id,
+        domain=args.domain,
+        skill_id=args.skill_id,
+        task_type=args.task_type,
+        known_inputs={
+            "customer_name": "Before",
+            "interruption_detected": True,
+        },
+    )
+    payload = build_openai_compatible_payload(context, model=args.model)
+    return {
+        "notice": DRY_RUN_CONTRACT_NOTICE,
+        "provider": args.provider,
+        "provider_name": args.provider_name,
+        "base_url_label": args.base_url_label,
+        "context": context,
+        "openai_compatible_payload": payload,
+    }
 
 
 def _provider_from_args(
@@ -154,6 +185,11 @@ def _print_result(result: dict[str, Any], args: argparse.Namespace) -> None:
     print(markdown, end="" if markdown.endswith("\n") else "\n")
 
 
+def _print_contract_preview(preview: dict[str, Any]) -> None:
+    print(DRY_RUN_CONTRACT_NOTICE)
+    print(json.dumps(preview, indent=2, sort_keys=True))
+
+
 def _parse_args(
     argv: list[str] | None,
     env: Mapping[str, str],
@@ -165,6 +201,11 @@ def _parse_args(
         "--live",
         action="store_true",
         help="Explicitly allow a live OpenAI-compatible provider call.",
+    )
+    parser.add_argument(
+        "--dry-run-contract",
+        action="store_true",
+        help="Print the final provider contract/context without calling a provider.",
     )
     parser.add_argument(
         "--provider",
