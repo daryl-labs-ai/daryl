@@ -48,6 +48,9 @@ Run from the repository root:
   --data-dir .venv-live-smoke/agent-proposal
 ```
 
+Run this from the repository root. The script bootstraps repository imports when
+executed by path, so manual `PYTHONPATH=.` is not required.
+
 Useful options:
 
 ```bash
@@ -102,6 +105,49 @@ Interpretation:
 
 If a live model over-promises truth or finality, `rejected_by_validator` is the
 correct outcome.
+
+## First Observed Live Smoke Result
+
+The first observed LM Studio live smoke ran successfully against:
+
+```text
+nvidia/nemotron-3-nano-omni
+```
+
+DSM assigned:
+
+```text
+rejected_by_validator
+```
+
+This is a boundary success. A real provider proposal reached DSM, and DSM
+rejected it because required checks were not covered or surfaced and limitations
+were missing. This proves the reject path on live provider output.
+
+It does not yet prove the `accepted_for_audit` live path.
+
+Observed labels only:
+
+- warning: `missing_limitations`
+- rejection: `required_check_not_covered_or_surfaced`
+- affected checks:
+  - `bug_before_feature`
+  - `external_evidence_limit_disclosed`
+  - `known_context_not_reasked`
+  - `persistence_failure_checked`
+
+Do not commit raw model output or dogfood artifacts from live smoke runs.
+
+Open diagnostic question:
+
+Required checks were present in the DSM context but were not covered or surfaced
+by the model. Possible causes:
+
+1. weak or small model;
+2. context legibility issue;
+3. detection strictness issue.
+
+Investigate without lowering the validator bar.
 
 ## 5. Dogfood Artifacts
 

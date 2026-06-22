@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 from tools.agent_proposal_gateway_v0 import live_smoke
@@ -73,6 +76,35 @@ def test_live_smoke_mock_plumbing_writes_only_test_data_dir(
     assert data_dir.exists()
     assert data_dir != MAIN_MEMORY_PATH
     assert tmp_path in data_dir.parents
+
+
+def test_direct_script_execution_from_repo_root_without_pythonpath(tmp_path):
+    env = os.environ.copy()
+    env.pop("PYTHONPATH", None)
+    env["CI"] = "true"
+    data_dir = tmp_path / "direct-smoke"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(LIVE_SMOKE_PATH),
+            "--provider",
+            "mock",
+            "--data-dir",
+            str(data_dir),
+        ],
+        cwd=REPO_ROOT,
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0
+    assert live_smoke.VALIDATION_NOTICE in result.stdout
+    assert "Validation status: accepted_for_audit" in result.stdout
+    assert "ModuleNotFoundError" not in result.stderr
+    assert data_dir.exists()
 
 
 def test_live_smoke_mock_can_use_rejected_scenario_without_truth_claim(
