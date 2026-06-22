@@ -19,7 +19,7 @@ def test_golden_dataset_records_score_perfectly():
         for record in records
     ]
 
-    assert len(results) == 7
+    assert len(results) == len(records)
     assert all(result["score"] == scorer.MAX_SCORE for result in results)
     assert all(result["penalties"] == [] for result in results)
 
