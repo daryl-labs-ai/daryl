@@ -158,9 +158,7 @@ def wrap_agent_proposal(
     provider_metadata: dict[str, str],
 ) -> dict[str, Any]:
     raw_output = raw_proposal.get("raw_output", "")
-    structured = raw_proposal.get("structured_output") or {}
-    if not isinstance(structured, dict):
-        structured = {"narrative": str(structured)}
+    structured = _normalize_structured_output(raw_proposal)
     raw_hash_payload = {
         "raw_output": raw_output,
         "structured_output": structured,
@@ -178,6 +176,130 @@ def wrap_agent_proposal(
         "agent_supplied_status": _agent_supplied_status(raw_proposal),
         "model_proposed": True,
     }
+
+
+_CONTRACT_FIELDS = (
+    "claimed_checks",
+    "claimed_check_coverage",
+    "limitations",
+    "proposal",
+    "candidate_rule_handling",
+    "truth_claim",
+)
+
+
+def _normalize_structured_output(raw_proposal: dict[str, Any]) -> dict[str, Any]:
+    """Normalize provider output into a structured proposal before validation.
+
+    This only *parses*. It never accepts: a substantive ``structured_output``
+    dict always wins, and any JSON recovered from fenced/raw/narrative text is
+    handed to the existing validator unchanged. Parsed JSON does not imply
+    ``accepted_for_audit``.
+    """
+    structured = raw_proposal.get("structured_output") or {}
+    if not isinstance(structured, dict):
+        structured = {"narrative": str(structured)}
+
+    # A real structured_output (non-empty contractual fields) stays prioritized;
+    # never overwrite it with JSON found inside narrative/raw_output.
+    if _has_substantive_contract_fields(structured):
+        return structured
+
+    for candidate in _normalization_candidates(raw_proposal, structured):
+        extracted = _extract_json_object(candidate)
+        if extracted is not None and _has_substantive_contract_fields(extracted):
+            return extracted
+
+    return structured
+
+
+def _normalization_candidates(
+    raw_proposal: dict[str, Any],
+    structured: dict[str, Any],
+) -> list[Any]:
+    return [
+        raw_proposal.get("raw_output"),
+        raw_proposal.get("narrative"),
+        raw_proposal.get("content"),
+        structured.get("narrative"),
+        structured.get("raw_output"),
+        structured.get("content"),
+    ]
+
+
+def _has_substantive_contract_fields(structured: Any) -> bool:
+    if not isinstance(structured, dict):
+        return False
+    return any(_is_substantive(structured.get(field)) for field in _CONTRACT_FIELDS)
+
+
+def _is_substantive(value: Any) -> bool:
+    if isinstance(value, bool):
+        # truth_claim: false carries no substantive coverage.
+        return value
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return bool(value.strip())
+    if isinstance(value, (list, dict, tuple, set)):
+        return len(value) > 0
+    return True
+
+
+def _try_load_json_object(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        loaded = json.loads(value)
+    except (TypeError, ValueError):
+        return None
+    return loaded if isinstance(loaded, dict) else None
+
+
+def _first_balanced_json_object(text: Any) -> str | None:
+    if not isinstance(text, str):
+        return None
+
+    start = None
+    depth = 0
+    in_string = False
+    escaped = False
+
+    for index, char in enumerate(text):
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            continue
+
+        if char == '"':
+            in_string = True
+        elif char == "{":
+            if depth == 0:
+                start = index
+            depth += 1
+        elif char == "}":
+            if depth > 0:
+                depth -= 1
+                if depth == 0 and start is not None:
+                    return text[start : index + 1]
+
+    return None
+
+
+def _extract_json_object(value: Any) -> dict[str, Any] | None:
+    loaded = _try_load_json_object(value)
+    if loaded is not None:
+        return loaded
+
+    span = _first_balanced_json_object(value)
+    if span is None:
+        return None
+
+    return _try_load_json_object(span)
 
 
 def validate_agent_proposal(

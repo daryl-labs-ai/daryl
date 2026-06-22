@@ -280,6 +280,44 @@ def test_echo_only_required_check_labels_are_not_accepted(tmp_path):
     )
 
 
+def test_fenced_json_provider_is_normalized_through_full_gateway(tmp_path):
+    # Reproduces the observed LM Studio behaviour: a substantive JSON proposal
+    # returned inside a markdown code fence. Normalization parses it so the
+    # existing validator can decide; persistence must still run end to end.
+    result = _run_conformant_provider(
+        tmp_path,
+        FencedJsonProposalProvider(),
+        data_dir_name="fenced-json",
+    )
+
+    validation = result["validation"]
+    proposal = result["proposal"]
+
+    assert validation["status"] == ACCEPTED_FOR_AUDIT
+    assert set(proposal["structured_output"]["claimed_checks"]) == set(
+        result["context"]["required_checks"]
+    )
+    assert result["persistence"]["validation_status"] == ACCEPTED_FOR_AUDIT
+    assert result["persistence"]["decision_hash"].startswith("v1:")
+
+
+def test_echo_only_fenced_json_provider_is_parsed_but_not_accepted(tmp_path):
+    result = _run_conformant_provider(
+        tmp_path,
+        FencedEchoOnlyProposalProvider(),
+        data_dir_name="fenced-echo-only",
+    )
+
+    validation = result["validation"]
+
+    # Parsed (proposal field recovered from the fence) yet still rejected.
+    assert result["proposal"]["structured_output"].get("proposal")
+    assert validation["status"] == REJECTED_BY_VALIDATOR
+    assert "required_check_not_covered_or_surfaced" in _issue_codes(
+        validation["rejections"]
+    )
+
+
 def test_openai_compatible_provider_is_not_called_live_in_ci(monkeypatch, tmp_path):
     def fail_transport(*_args, **_kwargs):
         raise AssertionError("live transport should not be created under CI")
@@ -505,6 +543,77 @@ class EchoOnlyProposalProvider:
             "raw_output": json.dumps(structured, sort_keys=True),
             "structured_output": structured,
         }
+
+
+class FencedJsonProposalProvider:
+    """Returns a substantive proposal as JSON wrapped in a markdown fence.
+
+    Mirrors what the OpenAI-compatible parser yields when the model fences its
+    JSON: structured_output collapses to an empty, narrative-only shape while the
+    real JSON lives inside raw_output/narrative.
+    """
+
+    metadata = {
+        "kind": "openai_compatible",
+        "name": "lmstudio",
+        "model": "meta/llama-3.3-70b",
+        "base_url_label": "local-test",
+    }
+
+    def propose(self, context: dict) -> dict:
+        required_checks = list(context["required_checks"])
+        structured = {
+            "narrative": "Proposal scaffold accounts for each DSM-required check.",
+            "model_proposed_action": "Send to audit; do not finalize an outcome.",
+            "claimed_checks": required_checks,
+            "claimed_check_coverage": [
+                {
+                    "check_id": check,
+                    "coverage": (
+                        f"The proposal accounts for {check} without claiming truth."
+                    ),
+                }
+                for check in required_checks
+            ],
+            "limitations": _default_limitations(),
+            "candidate_rule_handling": "Candidate rules remain candidate.",
+            "truth_claim": False,
+        }
+        fenced = "```json\n" + json.dumps(structured, indent=2) + "\n```"
+        return {
+            "raw_output": fenced,
+            "structured_output": {
+                "narrative": fenced,
+                "model_proposed_action": "",
+                "claimed_checks": [],
+                "limitations": [],
+            },
+        }
+
+
+class FencedEchoOnlyProposalProvider:
+    """Echo-only proposal delivered inside a markdown fence."""
+
+    metadata = {
+        "kind": "openai_compatible",
+        "name": "lmstudio",
+        "model": "meta/llama-3.3-70b",
+        "base_url_label": "local-test",
+    }
+
+    def propose(self, context: dict) -> dict:
+        structured = {
+            "proposal": "Echo-only proposal.",
+            "claimed_checks": [
+                {"check_id": check, "coverage": check}
+                for check in context["required_checks"]
+            ],
+            "limitations": ["Labels were echoed without substantive coverage."],
+            "candidate_rule_handling": "Candidate rules remain candidate.",
+            "truth_claim": False,
+        }
+        fenced = "```json\n" + json.dumps(structured, indent=2) + "\n```"
+        return {"raw_output": fenced, "structured_output": {}}
 
 
 def _default_limitations() -> list[str]:
