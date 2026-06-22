@@ -17,6 +17,12 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+for _path in (_REPO_ROOT, _REPO_ROOT / "src"):
+    _path_text = str(_path)
+    if _path_text not in sys.path:
+        sys.path.insert(0, _path_text)
+
 from eval.skill_retrieval_v0 import load_records
 from tools.agent_proposal_gateway_v0 import (
     MockProposalProvider,
