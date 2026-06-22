@@ -48,6 +48,29 @@ v0 includes:
 - a mock provider for CI and corruption scenarios;
 - an OpenAI-compatible provider tested only with mocked HTTP transport.
 
+## Manual Live Smoke
+
+`live_smoke.py` can manually exercise a local OpenAI-compatible provider against
+the existing gateway:
+
+```bash
+./.venv312/bin/python tools/agent_proposal_gateway_v0/live_smoke.py \
+  --live \
+  --base-url http://localhost:1234/v1 \
+  --provider-name lmstudio \
+  --model local-model \
+  --data-dir .venv-live-smoke/agent-proposal
+```
+
+The smoke refuses `--live` when `CI=true` and writes only to a separate dogfood
+data directory. Its output includes:
+
+```text
+validated for form/honesty, not truth
+```
+
+See [LIVE_SMOKE.md](LIVE_SMOKE.md) for the full manual runbook.
+
 ## Trust Boundary
 
 The provider cannot:
