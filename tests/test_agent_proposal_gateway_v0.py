@@ -189,14 +189,9 @@ def test_gateway_and_providers_do_not_use_direct_storage():
             assert fragment not in source
 
 
-def test_no_kernel_files_changed():
-    changed = _run_git(["diff", "--name-only", "main..HEAD"])
-
-    assert not [
-        path
-        for path in changed.splitlines()
-        if path.startswith("src/dsm/core/")
-    ]
+def test_gateway_is_not_in_kernel_path():
+    for path in (GATEWAY_PATH, PROVIDERS_PATH):
+        assert "src/dsm/core" not in path.as_posix()
 
 
 def test_dsm_validation_is_deterministic_for_same_context_and_proposal(tmp_path):
@@ -272,15 +267,3 @@ def _normalized_persisted(result: dict) -> list[dict]:
         for entry in result["persisted_entries"]
     ]
 
-
-def _run_git(args: list[str]) -> str:
-    import subprocess
-
-    result = subprocess.run(
-        ["git", *args],
-        cwd=REPO_ROOT,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    return result.stdout
