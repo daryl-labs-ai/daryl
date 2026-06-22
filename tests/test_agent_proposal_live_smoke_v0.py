@@ -6,12 +6,27 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+from eval.skill_retrieval_v0 import load_records
+from tools.agent_proposal_gateway_v0 import (
+    ACCEPTED_FOR_AUDIT,
+    NEEDS_HUMAN_REVIEW,
+    REJECTED_BY_VALIDATOR,
+    run_agent_proposal_gateway,
+)
 from tools.agent_proposal_gateway_v0 import live_smoke
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 LIVE_SMOKE_PATH = REPO_ROOT / "tools" / "agent_proposal_gateway_v0" / "live_smoke.py"
 MAIN_MEMORY_PATH = REPO_ROOT / ".dsm-data"
+RECORDS_PATH = REPO_ROOT / "datasets" / "dsm_reasoning_v0" / "records.jsonl"
+LIVE_SMOKE_REQUIRED_CHECKS = (
+    "bug_before_feature",
+    "external_evidence_limit_disclosed",
+    "known_context_not_reasked",
+    "persistence_failure_checked",
+)
 
 
 def test_live_smoke_refuses_live_under_ci(monkeypatch, tmp_path, capsys):
@@ -130,6 +145,80 @@ def test_live_smoke_mock_can_use_rejected_scenario_without_truth_claim(
     assert "rejected_proposal_audit" in captured.out
 
 
+def test_conformant_provider_reaches_accepted_for_audit_without_lowering_bar(tmp_path):
+    result = _run_conformant_provider(tmp_path, ConformantProposalProvider())
+
+    validation = result["validation"]
+    proposal = result["proposal"]
+
+    assert validation["status"] == ACCEPTED_FOR_AUDIT
+    assert validation["warnings"] == []
+    assert validation["rejections"] == []
+    assert proposal["agent_supplied_status"] is None
+    assert set(proposal["structured_output"]["claimed_checks"]) == set(
+        result["context"]["required_checks"]
+    )
+    assert proposal["structured_output"]["limitations"]
+    assert "promoted_candidate_rules" not in proposal["structured_output"]
+
+
+@pytest.mark.parametrize("omitted_check", LIVE_SMOKE_REQUIRED_CHECKS)
+def test_conformant_provider_omitting_required_check_is_rejected(
+    omitted_check,
+    tmp_path,
+):
+    result = _run_conformant_provider(
+        tmp_path,
+        ConformantProposalProvider(omit_checks={omitted_check}),
+        data_dir_name=f"missing-{omitted_check}",
+    )
+
+    validation = result["validation"]
+
+    assert validation["status"] == REJECTED_BY_VALIDATOR
+    assert _issue_codes(validation["rejections"]) == {
+        "required_check_not_covered_or_surfaced"
+    }
+    assert any(
+        issue.get("check") == omitted_check
+        and issue["code"] == "required_check_not_covered_or_surfaced"
+        for issue in validation["rejections"]
+    )
+
+
+def test_conformant_provider_without_limitations_is_not_accepted(tmp_path):
+    result = _run_conformant_provider(
+        tmp_path,
+        ConformantProposalProvider(limitations=[]),
+        data_dir_name="missing-limitations",
+    )
+
+    validation = result["validation"]
+
+    assert validation["status"] == NEEDS_HUMAN_REVIEW
+    assert validation["rejections"] == []
+    assert "missing_limitations" in _issue_codes(validation["warnings"])
+
+
+def test_alternative_phrasing_conformant_provider_reaches_accepted_for_audit(tmp_path):
+    result = _run_conformant_provider(
+        tmp_path,
+        ConformantProposalProvider(alternative_phrasing=True),
+        data_dir_name="alternative-phrasing",
+    )
+
+    validation = result["validation"]
+    proposal = result["proposal"]
+
+    assert validation["status"] == ACCEPTED_FOR_AUDIT
+    assert validation["warnings"] == []
+    assert validation["rejections"] == []
+    assert "explicitly covers" not in proposal["structured_output"]["narrative"]
+    assert set(proposal["structured_output"]["claimed_checks"]) == set(
+        result["context"]["required_checks"]
+    )
+
+
 def test_openai_compatible_provider_is_not_called_live_in_ci(monkeypatch, tmp_path):
     def fail_transport(*_args, **_kwargs):
         raise AssertionError("live transport should not be created under CI")
@@ -236,3 +325,103 @@ def test_live_smoke_has_no_direct_storage_access():
 
 def test_live_smoke_is_not_in_kernel_path():
     assert "src/dsm/core" not in LIVE_SMOKE_PATH.as_posix()
+
+
+def _run_conformant_provider(
+    tmp_path: Path,
+    provider: "ConformantProposalProvider",
+    *,
+    data_dir_name: str = "conformant-smoke",
+) -> dict:
+    return run_agent_proposal_gateway(
+        load_records(RECORDS_PATH),
+        provider=provider,
+        data_dir=tmp_path / data_dir_name,
+        user_id="mohamed",
+        domain="omari_ai",
+        skill_id="omari_ai.lead_capture_reliability",
+        task_type="prioritization_decision",
+        known_inputs={
+            "customer_name": "Before",
+            "interruption_detected": True,
+        },
+    )
+
+
+def _issue_codes(issues: list[dict]) -> set[str]:
+    return {issue["code"] for issue in issues}
+
+
+class ConformantProposalProvider:
+    metadata = {
+        "kind": "mock",
+        "name": "conformant-acceptability",
+        "model": "conformant-no-network",
+        "base_url_label": "local-test",
+    }
+
+    def __init__(
+        self,
+        *,
+        omit_checks: set[str] | None = None,
+        limitations: list[str] | None = None,
+        alternative_phrasing: bool = False,
+    ):
+        self.omit_checks = set(omit_checks or set())
+        self.limitations = list(
+            _alternative_limitations()
+            if alternative_phrasing and limitations is None
+            else _default_limitations()
+            if limitations is None
+            else limitations
+        )
+        self.alternative_phrasing = alternative_phrasing
+
+    def propose(self, context: dict) -> dict:
+        required_checks = [
+            check
+            for check in context["required_checks"]
+            if check not in self.omit_checks
+        ]
+        narrative = (
+            "The scaffold accounts for each DSM check supplied in the context "
+            "and keeps the provider output as an auditable proposal only."
+            if self.alternative_phrasing
+            else "Proposal scaffold explicitly covers the DSM-required checks "
+            "while leaving final business judgment outside this provider."
+        )
+        action = (
+            "Send the proposal to audit with all required checks claimed and "
+            "with limits stated; do not finalize a business outcome."
+            if self.alternative_phrasing
+            else "Prepare an audit-ready proposal for human or downstream review; "
+            "do not treat it as a final business decision."
+        )
+        structured = {
+            "narrative": narrative,
+            "model_proposed_action": action,
+            "claimed_checks": required_checks,
+            "limitations": self.limitations,
+        }
+        return {
+            "raw_output": json.dumps(structured, sort_keys=True),
+            "structured_output": structured,
+        }
+
+
+def _default_limitations() -> list[str]:
+    return [
+        "This proposal is validated for form and honesty only.",
+        "It does not establish factual truth or reasoning validity.",
+        "Candidate rules remain candidate unless DSM marks them validated.",
+        "External evidence must be represented through DSM-verifiable records.",
+    ]
+
+
+def _alternative_limitations() -> list[str]:
+    return [
+        "Audit admission is not a truth claim.",
+        "A separate verifier must still evaluate facts and reasoning quality.",
+        "Candidate material stays candidate unless represented as validated DSM data.",
+        "External sources must be imported into DSM before they become evidence.",
+    ]

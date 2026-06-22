@@ -126,6 +126,10 @@ were missing. This proves the reject path on live provider output.
 
 It does not yet prove the `accepted_for_audit` live path.
 
+The acceptability test proves the validator can accept a conformant proposal and
+discriminate against missing required checks. It does not prove the live
+`accepted_for_audit` path.
+
 Observed labels only:
 
 - warning: `missing_limitations`
@@ -148,6 +152,38 @@ by the model. Possible causes:
 3. detection strictness issue.
 
 Investigate without lowering the validator bar.
+
+## Offline Diagnosis Summary
+
+Dogfood artifacts from the first LM Studio and Ollama live smokes were inspected
+locally. Raw model output and dogfood artifacts are intentionally not committed.
+
+Redacted classification:
+
+| Check | LM Studio | Ollama |
+| --- | --- | --- |
+| `bug_before_feature` | absent | unclear |
+| `external_evidence_limit_disclosed` | absent | covered-in-different-words |
+| `known_context_not_reasked` | absent | unclear |
+| `persistence_failure_checked` | absent | unclear |
+| `limitations` | absent | covered-in-different-words |
+
+LM Studio produced no usable structured proposal fields for the required checks.
+Ollama surfaced several check labels and limitations-like material inside a
+narrative payload, but left the contract fields `claimed_checks` and
+`limitations` empty.
+
+Dominant hypothesis to test next:
+
+- B: context/contract legibility is the dominant hypothesis to test next.
+- C: detection strictness may also be involved because some Ollama content was
+  semantically adjacent but not placed in the expected fields.
+- A: model weakness remains possible, especially for the empty LM Studio
+  structured output.
+
+Do not lower the validator bar based on these observations. Future work should
+make the provider-facing contract more legible or diagnose detection behavior in
+a separate, targeted change.
 
 ## 5. Dogfood Artifacts
 
