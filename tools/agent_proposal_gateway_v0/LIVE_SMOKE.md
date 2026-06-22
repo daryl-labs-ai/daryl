@@ -242,6 +242,57 @@ JSON found in narrative text. Parsed JSON does not imply `accepted_for_audit`:
 the validator still decides, echo-only fenced JSON is still rejected, and a
 provider self-status inside the JSON still cannot assign the DSM status.
 
+## Observed Live Accepted Path — LM Studio / Llama 3.3 70B
+
+After PR #43 (`provider-output-normalization-v0`), a manual live smoke was run
+against LM Studio with `meta/llama-3.3-70b`. This is the first observed live
+`accepted_for_audit` result.
+
+Observed labels only:
+
+- `validation_status`: `accepted_for_audit`
+- warnings: none
+- rejections: none
+- audit produced: yes
+- markdown produced: yes
+- provider metadata: present
+- input context hash: present
+- raw output hash: present
+
+This proves the live `accepted_for_audit` path is reachable with a sufficiently
+capable local model and the fenced JSON normalization from PR #43. The earlier
+`rejected_by_validator` result above remains the proven reject path; together they
+show DSM discriminating on real live provider output.
+
+Scope of the claim:
+
+- This is proof of reachability from one live run.
+- This does not prove repeatability or reliability.
+- `accepted_for_audit` means the proposal was structured and honest enough to be
+  audited by DSM.
+- It does not mean factual truth.
+- It does not mean a business decision was produced.
+- It does not mean external verification or anchoring.
+
+Manual substance review:
+
+- The model claimed substantive coverage for:
+  - `bug_before_feature`
+  - `known_context_not_reasked`
+  - `persistence_failure_checked`
+- The model did not claim `external_evidence_limit_disclosed` as fully covered.
+- It surfaced the missing or limited external evidence through coverage and
+  limitations.
+- `truth_claim` was false.
+- No provider-supplied DSM status was accepted.
+- No candidate rule was auto-promoted.
+
+This is considered a merited `accepted_for_audit` because the provider covered
+what it could and honestly surfaced what it could not cover.
+
+No raw provider output, dogfood artifacts, or `.venv-live-smoke` data are
+committed.
+
 ## 5. Dogfood Artifacts
 
 Use a separate dogfood data directory. The default is:
