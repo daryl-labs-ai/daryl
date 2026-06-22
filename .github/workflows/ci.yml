@@ -27,18 +27,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('pyproject.toml') }}
+          key: ${{ runner.os }}-pip-${{ hashFiles('pyproject.toml', 'packages/*/pyproject.toml', 'agent-mesh/pyproject.toml') }}
 
-      - name: Install dsm-primitives (peer package)
-        run: pip install -e packages/dsm-primitives
-
-      - name: Install agent-mesh (peer package)
-        run: pip install -e "agent-mesh/[dev]"
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+      - name: Install monorepo dev environment
+        run: bash scripts/setup_dev_env.sh
 
       - name: Show environment
         run: |

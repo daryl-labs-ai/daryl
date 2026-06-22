@@ -126,9 +126,7 @@ git clone https://github.com/daryl-labs-ai/daryl
 cd daryl
 python3.12 -m venv .venv312
 source .venv312/bin/activate
-python -m pip install -U pip
-python -m pip install -e packages/dsm-primitives
-python -m pip install -e .
+PYTHON=python bash scripts/setup_dev_env.sh
 ```
 
 `dsm-primitives` is a monorepo peer package used by both `daryl-dsm` and
@@ -137,6 +135,18 @@ wheel metadata. Install it first when working from source; project metadata
 uses a package dependency instead of a relative path dependency so the root
 package remains publishable. A public `daryl-dsm` PyPI release requires
 `dsm-primitives` to be resolvable from the package index first.
+
+The setup script installs internal peer packages in the required local order:
+
+```bash
+python -m pip install -e packages/dsm-primitives
+python -m pip install -e ".[dev]"
+python -m pip install -e "agent-mesh[dev]"
+python scripts/validate_dev_install.py
+```
+
+`agent-mesh` is required for cross-package integration tests such as
+`tests/integration/test_hash_parity.py`.
 
 ### Record and verify agent actions
 
@@ -577,10 +587,7 @@ git clone https://github.com/daryl-labs-ai/daryl
 cd daryl
 python3.12 -m venv .venv312
 source .venv312/bin/activate
-python -m pip install -U pip
-python -m pip install -e packages/dsm-primitives
-python -m pip install -e ".[dev]"
-python -m pip install -e "agent-mesh[dev]"
+PYTHON=python bash scripts/setup_dev_env.sh
 python -m pytest -q
 ```
 
@@ -590,9 +597,7 @@ python -m pytest -q
 git clone https://github.com/daryl-labs-ai/daryl && cd daryl
 python3.12 -m venv .venv312
 source .venv312/bin/activate
-python -m pip install -U pip
-python -m pip install -e packages/dsm-primitives
-python -m pip install -e ".[dev]"
+PYTHON=python bash scripts/setup_dev_env.sh
 python -m pytest -q
 ```
 
