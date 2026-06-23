@@ -335,6 +335,68 @@ Security note:
 No API key, API key fragment, raw provider output, full logs, dogfood artifacts,
 or `.venv-live-smoke` data are committed.
 
+## Observed Repeatability v0 — OpenAI / GPT-4o
+
+A bounded repeatability observation was run manually against OpenAI with
+`gpt-4o`. This is an observation of variance, not a benchmark or a reliability
+proof.
+
+This observation was run manually and supplied as a run summary by Mohamed; it
+was not executed within an assistant session. Raw provider output and full logs
+are intentionally not committed.
+
+Protocol:
+
+- provider: OpenAI
+- model: `gpt-4o`
+- scenario: default live smoke scenario
+- N: 5 fixed before execution
+- same command pattern across all runs
+- no prompt changes
+- no model changes
+- no provider changes
+- no validation changes
+- no retry loop
+- no N extension
+
+Observed distribution:
+
+| Status | Count |
+|---|---:|
+| `accepted_for_audit` | 4 |
+| `rejected_by_validator` | 1 |
+| `needs_human_review` | 0 |
+| provider/network failure | 0 |
+
+All five runs produced a decision hash, an input context hash, a raw output
+hash, explain JSON, and a markdown audit.
+
+Interpretation:
+
+This characterizes observed variance for one provider/model/scenario over N=5
+runs.
+
+It does not prove reliability or repeatability guarantees.
+
+It does not prove factual truth, business decision validity, external
+verification, or external anchoring.
+
+Run 3 was rejected by the validator for `external_evidence_limit_disclosed` with
+`required_check_not_covered_or_surfaced` (the check was neither claimed nor
+surfaced as a limitation). The rejection was safe: audit, explain JSON, and
+markdown audit were still produced.
+
+In this bounded observation (N=5), the boundary behaved as intended under the
+observed variance: accepted outputs were auditable, and the one non-conforming
+output was rejected with an audit still produced. This is an observed
+distribution, not a reliability or repeatability guarantee.
+
+Run 3 shows variance in model output relative to the current validator contract;
+it is not a validator defect.
+
+No raw provider output, full logs, API keys, dogfood artifacts, or
+`.venv-live-smoke` data are committed.
+
 ## 5. Dogfood Artifacts
 
 Use a separate dogfood data directory. The default is:
