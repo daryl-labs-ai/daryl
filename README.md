@@ -5,7 +5,7 @@
 <h1 align="center">Daryl</h1>
 
 <p align="center">
-<strong>DSM (Daryl Sharding Memory) — The trust layer for AI agents.</strong>
+<strong>DSM (Daryl Sharding Memory) — an off-chain trust, memory, and audit layer for AI agents.</strong>
 </p>
 
 <p align="center">
@@ -28,6 +28,78 @@ Created by <strong>Mohamed Azizi</strong> · <a href="https://www.daryl.md">dary
 </p>
 
 ---
+
+## What Daryl is
+
+Daryl/DSM is an off-chain, append-only trust, memory, and audit layer for AI
+agents. It records, validates, audits, and replays agent proposals without making
+the model the authority. It produces auditable and replayable receipts of the
+form, honesty, and boundaries of a proposal — not claims of semantic truth or
+strategic correctness.
+
+**Trust boundary**
+
+- The provider proposes.
+- DSM validates form, honesty, and boundaries.
+- DSM assigns status.
+- Agent Memory records the audit.
+- The provider never self-declares truth or final status.
+
+**Status semantics**
+
+A proposal receives exactly one of three statuses:
+
+- `accepted_for_audit`
+- `needs_human_review`
+- `rejected_by_validator`
+
+`accepted_for_audit` means the proposal is structured, bounded, and auditable. It
+does **not** mean the proposal is true, and it does **not** mean it is
+strategically or commercially correct.
+
+## Current status
+
+- local and cloud provider paths observed;
+- accepted and rejected paths proven reachable;
+- deterministic no-network functional pipeline tested;
+- OpenAI/GPT-4o repeatability variance observed on N=5 — observed, not a
+  reliability guarantee;
+- known-answer replay tests that `accepted_for_audit` != semantic truth;
+- Anchor Readiness v0 defines a canonical hash-only DSM receipt export, without
+  anchoring.
+
+## Blockchain positioning
+
+Daryl does not become a blockchain. Daryl remains off-chain, and blockchain
+anchoring is deferred.
+
+Anchor Readiness v0 only defines a canonical hash-only DSM receipt export. If
+external anchoring is added later, it would prove existence, timestamp, and
+integrity of selected hashes — not factual truth, semantic correctness, or
+business decision validity.
+
+## What Daryl does not claim
+
+- no factual truth guarantee;
+- no semantic correctness guarantee;
+- no business decision validity guarantee;
+- no reliability guarantee;
+- no repeatability guarantee;
+- no external verification yet;
+- no external anchoring yet;
+- no witness/MMR/STH yet;
+- no provider-as-authority;
+- no blockchain integration yet.
+
+## Where to look
+
+- [tools/agent_proposal_gateway_v0/LIVE_SMOKE.md](tools/agent_proposal_gateway_v0/LIVE_SMOKE.md) — live/observed provider smoke notes
+- [docs/milestones/provider_live_v0.md](docs/milestones/provider_live_v0.md) — provider-live v0 milestone
+- [docs/design/daryl_for_chatgpt_v0.md](docs/design/daryl_for_chatgpt_v0.md) — ChatGPT integration design (design-only)
+- [docs/design/dsm_anchor_readiness_v0.md](docs/design/dsm_anchor_readiness_v0.md) — hash-only anchor export contract
+- [tests/test_agent_proposal_functional_v0.py](tests/test_agent_proposal_functional_v0.py) — deterministic no-network pipeline test
+- [tests/test_known_answer_decision_replay_v0.py](tests/test_known_answer_decision_replay_v0.py) — `accepted_for_audit` != semantic truth
+- [tests/test_dsm_anchor_payload_v0.py](tests/test_dsm_anchor_payload_v0.py) — hash-only payload contract test
 
 ## The Problem
 
