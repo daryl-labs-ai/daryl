@@ -293,6 +293,48 @@ what it could and honestly surfaced what it could not cover.
 No raw provider output, dogfood artifacts, or `.venv-live-smoke` data are
 committed.
 
+## Observed Cloud Provider Path — OpenAI / GPT-4o
+
+A manual live smoke was run against OpenAI with `gpt-4o` through the existing
+OpenAI-compatible provider path. This is the first observed cloud provider run
+for Direction A (see `docs/design/daryl_for_chatgpt_v0.md`).
+
+Observed labels only:
+
+- `validation_status`: `accepted_for_audit`
+- warnings: none
+- rejections: none
+- audit produced: yes
+- markdown produced: yes
+- provider metadata: present
+- input context hash: present
+- raw output hash: present
+
+This observes the cloud provider path for Direction A: OpenAI as an untrusted
+provider proposing into DSM through the existing Agent Proposal Gateway.
+
+Scope of the claim:
+
+- This proves the OpenAI provider path is reachable.
+- This does not prove repeatability or reliability.
+- `accepted_for_audit` does not mean factual truth, business decision approval,
+  external verification, or external anchoring.
+- DSM remains the authority over validation status.
+
+Substance note:
+
+The provider output was accepted for audit as structured and honest enough to
+persist. It did not prove external evidence. The model included
+`external_evidence_limit_disclosed` in `claimed_checks`, but its coverage text
+stated that external evidence limits were not explicitly provided and recorded
+this as a limitation. This is therefore an auditable/honest proposal form, not
+proof that external evidence was actually supplied.
+
+Security note:
+
+No API key, API key fragment, raw provider output, full logs, dogfood artifacts,
+or `.venv-live-smoke` data are committed.
+
 ## 5. Dogfood Artifacts
 
 Use a separate dogfood data directory. The default is:
