@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 from dsm.core.models import Entry
 from dsm.core.storage import Storage
 
+from ..config import PRLConfig
 from ..index.mapper import ProjectMap
 from ..types import EntryDraft, PRLNode, to_entry
 
@@ -38,6 +39,16 @@ def prl_shard_name(project_id: str) -> str:
 def new_run_id() -> str:
     """A unique harvest-run id, carried as ``Entry.session_id`` for the run."""
     return f"prl_run_{int(datetime.now(timezone.utc).timestamp())}_{uuid.uuid4().hex[:8]}"
+
+
+def open_store(config: PRLConfig) -> "PRLStore":
+    """Build a :class:`PRLStore` backed by a ``Storage`` at ``config.storage_dir``.
+
+    Kept in this module (the registered ``LEGITIMATE_WRITERS`` entry) so callers
+    such as the CLI never import ``dsm.core.storage.Storage`` directly and thus
+    never need their own writer registration.
+    """
+    return PRLStore(Storage(data_dir=str(config.storage_dir)))
 
 
 def _draft_to_entry(draft: EntryDraft) -> Entry:

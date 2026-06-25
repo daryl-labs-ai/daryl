@@ -9,6 +9,6 @@ Per ADR-0001, PRL never reads via ``Storage.read``; reads go through RR (P5).
 
 from __future__ import annotations
 
-from .dsm_commit import CommitResult, PRLStore, new_run_id, prl_shard_name
+from .dsm_commit import CommitResult, PRLStore, new_run_id, open_store, prl_shard_name
 
-__all__ = ["PRLStore", "CommitResult", "prl_shard_name", "new_run_id"]
+__all__ = ["PRLStore", "CommitResult", "prl_shard_name", "new_run_id", "open_store"]
