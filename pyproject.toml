@@ -57,7 +57,7 @@ lint.ignore = [
 ]
 
 [tool.coverage.run]
-source = ["src/dsm"]
+source = ["src/dsm", "src/prl"]
 omit = [
     "src/dsm/cli.py",
     "src/dsm/__main__.py",
