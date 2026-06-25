@@ -87,6 +87,11 @@ LEGITIMATE_WRITERS: frozenset[str] = frozenset({
     "src/dsm/session/session_graph.py",
     "src/dsm/sovereignty.py",
     "src/dsm/verify.py",
+    # PRL store (P3): commits a ProjectMap into a dedicated per-project shard
+    # using ONLY storage.append() — never storage.read() (reads go through RR
+    # in P5 per ADR-0001). A pure WRITER, same classification as session_graph.
+    # Decision recorded in ADR_PRL_RR_BINDING §8.
+    "src/prl/store/dsm_commit.py",
 })
 
 # Known READER files that currently bypass RR — tracked debt under active
