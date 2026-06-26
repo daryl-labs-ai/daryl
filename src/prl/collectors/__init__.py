@@ -19,6 +19,7 @@ from .base import (
     list_collectors,
     register,
 )
+from .binder import bind_sessions
 from .chatgpt import ChatGPTCollector
 
 __all__ = [
@@ -28,4 +29,5 @@ __all__ = [
     "get_collector",
     "list_collectors",
     "ChatGPTCollector",
+    "bind_sessions",
 ]
