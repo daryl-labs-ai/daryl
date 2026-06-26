@@ -22,6 +22,9 @@ Source = "https://github.com/daryl-labs-ai/daryl"
 
 [project.optional-dependencies]
 goose = ["mcp>=1.25.0"]
+# PRL P8 local semantic index — heavy ML stack, isolated from core/dev/CI.
+# Install on demand: pip install daryl-dsm[semantic]
+semantic = ["sentence-transformers>=3"]
 dev = [
     "pytest",
     "pytest-cov",
