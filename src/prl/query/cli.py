@@ -18,10 +18,13 @@ import argparse
 import sys
 from pathlib import Path
 
+from ..collectors import ChatGPTCollector, bind_sessions
 from ..config import PRLConfig
 from ..exceptions import PRLError
 from ..index import build_map, make_project_node
 from ..store import open_store, prl_shard_name
+from .recall import RecallEngine
+from .semantic import LocalEmbedder, SemanticIndex
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -36,7 +39,21 @@ def build_parser() -> argparse.ArgumentParser:
     p_status = sub.add_parser("status", help="show declared projects and their shards")
     p_status.add_argument("--config", help="path to the PRL config JSON")
 
+    p_ask = sub.add_parser("ask", help="natural-language recall over a project + chat export")
+    p_ask.add_argument("question", help="the natural-language question")
+    p_ask.add_argument("--project", required=True, help="project folder to map")
+    p_ask.add_argument("--export", required=True, help="ChatGPT export JSON to collect sessions from")
+    p_ask.add_argument("-k", type=int, default=5, help="number of hits to return")
+    p_ask.add_argument("--min-confidence", dest="min_confidence", type=float, default=0.40,
+                       help="binder edge confidence threshold")
+
     return parser
+
+
+def _make_embedder(model_name: str):
+    """Factory for the recall embedder (overridable in tests). Defaults to the
+    local sentence-transformers backend (optional ``[semantic]`` extra)."""
+    return LocalEmbedder(model_name)
 
 
 def _resolve_config(args: argparse.Namespace) -> PRLConfig:
@@ -89,10 +106,52 @@ def cmd_status(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_ask(args: argparse.Namespace) -> int:
+    """Full in-memory recall: collect sessions → build map → bind → semantic
+    search → structural enrichment → ranked, explainable hits. No LLM, no
+    persisted state."""
+    try:
+        project = make_project_node(args.project)
+        config = PRLConfig(declared_projects=[Path(args.project)])
+        pmap = build_map(project, config)
+        sessions = ChatGPTCollector(args.export).collect()
+        edges = bind_sessions(sessions, pmap, min_confidence=args.min_confidence)
+
+        index = SemanticIndex(_make_embedder(config.embedding_local_name))
+        index.build([(s.session_id, f"{s.title or ''} {s.text_preview}") for s in sessions])
+
+        engine = RecallEngine(
+            index,
+            {s.session_id: s for s in sessions},
+            edges,
+            files={f.content_hash: f for f in pmap.files},
+            commits={c.sha: c for c in pmap.commits},
+        )
+        hits = engine.ask(args.question, k=args.k)
+    except PRLError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+    if not hits:
+        print("no confident match found")
+        return 0
+    for h in hits:
+        print(f"▸ {h.session.title or h.session.session_id}  [score {h.score:.3f}]")
+        print(f"    session: {h.session.session_id} ({h.session.tool})")
+        if h.linked_files:
+            print(f"    files: {', '.join(f.path for f in h.linked_files)}")
+        if h.linked_commits:
+            print(f"    commits: {', '.join(c.sha[:10] for c in h.linked_commits)}")
+        print(f"    why: {'; '.join(h.why)}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command == "index":
         return cmd_index(args)
     if args.command == "status":
         return cmd_status(args)
+    if args.command == "ask":
+        return cmd_ask(args)
     return 1  # pragma: no cover (argparse 'required' guards this)
