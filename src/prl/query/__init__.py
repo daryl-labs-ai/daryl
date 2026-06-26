@@ -7,7 +7,8 @@ index, NL recall) arrive in P5+.
 
 from __future__ import annotations
 
-from .cli import build_parser, cmd_index, cmd_status, main
+from .cli import build_parser, cmd_ask, cmd_index, cmd_status, main
+from .recall import RecallEngine, RecallHit
 from .semantic import Embedder, LocalEmbedder, SemanticError, SemanticIndex
 from .structural import PRLAdjacencyIndex, StructuralQuery
 
@@ -16,10 +17,13 @@ __all__ = [
     "build_parser",
     "cmd_index",
     "cmd_status",
+    "cmd_ask",
     "StructuralQuery",
     "PRLAdjacencyIndex",
     "SemanticIndex",
     "Embedder",
     "LocalEmbedder",
     "SemanticError",
+    "RecallEngine",
+    "RecallHit",
 ]
