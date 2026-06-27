@@ -41,6 +41,11 @@ class PRLConfig(BaseModel):
     max_file_bytes: int = 2_000_000
     embedding_model: str = "local"  # D5 — local-first; "openai"/"voyage" optional
     embedding_local_name: str = "all-MiniLM-L6-v2"
+    # Retrieval Policy v2.0 (ADR-PRL-0006) — frozen measured optima. Configurable,
+    # but these are the ratified defaults, not knobs for re-exploration.
+    retrieval_chunk_chars: int = 500
+    retrieval_preview_gate: int = 10
+    retrieval_rrf_k: int = 10
 
     @field_validator("declared_projects")
     @classmethod

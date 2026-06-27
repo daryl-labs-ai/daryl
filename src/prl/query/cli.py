@@ -18,11 +18,13 @@ import argparse
 import sys
 from pathlib import Path
 
-from ..collectors import ChatGPTCollector, bind_sessions
+from ..collectors import ChatGPTCollector, FullTextSource, bind_sessions
 from ..config import PRLConfig
 from ..exceptions import PRLError
 from ..index import build_map, make_project_node
 from ..store import open_store, prl_shard_name
+from .chunk_index import ChunkIndex
+from .fusion_index import FusionIndex
 from .recall import RecallEngine
 from .semantic import LocalEmbedder, SemanticIndex
 
@@ -114,11 +116,29 @@ def cmd_ask(args: argparse.Namespace) -> int:
         project = make_project_node(args.project)
         config = PRLConfig(declared_projects=[Path(args.project)])
         pmap = build_map(project, config)
-        sessions = ChatGPTCollector(args.export).collect()
+        collector = ChatGPTCollector(args.export)
+        sessions = collector.collect()
         edges = bind_sessions(sessions, pmap, min_confidence=args.min_confidence)
 
-        index = SemanticIndex(_make_embedder(config.embedding_local_name))
-        index.build([(s.session_id, f"{s.title or ''} {s.text_preview}") for s in sessions])
+        # Retrieval Policy v2.0 (ADR-PRL-0006): conversation (preview) retriever +
+        # passage (chunk) retriever, fused chunk-primary with a preview gate. Falls
+        # back to preview-only when the source can't provide full text.
+        embedder = _make_embedder(config.embedding_local_name)
+        preview = SemanticIndex(embedder)
+        preview.build([(s.session_id, f"{s.title or ''} {s.text_preview}") for s in sessions])
+
+        index: SemanticIndex | FusionIndex = preview
+        if isinstance(collector, FullTextSource):
+            fulls = collector.full_texts()
+            if fulls:
+                chunk = ChunkIndex(embedder, chunk_chars=config.retrieval_chunk_chars)
+                chunk.build([(s.session_id, f"{s.title or ''} {fulls.get(s.session_id, '')}")
+                             for s in sessions])
+                index = FusionIndex(
+                    preview, chunk,
+                    preview_gate=config.retrieval_preview_gate,
+                    rrf_k=config.retrieval_rrf_k,
+                )
 
         engine = RecallEngine(
             index,
