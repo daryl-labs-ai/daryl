@@ -13,6 +13,7 @@ import pytest
 from prl.collectors import (
     ChatGPTCollector,
     Collector,
+    FullTextSource,
     get_collector,
     list_collectors,
 )
@@ -123,6 +124,31 @@ def test_bad_json_raises(tmp_path):
     p.write_text("not json{", encoding="utf-8")
     with pytest.raises(CollectorError):
         ChatGPTCollector(str(p)).collect()
+
+
+# --- full-text provider (Retrieval v2 / R1 — FullTextSource) ---------------
+
+
+def test_chatgpt_satisfies_full_text_source(tmp_path):
+    assert isinstance(ChatGPTCollector(_write(tmp_path, _FIXTURE)), FullTextSource)
+
+
+def test_full_texts_untruncated_and_keyed_by_id(tmp_path):
+    fulls = ChatGPTCollector(_write(tmp_path, _FIXTURE)).full_texts()
+    # conv-1 present with full transcript; empty conv-2 omitted (no text)
+    assert set(fulls) == {"conv-1"}
+    assert fulls["conv-1"] == (
+        "user: how to monetize Daryl? | assistant: sell it as an AI decision audit"
+    )
+
+
+def test_full_text_is_superset_of_preview(tmp_path):
+    """The preview is exactly the first chars of the full text — same ordered
+    transcript, so the P6 node stays consistent with the chunk source."""
+    coll = ChatGPTCollector(_write(tmp_path, _FIXTURE))
+    node = {n.session_id: n for n in coll.collect()}["conv-1"]
+    full = coll.full_texts()["conv-1"]
+    assert full.startswith(node.text_preview)
 
 
 # --- DSM-readiness (collected sessions survive the Entry mapping) -----------
