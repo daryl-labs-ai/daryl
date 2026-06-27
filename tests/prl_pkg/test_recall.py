@@ -148,6 +148,29 @@ def test_cli_ask_end_to_end(tmp_path, capsys, monkeypatch):
     assert "why:" in out
 
 
+def test_cli_ask_index_dir_caches_and_reloads(tmp_path, capsys, monkeypatch):
+    """--index-dir persists the fusion vectors on first run, then loads them on
+    the second (cache hit) — both runs return the same answer (R3)."""
+    from prl.query.fusion_index import FusionIndex
+
+    monkeypatch.setattr(cli, "_make_embedder", lambda name: FakeEmbedder())
+    proj = _git_project(tmp_path)
+    export = _export(tmp_path)
+    cache = tmp_path / "idx"
+
+    rc1 = cli.main(["ask", "where did we decide the kernel architecture?",
+                    "--project", str(proj), "--export", export, "--index-dir", str(cache)])
+    out1 = capsys.readouterr().out
+    assert rc1 == 0
+    assert FusionIndex.is_persisted(cache)  # built + saved on first run
+
+    rc2 = cli.main(["ask", "where did we decide the kernel architecture?",
+                    "--project", str(proj), "--export", export, "--index-dir", str(cache)])
+    out2 = capsys.readouterr().out
+    assert rc2 == 0
+    assert out1 == out2  # cache hit (load path) yields the identical result
+
+
 def test_cli_ask_missing_semantic_extra_errors(tmp_path, capsys):
     # Without monkeypatching, _make_embedder uses LocalEmbedder; the 'semantic'
     # extra is absent in CI → clean error, exit 2 (not a crash).

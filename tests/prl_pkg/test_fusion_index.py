@@ -133,3 +133,30 @@ def test_recall_engine_consumes_fusion_index():
     engine = RecallEngine(fusion, {s.session_id: s for s in sessions}, [])
     hits = engine.ask("canonicalhashdecision", k=2)
     assert hits and hits[0].session.session_id == "s1"  # buried decision recalled via chunk
+
+
+# --- persistence (R3) ------------------------------------------------------
+
+def _fusion(emb, gate=10, k=10):
+    preview = SemanticIndex(emb)
+    preview.build([("s1", "vague title small talk"), ("s2", "lunch pizza salad")])
+    chunk = ChunkIndex(emb, chunk_chars=30)
+    chunk.build([("s1", "noise noise canonicalhashdecision noise"), ("s2", "pizza salad menu")])
+    return FusionIndex(preview, chunk, preview_gate=gate, rrf_k=k)
+
+
+def test_is_persisted_false_then_true(tmp_path):
+    assert FusionIndex.is_persisted(tmp_path / "cache") is False
+    _fusion(FakeEmbedder()).save(tmp_path / "cache")
+    assert FusionIndex.is_persisted(tmp_path / "cache") is True
+
+
+def test_fusion_save_load_round_trip(tmp_path):
+    fx = _fusion(FakeEmbedder(), gate=7, k=12)
+    before = fx.search("canonicalhashdecision", k=5)
+
+    fx.save(tmp_path / "cache")
+    loaded = FusionIndex.load(tmp_path / "cache", embedder=FakeEmbedder())
+
+    assert (loaded._gate, loaded._k) == (7, 12)  # policy params preserved
+    assert loaded.search("canonicalhashdecision", k=5) == before  # identical, no re-embedding

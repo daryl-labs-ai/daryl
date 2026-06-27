@@ -18,6 +18,10 @@ ADR-PRL-0006 frozen default: ``chunk_chars = 500``.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+from typing import Any
+
 from .semantic import Embedder, SemanticIndex
 
 # Measured optimum (ADR-PRL-0006): smaller chunks recall buried decisions better.
@@ -74,3 +78,19 @@ class ChunkIndex:
             if session_id not in best or score > best[session_id]:
                 best[session_id] = score
         return sorted(best.items(), key=lambda t: t[1], reverse=True)[:k]
+
+    # -- persistence (JSON) — R3, mirrors SemanticIndex -----------------------
+
+    def save(self, path: Any) -> None:
+        """Persist the chunk vectors (expensive to recompute) + ``chunk_chars``."""
+        Path(path).write_text(
+            json.dumps({"chunk_chars": self._chunk_chars, "index": self._idx.to_dict()}),
+            encoding="utf-8",
+        )
+
+    @classmethod
+    def load(cls, path: Any, embedder: Embedder | None = None) -> "ChunkIndex":
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+        obj = cls(embedder=embedder, chunk_chars=int(data.get("chunk_chars", DEFAULT_CHUNK_CHARS)))
+        obj._idx = SemanticIndex.from_dict(data.get("index", {}), embedder)
+        return obj
