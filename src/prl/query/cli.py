@@ -18,7 +18,13 @@ import argparse
 import sys
 from pathlib import Path
 
-from ..collectors import ChatGPTCollector, FullTextSource, bind_sessions
+from ..collectors import (
+    ChatGPTCollector,
+    ConsultationAdapter,
+    FullTextSource,
+    OpenAIClient,
+    bind_sessions,
+)
 from ..config import PRLConfig
 from ..exceptions import PRLError
 from ..index import build_map, make_project_node
@@ -64,6 +70,19 @@ def build_parser() -> argparse.ArgumentParser:
     p_consult.add_argument("--rr-index-dir", dest="rr_index_dir",
                            help="directory for RR's derived index (default: <storage-dir>/_rr_index)")
 
+    p_do = sub.add_parser("consult",
+                          help="consult a real agent → DSM-certified Knowledge Act (ADR-0008, v3)")
+    p_do.add_argument("prompt", help="the prompt sent to the real agent")
+    p_do.add_argument("--provider", default="openai", help="agent provider (default: openai)")
+    p_do.add_argument("--model", required=True, help="model name (e.g. gpt-5)")
+    p_do.add_argument("--subject", required=True, help="the Knowledge Object / subject id")
+    p_do.add_argument("--config", help="path to the PRL config JSON")
+    p_do.add_argument("--storage-dir", dest="storage_dir", help="override the DSM storage dir")
+    p_do.add_argument("--confidence", type=float, default=1.0,
+                      help="confidence in the OBSERVATION (the agent answered), not its truth")
+    p_do.add_argument("--propose", action="store_true",
+                      help="record as Observation+Proposal instead of Observation (explicit only)")
+
     return parser
 
 
@@ -71,6 +90,14 @@ def _make_embedder(model_name: str):
     """Factory for the recall embedder (overridable in tests). Defaults to the
     local sentence-transformers backend (optional ``[semantic]`` extra)."""
     return LocalEmbedder(model_name)
+
+
+def _make_agent_client(provider: str):
+    """Factory for the real-agent client (overridable in tests → fake, no network).
+    v3 ships the OpenAI provider only; others are future implementations."""
+    if provider == "openai":
+        return OpenAIClient()
+    raise PRLError(f"unknown agent provider: {provider!r} (v3 supports: openai)")
 
 
 def _resolve_config(args: argparse.Namespace) -> PRLConfig:
@@ -143,6 +170,35 @@ def cmd_consultations(args: argparse.Namespace) -> int:
         return 2
 
     print(render_consultations(views))
+    return 0
+
+
+def cmd_consult(args: argparse.Namespace) -> int:
+    """R-consult v3: consult a real agent and commit its answer as a DSM-certified
+    Knowledge Act. The model is unaware of PRL; the adapter maps native answer → act,
+    prl/store certifies it. Default = Observation; --propose for Observation+Proposal."""
+    try:
+        if getattr(args, "config", None):
+            config = PRLConfig.load(Path(args.config))
+        else:
+            config = PRLConfig(declared_projects=[Path(".")])  # write path: declared_projects unused
+        if getattr(args, "storage_dir", None):
+            config = config.model_copy(update={"storage_dir": Path(args.storage_dir)})
+
+        client = _make_agent_client(args.provider)  # real model (test monkeypatches this)
+        node = ConsultationAdapter().consult(
+            client, subject_id=args.subject, prompt=args.prompt, model=args.model,
+            confidence=args.confidence, propose=args.propose,
+        )
+        res = open_store(config).commit_act(node)
+    except PRLError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+    print(f"✓ provider: {args.provider}")
+    print(f"✓ model: {args.model}")
+    print(f"✓ act: {node.mode}")
+    print(f"✓ DSM receipt: {res.tip_hash}")
     return 0
 
 
@@ -225,4 +281,6 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_ask(args)
     if args.command == "consultations":
         return cmd_consultations(args)
+    if args.command == "consult":
+        return cmd_consult(args)
     return 1  # pragma: no cover (argparse 'required' guards this)
