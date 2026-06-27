@@ -113,7 +113,7 @@ def test_action_name_per_kind():
     for node, exp in zip(nodes, expected):
         draft = to_entry(node, shard=SHARD, session_id=RUN)
         assert draft.metadata["action_name"] == exp
-    assert set(PRL_ACTION.values()) == set(expected)
+    assert set(PRL_ACTION.values()) == set(expected) | {"prl.consultation"}
 
 
 def test_entry_draft_has_shard_and_session():

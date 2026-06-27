@@ -22,6 +22,7 @@ from .base import (
 )
 from .binder import bind_sessions
 from .chatgpt import ChatGPTCollector
+from .consultation_adapter import ConsultationAdapter
 
 __all__ = [
     "Collector",
@@ -32,4 +33,5 @@ __all__ = [
     "list_collectors",
     "ChatGPTCollector",
     "bind_sessions",
+    "ConsultationAdapter",
 ]
