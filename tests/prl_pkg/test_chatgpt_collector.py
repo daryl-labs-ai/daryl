@@ -100,6 +100,24 @@ def test_bare_map_without_wrapper(tmp_path):
     assert {n.session_id for n in nodes} == {"conv-1", "conv-2"}
 
 
+def test_loose_conversations_wrapper(tmp_path):
+    """Real checkpoint export uses a ``loose_conversations`` wrapper — the prod
+    collector must read it (previously only the eval harness did)."""
+    data = {"loose_conversations": _FIXTURE["conversations"], "loose_total": 1038}
+    coll = ChatGPTCollector(_write(tmp_path, data))
+    assert {n.session_id for n in coll.collect()} == {"conv-1", "conv-2"}
+    # and full_texts() reads it too → FusionIndex can build on a real export
+    assert set(coll.full_texts()) == {"conv-1"}
+
+
+def test_conversations_wrapper_wins_over_loose(tmp_path):
+    """If both keys exist, the canonical ``conversations`` wrapper takes precedence."""
+    data = {"conversations": _FIXTURE["conversations"],
+            "loose_conversations": {"other": {"title": "x", "messages": []}}}
+    nodes = ChatGPTCollector(_write(tmp_path, data)).collect()
+    assert {n.session_id for n in nodes} == {"conv-1", "conv-2"}
+
+
 def test_malformed_entry_skipped(tmp_path):
     data = {"conversations": {"ok": {"title": "t", "messages": []}, "bad": "not-a-dict"}}
     nodes = ChatGPTCollector(_write(tmp_path, data)).collect()

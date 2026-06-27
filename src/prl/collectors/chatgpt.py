@@ -90,8 +90,10 @@ class ChatGPTCollector:
         self._path = Path(export_path)
 
     def _conversations(self) -> dict:
-        """Load and return the ``{conv_id: conv}`` map, tolerating the wrapper or
-        bare shapes. Shared by :meth:`collect` and :meth:`full_texts`."""
+        """Load and return the ``{conv_id: conv}`` map, tolerating the real-export
+        shapes: a ``{"conversations": {...}}`` wrapper, the checkpoint
+        ``{"loose_conversations": {...}}`` wrapper, or a bare ``{<id>: conv}`` map.
+        Shared by :meth:`collect` and :meth:`full_texts`."""
         try:
             raw = self._path.read_text(encoding="utf-8")
         except OSError as exc:
@@ -103,6 +105,8 @@ class ChatGPTCollector:
 
         if isinstance(data, dict) and isinstance(data.get("conversations"), dict):
             return data["conversations"]
+        if isinstance(data, dict) and isinstance(data.get("loose_conversations"), dict):
+            return data["loose_conversations"]
         if isinstance(data, dict):
             return data
         raise CollectorError("ChatGPT export must be a JSON object of conversations")
