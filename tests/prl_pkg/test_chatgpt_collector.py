@@ -155,18 +155,21 @@ def test_full_texts_untruncated_and_keyed_by_id(tmp_path):
     fulls = ChatGPTCollector(_write(tmp_path, _FIXTURE)).full_texts()
     # conv-1 present with full transcript; empty conv-2 omitted (no text)
     assert set(fulls) == {"conv-1"}
-    assert fulls["conv-1"] == (
-        "user: how to monetize Daryl? | assistant: sell it as an AI decision audit"
-    )
+    # F2 canonical retrieval format: raw texts only, no role prefixes, space-joined
+    assert fulls["conv-1"] == "how to monetize Daryl? sell it as an AI decision audit"
 
 
-def test_full_text_is_superset_of_preview(tmp_path):
-    """The preview is exactly the first chars of the full text — same ordered
-    transcript, so the P6 node stays consistent with the chunk source."""
+def test_full_text_is_raw_space_joined_no_roles(tmp_path):
+    """F2: the chunk source is raw message text (no 'role:' prefix, no ' | '),
+    matching the eval harness exactly. The P6 preview keeps its 'role:' form and
+    is independent of the full text."""
     coll = ChatGPTCollector(_write(tmp_path, _FIXTURE))
     node = {n.session_id: n for n in coll.collect()}["conv-1"]
     full = coll.full_texts()["conv-1"]
-    assert full.startswith(node.text_preview)
+    assert "role:" not in full and " | " not in full and "user:" not in full
+    assert "how to monetize Daryl?" in full and "sell it as an AI decision audit" in full
+    # preview is unchanged (still the P6 'role: text' form)
+    assert node.text_preview.startswith("user: how to monetize Daryl?")
 
 
 # --- DSM-readiness (collected sessions survive the Entry mapping) -----------
