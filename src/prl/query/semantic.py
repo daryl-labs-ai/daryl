@@ -120,17 +120,21 @@ class SemanticIndex:
 
     # -- persistence (JSON) --------------------------------------------------
 
-    def save(self, path: Any) -> None:
-        Path(path).write_text(
-            json.dumps({"dim": self._dim, "ids": self._ids, "vectors": self._vecs}),
-            encoding="utf-8",
-        )
+    def to_dict(self) -> dict:
+        """Serializable payload (vectors are already normalized)."""
+        return {"dim": self._dim, "ids": self._ids, "vectors": self._vecs}
 
     @classmethod
-    def load(cls, path: Any, embedder: Embedder | None = None) -> "SemanticIndex":
-        data = json.loads(Path(path).read_text(encoding="utf-8"))
+    def from_dict(cls, data: dict, embedder: Embedder | None = None) -> "SemanticIndex":
         idx = cls(embedder=embedder)
         idx._dim = data.get("dim")
         idx._ids = list(data.get("ids", []))
         idx._vecs = [[float(x) for x in v] for v in data.get("vectors", [])]
         return idx
+
+    def save(self, path: Any) -> None:
+        Path(path).write_text(json.dumps(self.to_dict()), encoding="utf-8")
+
+    @classmethod
+    def load(cls, path: Any, embedder: Embedder | None = None) -> "SemanticIndex":
+        return cls.from_dict(json.loads(Path(path).read_text(encoding="utf-8")), embedder)

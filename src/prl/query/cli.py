@@ -48,6 +48,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_ask.add_argument("-k", type=int, default=5, help="number of hits to return")
     p_ask.add_argument("--min-confidence", dest="min_confidence", type=float, default=0.40,
                        help="binder edge confidence threshold")
+    p_ask.add_argument("--index-dir", dest="index_dir",
+                       help="persist/load the retrieval indices here (latency cache); "
+                            "delete the directory to force a rebuild")
 
     return parser
 
@@ -120,25 +123,34 @@ def cmd_ask(args: argparse.Namespace) -> int:
         sessions = collector.collect()
         edges = bind_sessions(sessions, pmap, min_confidence=args.min_confidence)
 
-        # Retrieval Policy v2.0 (ADR-PRL-0006): conversation (preview) retriever +
-        # passage (chunk) retriever, fused chunk-primary with a preview gate. Falls
-        # back to preview-only when the source can't provide full text.
         embedder = _make_embedder(config.embedding_local_name)
-        preview = SemanticIndex(embedder)
-        preview.build([(s.session_id, f"{s.title or ''} {s.text_preview}") for s in sessions])
+        index_dir = getattr(args, "index_dir", None)
 
-        index: SemanticIndex | FusionIndex = preview
-        if isinstance(collector, FullTextSource):
-            fulls = collector.full_texts()
-            if fulls:
-                chunk = ChunkIndex(embedder, chunk_chars=config.retrieval_chunk_chars)
-                chunk.build([(s.session_id, f"{s.title or ''} {fulls.get(s.session_id, '')}")
-                             for s in sessions])
-                index = FusionIndex(
-                    preview, chunk,
-                    preview_gate=config.retrieval_preview_gate,
-                    rrf_k=config.retrieval_rrf_k,
-                )
+        # Retrieval Policy v2.0 (ADR-PRL-0006): conversation (preview) retriever +
+        # passage (chunk) retriever, fused chunk-primary with a preview gate. The
+        # heavy part is embedding the chunks; --index-dir caches those vectors.
+        index: SemanticIndex | FusionIndex
+        if index_dir and FusionIndex.is_persisted(index_dir):
+            # Load cached vectors (no re-embedding). Invalidation is explicit:
+            # delete the directory to rebuild after the export changes.
+            index = FusionIndex.load(index_dir, embedder)
+        else:
+            preview = SemanticIndex(embedder)
+            preview.build([(s.session_id, f"{s.title or ''} {s.text_preview}") for s in sessions])
+            index = preview
+            if isinstance(collector, FullTextSource):
+                fulls = collector.full_texts()
+                if fulls:
+                    chunk = ChunkIndex(embedder, chunk_chars=config.retrieval_chunk_chars)
+                    chunk.build([(s.session_id, f"{s.title or ''} {fulls.get(s.session_id, '')}")
+                                 for s in sessions])
+                    index = FusionIndex(
+                        preview, chunk,
+                        preview_gate=config.retrieval_preview_gate,
+                        rrf_k=config.retrieval_rrf_k,
+                    )
+            if index_dir and isinstance(index, FusionIndex):
+                index.save(index_dir)  # cache for next time (fusion path only)
 
         engine = RecallEngine(
             index,

@@ -84,3 +84,18 @@ def test_empty_chunks_skipped_and_len():
 def test_default_chunk_chars_is_500():
     assert DEFAULT_CHUNK_CHARS == 500
     assert ChunkIndex(embedder=FakeEmbedder())._chunk_chars == 500
+
+
+# --- persistence (R3) ------------------------------------------------------
+
+def test_save_load_round_trip(tmp_path):
+    idx = ChunkIndex(embedder=FakeEmbedder(), chunk_chars=25)
+    idx.build([("conv-A", "alpha needle alpha alpha"), ("conv-B", "beta beta beta")])
+    before = idx.search("needle", k=5)
+
+    path = tmp_path / "chunk.json"
+    idx.save(path)
+    loaded = ChunkIndex.load(path, embedder=FakeEmbedder())
+
+    assert loaded._chunk_chars == 25  # chunk_chars preserved
+    assert loaded.search("needle", k=5) == before  # identical results, no re-embedding

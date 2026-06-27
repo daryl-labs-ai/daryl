@@ -20,8 +20,12 @@ best demonstrated level, nothing more.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+from typing import Any
+
 from .chunk_index import ChunkIndex
-from .semantic import SemanticIndex
+from .semantic import Embedder, SemanticIndex
 
 # Frozen optima (ADR-PRL-0006 §2). Configuration, not constants — overridable via
 # PRLConfig — but these are the ratified defaults, not knobs for re-exploration.
@@ -77,3 +81,38 @@ class FusionIndex:
         ranked = sorted(((cid, sc / top) for cid, sc in scores.items()),
                         key=lambda t: t[1], reverse=True)
         return ranked[:k]
+
+    # -- persistence (R3) — a directory holding both indices + the policy -----
+
+    _PREVIEW_FILE = "preview.json"
+    _CHUNK_FILE = "chunk.json"
+    _POLICY_FILE = "fusion.json"
+
+    def save(self, dir_path: Any) -> None:
+        """Persist both sub-indices + the policy params into ``dir_path``."""
+        d = Path(dir_path)
+        d.mkdir(parents=True, exist_ok=True)
+        self._preview.save(d / self._PREVIEW_FILE)
+        self._chunk.save(d / self._CHUNK_FILE)
+        (d / self._POLICY_FILE).write_text(
+            json.dumps({"preview_gate": self._gate, "rrf_k": self._k}), encoding="utf-8"
+        )
+
+    @classmethod
+    def load(cls, dir_path: Any, embedder: Embedder | None = None) -> "FusionIndex":
+        d = Path(dir_path)
+        preview = SemanticIndex.load(d / cls._PREVIEW_FILE, embedder)
+        chunk = ChunkIndex.load(d / cls._CHUNK_FILE, embedder)
+        params = json.loads((d / cls._POLICY_FILE).read_text(encoding="utf-8"))
+        return cls(
+            preview, chunk,
+            preview_gate=int(params.get("preview_gate", DEFAULT_PREVIEW_GATE)),
+            rrf_k=int(params.get("rrf_k", DEFAULT_RRF_K)),
+        )
+
+    @staticmethod
+    def is_persisted(dir_path: Any) -> bool:
+        """True iff ``dir_path`` holds a complete persisted FusionIndex."""
+        d = Path(dir_path)
+        return all((d / f).is_file() for f in
+                   (FusionIndex._PREVIEW_FILE, FusionIndex._CHUNK_FILE, FusionIndex._POLICY_FILE))
