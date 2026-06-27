@@ -46,6 +46,7 @@ class PRLConfig(BaseModel):
     retrieval_chunk_chars: int = 500
     retrieval_preview_gate: int = 10
     retrieval_rrf_k: int = 10
+    retrieval_candidate_k: int = 50  # F3: retrieval depth before binder (≫ output k)
 
     @field_validator("declared_projects")
     @classmethod

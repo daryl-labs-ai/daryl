@@ -106,6 +106,51 @@ def test_no_edges_score_equals_semantic():
     assert hit.linked_files == [] and hit.linked_commits == []
 
 
+# --- F3: candidate_k decoupled from output_k -------------------------------
+
+
+class StubSemantic:
+    """Returns a fixed (id, score) ranking — lets us drive exact semantic ranks."""
+
+    def __init__(self, scored):
+        self._scored = scored  # list[(id, score)] sorted desc
+
+    def search(self, query, k=10):
+        return self._scored[:k]
+
+
+def _deep_engine():
+    """6 sessions; gold s6 is semantic rank 6 but carries a strong binder edge."""
+    sessions = [_session(f"s{i}", f"t{i}", "x") for i in range(1, 7)]
+    scored = [("s1", 0.50), ("s2", 0.49), ("s3", 0.48), ("s4", 0.47), ("s5", 0.46), ("s6", 0.45)]
+    edges = [Edge(edge_type="references", src_id="s6", dst_id=H_A, confidence=1.0,
+                  evidence={"method": "path"})]
+    files = {H_A: FileNode(path="src/k.py", content_hash=H_A, size=1, mtime_ms=1, project_id=PID)}
+    return RecallEngine(StubSemantic(scored), {s.session_id: s for s in sessions}, edges, files=files)
+
+
+def test_binder_rescues_deep_candidate_with_default_depth():
+    """gold at semantic rank 6 rises to top-1 via the binder even with k=5,
+    because candidate_k defaults to 50 (retrieves the whole pool before boosting)."""
+    hits = _deep_engine().ask("q", k=5)  # no candidate_k → DEFAULT_CANDIDATE_K (50)
+    assert hits[0].session.session_id == "s6"  # 0.45 + 0.20*1.0 = 0.65 > 0.50
+    assert len(hits) == 5
+
+
+def test_shallow_candidate_k_cannot_rescue():
+    """With candidate_k == k (old coupled behavior), the rank-6 gold is never
+    retrieved, so the binder cannot see it — proves the decoupling matters."""
+    hits = _deep_engine().ask("q", k=5, candidate_k=5)
+    assert "s6" not in [h.session.session_id for h in hits]
+
+
+def test_candidate_k_below_k_is_clamped_to_k():
+    """candidate_k < k must not retrieve fewer than k candidates."""
+    hits = _deep_engine().ask("q", k=3, candidate_k=1)  # search_k = max(3, 1) = 3
+    assert len(hits) == 3
+    assert [h.session.session_id for h in hits] == ["s1", "s2", "s3"]
+
+
 # --- CLI `ask` -------------------------------------------------------------
 
 
@@ -140,7 +185,7 @@ def test_cli_ask_end_to_end(tmp_path, capsys, monkeypatch):
     proj = _git_project(tmp_path)
     export = _export(tmp_path)
     rc = cli.main(["ask", "where did we decide the kernel architecture?",
-                   "--project", str(proj), "--export", export])
+                   "--project", str(proj), "--export", export, "--candidate-k", "50"])
     assert rc == 0
     out = capsys.readouterr().out
     assert "kernel architecture" in out

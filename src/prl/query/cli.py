@@ -46,6 +46,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_ask.add_argument("--project", required=True, help="project folder to map")
     p_ask.add_argument("--export", required=True, help="ChatGPT export JSON to collect sessions from")
     p_ask.add_argument("-k", type=int, default=5, help="number of hits to return")
+    p_ask.add_argument("--candidate-k", dest="candidate_k", type=int, default=None,
+                       help="retrieval depth before the binder (default from config, 50); "
+                            "decoupled from -k so the binder can rescue deeper candidates")
     p_ask.add_argument("--min-confidence", dest="min_confidence", type=float, default=0.40,
                        help="binder edge confidence threshold")
     p_ask.add_argument("--index-dir", dest="index_dir",
@@ -159,7 +162,9 @@ def cmd_ask(args: argparse.Namespace) -> int:
             files={f.content_hash: f for f in pmap.files},
             commits={c.sha: c for c in pmap.commits},
         )
-        hits = engine.ask(args.question, k=args.k)
+        candidate_k = (args.candidate_k if getattr(args, "candidate_k", None) is not None
+                       else config.retrieval_candidate_k)
+        hits = engine.ask(args.question, k=args.k, candidate_k=candidate_k)
     except PRLError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2

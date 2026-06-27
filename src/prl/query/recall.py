@@ -20,6 +20,11 @@ from .semantic import SemanticIndex
 # Semantic relevance dominates; links are a tiebreaker/booster.
 _LINK_WEIGHT = 0.20
 
+# Default retrieval depth before enrichment (F3). The binder can only rerank
+# candidates the retriever returned, so we retrieve a deeper pool than the user's
+# output size, then return the top k. Decouples candidate_k from output_k.
+DEFAULT_CANDIDATE_K = 50
+
 
 @dataclass(frozen=True)
 class RecallHit:
@@ -60,10 +65,19 @@ class RecallEngine:
         for e in edges:
             self._edges_by_src.setdefault(e.src_id, []).append(e)
 
-    def ask(self, question: str, k: int = 5) -> list[RecallHit]:
-        """Return up to *k* explainable hits, best first."""
+    def ask(self, question: str, k: int = 5, candidate_k: int | None = None) -> list[RecallHit]:
+        """Return up to *k* explainable hits, best first.
+
+        Retrieval depth is **decoupled** from output size (F3): the binder can only
+        rerank candidates the retriever returned, so we retrieve a deeper pool —
+        ``candidate_k`` (default :data:`DEFAULT_CANDIDATE_K`) — enrich + boost the
+        whole pool, then return the top ``k``. A ``candidate_k`` below ``k`` is
+        clamped up to ``k`` (never retrieve fewer than asked for).
+        """
+        depth = candidate_k if candidate_k is not None else DEFAULT_CANDIDATE_K
+        search_k = max(k, depth)
         hits: list[RecallHit] = []
-        for session_id, sem_score in self._semantic.search(question, k=k):
+        for session_id, sem_score in self._semantic.search(question, k=search_k):
             session = self._sessions.get(session_id)
             if session is None:
                 continue  # indexed id with no session record — skip safely
