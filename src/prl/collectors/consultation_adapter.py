@@ -19,8 +19,12 @@ Invariants enforced here (ADR-PRL-0008):
 from __future__ import annotations
 
 import uuid
+from typing import TYPE_CHECKING
 
 from ..types import MEF, ConsultationMode, ConsultationNode
+
+if TYPE_CHECKING:  # avoid importing the client at runtime; consult receives one
+    from .agent_client import AgentClient
 
 # v1 default regimes — conservative; the exact taxonomy is ADR-0003 / open question 8.a
 # (witnessed vs declared for the consultation event), deliberately NOT canonized here.
@@ -68,4 +72,30 @@ class ConsultationAdapter:
             mode=mode,
             answer=answer,
             mef=mef,
+        )
+
+    def consult(
+        self,
+        client: "AgentClient",
+        *,
+        subject_id: str,
+        prompt: str,
+        model: str,
+        confidence: float = 1.0,
+        propose: bool = False,
+    ) -> ConsultationNode:
+        """R-consult v3: call a **real agent** and map its native answer to a Knowledge
+        Act. The model is unaware of PRL; ``client`` is injected (so tests use a fake,
+        no network). Producer attribution = provider + model + adapter version (ADR-0007).
+
+        ``confidence`` is confidence in the *Observation* (the agent did answer this) —
+        **not** in the truth of the answer (Accepted ≠ True). Default 1.0 (we recorded
+        exactly what the model returned). Default mode = Observation; ``propose`` is the
+        only way to a Proposal.
+        """
+        answer = client.complete(prompt, model=model)
+        producer = f"{getattr(client, 'provider', 'agent')}:{model} (consult-adapter v1)"
+        return self.to_act(
+            subject_id=subject_id, answer=answer, producer=producer,
+            confidence=confidence, propose=propose,
         )

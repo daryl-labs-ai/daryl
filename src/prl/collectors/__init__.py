@@ -20,6 +20,7 @@ from .base import (
     list_collectors,
     register,
 )
+from .agent_client import AgentClient, AgentClientError, OpenAIClient
 from .binder import bind_sessions
 from .chatgpt import ChatGPTCollector
 from .consultation_adapter import ConsultationAdapter
@@ -34,4 +35,7 @@ __all__ = [
     "ChatGPTCollector",
     "bind_sessions",
     "ConsultationAdapter",
+    "AgentClient",
+    "AgentClientError",
+    "OpenAIClient",
 ]

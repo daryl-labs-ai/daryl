@@ -106,3 +106,36 @@ def test_cli_consultations_e2e(tmp_path, capsys):
     out = capsys.readouterr().out
     assert rc == 0
     assert "OBSERVATION on ko-Z" in out and "DSM receipt:" in out
+
+
+# --- R-consult v3: real-agent consult via CLI (fake client, kernel) --------
+
+class _FakeAgentClient:
+    provider = "openai"
+
+    def complete(self, prompt, *, model):
+        return "use prev_hash"
+
+
+def test_cli_consult_writes_certified_act_then_readable(tmp_path, capsys, monkeypatch):
+    """The v3 chain with a fake client (no network): consult → certified act →
+    readable/displayable. Proves real-agent → certified Knowledge Act end-to-end."""
+    from prl.query import cli
+
+    monkeypatch.setattr(cli, "_make_agent_client", lambda provider: _FakeAgentClient())
+    storage = str(tmp_path / "dsm")
+
+    rc = cli.main(["consult", "--provider", "openai", "--model", "gpt-5",
+                   "--subject", "KO-123", "Should Storage.append expose prev_hash?",
+                   "--storage-dir", storage])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "provider: openai" in out and "model: gpt-5" in out
+    assert "act: observation" in out and "DSM receipt:" in out
+
+    rc2 = cli.main(["consultations", "--storage-dir", storage, "--subject", "KO-123",
+                    "--rr-index-dir", str(tmp_path / "rr")])
+    out2 = capsys.readouterr().out
+    assert rc2 == 0
+    assert "OBSERVATION on KO-123" in out2
+    assert "openai:gpt-5 (consult-adapter v1)" in out2
