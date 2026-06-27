@@ -22,8 +22,9 @@ from ..collectors import ChatGPTCollector, FullTextSource, bind_sessions
 from ..config import PRLConfig
 from ..exceptions import PRLError
 from ..index import build_map, make_project_node
-from ..store import open_store, prl_shard_name
+from ..store import open_storage, open_store, prl_shard_name
 from .chunk_index import ChunkIndex
+from .consultation_read import ConsultationQuery, render_consultations
 from .fusion_index import FusionIndex
 from .recall import RecallEngine
 from .semantic import LocalEmbedder, SemanticIndex
@@ -54,6 +55,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_ask.add_argument("--index-dir", dest="index_dir",
                        help="persist/load the retrieval indices here (latency cache); "
                             "delete the directory to force a rebuild")
+
+    p_consult = sub.add_parser("consultations",
+                               help="list recorded agent consultation acts (RR read, ADR-0008)")
+    p_consult.add_argument("--config", help="path to the PRL config JSON")
+    p_consult.add_argument("--storage-dir", dest="storage_dir", help="override the DSM storage dir")
+    p_consult.add_argument("--subject", help="filter to one Knowledge Object / subject id")
+    p_consult.add_argument("--rr-index-dir", dest="rr_index_dir",
+                           help="directory for RR's derived index (default: <storage-dir>/_rr_index)")
 
     return parser
 
@@ -111,6 +120,29 @@ def cmd_status(args: argparse.Namespace) -> int:
     for root in config.declared_projects:
         project = make_project_node(root)
         print(f"  - {project.name}  [{prl_shard_name(project.project_id)}]  {root}")
+    return 0
+
+
+def cmd_consultations(args: argparse.Namespace) -> int:
+    """List recorded consultation acts (R-consult v2, ADR-0008). Read-only: opens a
+    Storage via prl/store and reads ``prl.consultation`` through RR. No writer, no LLM."""
+    try:
+        if getattr(args, "config", None):
+            config = PRLConfig.load(Path(args.config))
+        else:
+            # read path: declared_projects is irrelevant here — placeholder to satisfy the model
+            config = PRLConfig(declared_projects=[Path(".")])
+        if getattr(args, "storage_dir", None):
+            config = config.model_copy(update={"storage_dir": Path(args.storage_dir)})
+
+        storage = open_storage(config)  # raw Storage from the registered store module (read)
+        rr_dir = args.rr_index_dir or (Path(config.storage_dir) / "_rr_index")
+        views = ConsultationQuery(storage, rr_dir).list(subject_id=getattr(args, "subject", None))
+    except PRLError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+    print(render_consultations(views))
     return 0
 
 
@@ -191,4 +223,6 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_status(args)
     if args.command == "ask":
         return cmd_ask(args)
+    if args.command == "consultations":
+        return cmd_consultations(args)
     return 1  # pragma: no cover (argparse 'required' guards this)

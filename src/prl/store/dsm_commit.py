@@ -51,6 +51,14 @@ def open_store(config: PRLConfig) -> "PRLStore":
     return PRLStore(Storage(data_dir=str(config.storage_dir)))
 
 
+def open_storage(config: PRLConfig) -> Storage:
+    """Raw ``Storage`` at ``config.storage_dir``, for **RR read consumers** (e.g.
+    ``ConsultationQuery`` in R-consult v2). Kept here (the registered writer module) so
+    read callers never import ``dsm.core.storage.Storage`` directly — they receive the
+    instance and pass it to RR, which is the only read path (ADR-0001). Not a new writer."""
+    return Storage(data_dir=str(config.storage_dir))
+
+
 def _draft_to_entry(draft: EntryDraft) -> Entry:
     """Bridge an :class:`EntryDraft` (P0) to a kernel ``Entry``.
 
