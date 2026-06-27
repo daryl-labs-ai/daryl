@@ -60,9 +60,20 @@ def _sorted_parts(conv: dict) -> tuple[list[int], list[str]]:
 
 
 def _full_text(conv: dict) -> str:
-    """Full joined transcript (untruncated) — the passage/chunk source (R1)."""
-    _times, parts = _sorted_parts(conv)
-    return " | ".join(parts)
+    """Full transcript for the passage/chunk source (R1), in the **canonical
+    retrieval format** (F2): raw message texts only — no ``role:`` prefixes, no
+    ``" | "`` separators — joined by a single space, in original message order.
+
+    This deliberately mirrors the eval harness's ``_full_texts`` *exactly* so the
+    measured policy (``chunk_chars=500`` etc.) was tuned on the same text the
+    production chunk index now embeds. The role lives in metadata, not in the
+    embedded text. The P6 ``text_preview`` is independent and unchanged.
+    """
+    return " ".join(
+        str(m.get("text", "")).strip()
+        for m in (conv.get("messages") or [])
+        if isinstance(m, dict) and str(m.get("text", "")).strip()
+    )
 
 
 def _to_session_node(conv_id: str, conv: dict) -> SessionNode:
