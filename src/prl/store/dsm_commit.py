@@ -73,6 +73,11 @@ def _draft_to_entry(draft: EntryDraft) -> Entry:
     )
 
 
+# Dedicated shard for consultation acts (ADR-PRL-0008). RR reads by action_name across
+# shards, so the shard choice does not affect read; it just groups the acts.
+CONSULTATION_SHARD = "prl_consultations"
+
+
 @dataclass(frozen=True)
 class CommitResult:
     run_id: str
@@ -80,6 +85,16 @@ class CommitResult:
     shard: str
     n_entries: int
     tip_hash: str  # hash of the last appended entry (shard chain tip after commit)
+
+
+@dataclass(frozen=True)
+class ActResult:
+    """Result of committing a single Knowledge Act (e.g. a consultation, ADR-PRL-0008)."""
+
+    run_id: str
+    shard: str
+    act_id: str
+    tip_hash: str  # hash of the appended entry (certification: hash + prev_hash chain)
 
 
 class PRLStore:
@@ -113,3 +128,19 @@ class PRLStore:
             n_entries=count,
             tip_hash=tip_hash,
         )
+
+    def commit_act(
+        self, node: PRLNode, *, run_id: str | None = None, shard: str = CONSULTATION_SHARD
+    ) -> ActResult:
+        """Append a single Knowledge Act (e.g. a ``ConsultationNode``) to its shard.
+
+        Same write path as :meth:`commit_map` (one ``Entry`` via ``Storage.append``,
+        ``metadata['action_name']`` = the PRL kind), so the act is certified (hash +
+        prev_hash chain) and readable via RR by its ``action_name``. Lives in this
+        already-registered writer module, so no new ``LEGITIMATE_WRITERS`` entry.
+        """
+        run_id = run_id or new_run_id()
+        draft: EntryDraft = to_entry(node, shard=shard, session_id=run_id)
+        written = self._storage.append(_draft_to_entry(draft))
+        act_id = getattr(node, "consultation_id", "") or ""
+        return ActResult(run_id=run_id, shard=shard, act_id=act_id, tip_hash=written.hash)

@@ -43,9 +43,12 @@ from .exceptions import PRLEntryMappingError, PRLValidationError
 # Enumerated string literals
 # ---------------------------------------------------------------------------
 
-NodeType = Literal["project", "file", "commit", "session"]
+NodeType = Literal["project", "file", "commit", "session", "consultation"]
 EdgeType = Literal["produced", "modified", "references", "follows", "belongs_to"]
 ToolName = Literal["chatgpt", "claude", "cursor", "vscode", "terminal", "other"]
+
+# Consultation mode (ADR-PRL-0008): Observation by default; Proposal only by explicit adapter flag.
+ConsultationMode = Literal["observation", "proposal"]
 
 # node_type / edge → metadata["action_name"] (RR action_index hook, D-1)
 PRL_ACTION: dict[str, str] = {
@@ -54,6 +57,7 @@ PRL_ACTION: dict[str, str] = {
     "commit": "prl.commit",
     "session": "prl.session",
     "edge": "prl.edge",
+    "consultation": "prl.consultation",  # ADR-PRL-0008 (R-consult v1)
 }
 ACTION_TO_MODEL: dict[str, type[BaseModel]] = {}  # filled after model definitions
 
@@ -137,7 +141,52 @@ class Edge(BaseModel):
         return value
 
 
-PRLNode = Union[ProjectNode, FileNode, CommitNode, SessionNode, Edge]
+class MEF(BaseModel):
+    """Minimal Epistemic Frame (ADR-PRL-0004 Ch2) — the non-strippable transport
+    contract. All fields are required: a record cannot be constructed without a
+    complete MEF, so "MEF complete or refuse" is enforced by the type, not by a
+    convention. ``regime`` is a free string here (its exact taxonomy is ADR-0003 /
+    open question 8.a — not canonized at this layer)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    claim_id: str
+    regime: str          # e.g. "observed.declared" | "derived.proposed" (v1; see ADR-0003 / 8.a)
+    confidence: float
+    contested: bool
+    producer: str        # attribution: "model via adapter vN" (mandatory, ADR-0007/0008)
+
+    @field_validator("confidence")
+    @classmethod
+    def _check_confidence(cls, value: float) -> float:
+        if not (0.0 <= value <= 1.0):
+            raise ValueError(f"MEF.confidence must be within [0, 1], got {value!r}")
+        return value
+
+    @field_validator("claim_id", "regime", "producer")
+    @classmethod
+    def _non_empty(cls, value: str) -> str:
+        if not str(value).strip():
+            raise ValueError("MEF claim_id / regime / producer must be non-empty")
+        return value
+
+
+class ConsultationNode(BaseModel):
+    """A live agent consultation recorded as an attributed Knowledge Act
+    (ADR-PRL-0008). Default ``mode`` is ``observation``; ``proposal`` is set only by
+    an explicit adapter decision. Carries a complete :class:`MEF` (non-strippable)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    node_type: Literal["consultation"] = "consultation"
+    consultation_id: str
+    subject_id: str                       # the consulted Knowledge Object / session id
+    mode: ConsultationMode = "observation"  # default = Observation (ADR-0008 invariant)
+    answer: str                           # the agent's answer payload
+    mef: MEF                              # complete or the record cannot be built
+
+
+PRLNode = Union[ProjectNode, FileNode, CommitNode, SessionNode, Edge, ConsultationNode]
 
 ACTION_TO_MODEL.update(
     {
@@ -146,6 +195,7 @@ ACTION_TO_MODEL.update(
         "prl.commit": CommitNode,
         "prl.session": SessionNode,
         "prl.edge": Edge,
+        "prl.consultation": ConsultationNode,
     }
 )
 
