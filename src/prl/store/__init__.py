@@ -15,6 +15,7 @@ from .dsm_commit import (
     CommitResult,
     PRLStore,
     new_run_id,
+    open_storage,
     open_store,
     prl_shard_name,
 )
@@ -27,4 +28,5 @@ __all__ = [
     "prl_shard_name",
     "new_run_id",
     "open_store",
+    "open_storage",
 ]

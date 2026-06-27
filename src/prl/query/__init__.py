@@ -8,7 +8,8 @@ index, NL recall) arrive in P5+.
 from __future__ import annotations
 
 from .chunk_index import DEFAULT_CHUNK_CHARS, ChunkIndex, chunk_text
-from .cli import build_parser, cmd_ask, cmd_index, cmd_status, main
+from .cli import build_parser, cmd_ask, cmd_consultations, cmd_index, cmd_status, main
+from .consultation_read import ConsultationQuery, ConsultationView, render_consultations
 from .fusion_index import DEFAULT_PREVIEW_GATE, DEFAULT_RRF_K, FusionIndex
 from .recall import RecallEngine, RecallHit
 from .semantic import Embedder, LocalEmbedder, SemanticError, SemanticIndex
@@ -20,6 +21,10 @@ __all__ = [
     "cmd_index",
     "cmd_status",
     "cmd_ask",
+    "cmd_consultations",
+    "ConsultationQuery",
+    "ConsultationView",
+    "render_consultations",
     "StructuralQuery",
     "PRLAdjacencyIndex",
     "SemanticIndex",
