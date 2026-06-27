@@ -28,6 +28,19 @@ class Collector(Protocol):
     def collect(self) -> list[SessionNode]: ...
 
 
+@runtime_checkable
+class FullTextSource(Protocol):
+    """Optional capability (Retrieval v2 / ADR-PRL-0006, R1): yield the **full**
+    transcript text per session, keyed by ``session_id``.
+
+    Deliberately separate from :meth:`Collector.collect` so the P6 ``SessionNode``
+    schema stays frozen (preview-only). Only sources that can provide full text
+    implement this; the passage (chunk) index consumes the returned map. A source
+    is checked for this capability with ``isinstance(src, FullTextSource)``."""
+
+    def full_texts(self) -> dict[str, str]: ...
+
+
 COLLECTOR_REGISTRY: dict[str, type] = {}
 
 

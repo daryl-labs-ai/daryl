@@ -36,7 +36,12 @@ def _ms(t: Any) -> int | None:
         return None
 
 
-def _to_session_node(conv_id: str, conv: dict) -> SessionNode:
+def _sorted_parts(conv: dict) -> tuple[list[int], list[str]]:
+    """Return (timestamps_ms, ``"role: text"`` parts) sorted chronologically.
+
+    Shared by the SessionNode preview and the full-text accessor so both see the
+    same ordered transcript — the preview is just its first ``_PREVIEW_MAX`` chars.
+    """
     raw = conv.get("messages") or []
     # (ms, message) pairs; sort chronologically (messages may arrive unordered),
     # with timestamp-less messages kept last in original order.
@@ -51,7 +56,18 @@ def _to_session_node(conv_id: str, conv: dict) -> SessionNode:
             continue
         role = str(m.get("role", "")).strip() or "?"
         parts.append(f"{role}: {text}")
-    preview = " | ".join(parts)[:_PREVIEW_MAX]
+    return times, parts
+
+
+def _full_text(conv: dict) -> str:
+    """Full joined transcript (untruncated) — the passage/chunk source (R1)."""
+    _times, parts = _sorted_parts(conv)
+    return " | ".join(parts)
+
+
+def _to_session_node(conv_id: str, conv: dict) -> SessionNode:
+    times, parts = _sorted_parts(conv)
+    preview = " | ".join(parts)[:_PREVIEW_MAX]  # P6 schema: preview-only, unchanged
 
     return SessionNode(
         session_id=str(conv_id),
@@ -73,7 +89,9 @@ class ChatGPTCollector:
     def __init__(self, export_path: str | Path):
         self._path = Path(export_path)
 
-    def collect(self) -> list[SessionNode]:
+    def _conversations(self) -> dict:
+        """Load and return the ``{conv_id: conv}`` map, tolerating the wrapper or
+        bare shapes. Shared by :meth:`collect` and :meth:`full_texts`."""
         try:
             raw = self._path.read_text(encoding="utf-8")
         except OSError as exc:
@@ -84,15 +102,29 @@ class ChatGPTCollector:
             raise CollectorError(f"ChatGPT export is not valid JSON: {exc}") from exc
 
         if isinstance(data, dict) and isinstance(data.get("conversations"), dict):
-            conversations = data["conversations"]
-        elif isinstance(data, dict):
-            conversations = data
-        else:
-            raise CollectorError("ChatGPT export must be a JSON object of conversations")
+            return data["conversations"]
+        if isinstance(data, dict):
+            return data
+        raise CollectorError("ChatGPT export must be a JSON object of conversations")
 
+    def collect(self) -> list[SessionNode]:
         nodes: list[SessionNode] = []
-        for conv_id, conv in conversations.items():
+        for conv_id, conv in self._conversations().items():
             if not isinstance(conv, dict):
                 continue  # skip malformed entry defensively
             nodes.append(_to_session_node(conv_id, conv))
         return nodes
+
+    def full_texts(self) -> dict[str, str]:
+        """``session_id -> full transcript`` (Retrieval v2 / R1 ``FullTextSource``).
+
+        The passage index consumes this; ``SessionNode`` stays preview-only. Only
+        non-empty transcripts are returned."""
+        out: dict[str, str] = {}
+        for conv_id, conv in self._conversations().items():
+            if not isinstance(conv, dict):
+                continue
+            text = _full_text(conv)
+            if text:
+                out[str(conv_id)] = text
+        return out

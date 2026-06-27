@@ -15,6 +15,7 @@ from __future__ import annotations
 from .base import (
     COLLECTOR_REGISTRY,
     Collector,
+    FullTextSource,
     get_collector,
     list_collectors,
     register,
@@ -24,6 +25,7 @@ from .chatgpt import ChatGPTCollector
 
 __all__ = [
     "Collector",
+    "FullTextSource",
     "COLLECTOR_REGISTRY",
     "register",
     "get_collector",
