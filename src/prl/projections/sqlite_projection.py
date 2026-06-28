@@ -114,12 +114,14 @@ class SqliteProjection:
             return []
         conn = sqlite3.connect(self._db)
         try:
+            # placeholders is only "?" (one per id); every value is a bound parameter,
+            # so this is not a string-interpolated SQL injection vector (bandit B608).
             placeholders = ",".join("?" for _ in ids)
-            rows = conn.execute(
-                f"SELECT entry_id, action_name, content, receipt FROM acts "
-                f"WHERE entry_id IN ({placeholders})",
-                ids,
-            ).fetchall()
+            sql = (
+                "SELECT entry_id, action_name, content, receipt FROM acts "
+                f"WHERE entry_id IN ({placeholders})"  # nosec B608
+            )
+            rows = conn.execute(sql, ids).fetchall()
         finally:
             conn.close()
         out = [
