@@ -212,3 +212,52 @@ def test_standing_latest_resolution_wins_through_kernel(tmp_path):
     view = StandingQuery(store._storage, tmp_path / "rr").standing_of(claim)
     assert view.standing == "superseded"                     # latest act wins
     assert view.decisions == ("accepted", "superseded")      # in append order
+
+
+# --- R-explain v1: reconstruct "why this decision?" from certified acts (kernel) ----
+
+def test_explain_reconstructs_chain_through_kernel(tmp_path):
+    """Step 6: given a claim, reconstruct Proposal → Resolution → derived standing from
+    certified acts only (no narration). Every facet carries its DSM receipt."""
+    from prl.query.explain_read import ExplainQuery
+
+    store = _store(tmp_path)
+    proposal = ConsultationAdapter().to_act(
+        subject_id="KO-7", answer="derived only", producer="openai:gpt-4o (consult-adapter v1)",
+        confidence=0.7, propose=True)
+    p_res = store.commit_act(proposal)
+    claim = proposal.mef.claim_id
+    r_res = store.commit_act(make_resolution(
+        target_claim_id=claim, decision="accepted", producer="human:mohamed"))
+
+    e = ExplainQuery(store._storage, tmp_path / "rr").explain(claim)
+    assert e.proposal is not None and e.proposal.receipt == p_res.tip_hash
+    assert e.proposal.producer == "openai:gpt-4o (consult-adapter v1)"
+    assert len(e.resolutions) == 1
+    assert e.resolutions[0].decision == "accepted"
+    assert e.resolutions[0].resolver == "human:mohamed"
+    assert e.resolutions[0].receipt == r_res.tip_hash
+    assert e.standing == "accepted"
+
+
+def test_cli_explain_e2e(tmp_path, capsys):
+    from prl.query import cli
+
+    store = _store(tmp_path)
+    proposal = ConsultationAdapter().to_act(
+        subject_id="KO-7", answer="X", producer="openai:gpt-4o (consult-adapter v1)",
+        confidence=0.7, propose=True)
+    store.commit_act(proposal)
+    claim = proposal.mef.claim_id
+    cli.main(["resolve", "--claim", claim, "--decision", "accepted",
+              "--producer", "human:mohamed", "--storage-dir", str(tmp_path)])
+    capsys.readouterr()
+
+    rc = cli.main(["explain", "--claim", claim, "--storage-dir", str(tmp_path),
+                   "--rr-index-dir", str(tmp_path / "rr")])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert f"why {claim} is ACCEPTED" in out
+    assert "resolver=human:mohamed" in out
+    assert "standing   ACCEPTED (derived)" in out
+    assert out.count("receipt v1:") == 2

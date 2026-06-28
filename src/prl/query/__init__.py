@@ -13,6 +13,7 @@ from .cli import (
     cmd_ask,
     cmd_consult,
     cmd_consultations,
+    cmd_explain,
     cmd_index,
     cmd_resolve,
     cmd_standing,
@@ -20,10 +21,11 @@ from .cli import (
     main,
 )
 from .consultation_read import ConsultationQuery, ConsultationView, render_consultations
+from .explain_read import ExplainQuery, Explanation, ProposalFact, render_explanation
 from .fusion_index import DEFAULT_PREVIEW_GATE, DEFAULT_RRF_K, FusionIndex
 from .recall import RecallEngine, RecallHit
 from .semantic import Embedder, LocalEmbedder, SemanticError, SemanticIndex
-from .standing_read import StandingQuery, StandingView, render_standing
+from .standing_read import ResolutionFact, StandingQuery, StandingView, render_standing
 from .structural import PRLAdjacencyIndex, StructuralQuery
 
 __all__ = [
@@ -36,9 +38,15 @@ __all__ = [
     "cmd_consult",
     "cmd_resolve",
     "cmd_standing",
+    "cmd_explain",
     "StandingQuery",
     "StandingView",
+    "ResolutionFact",
     "render_standing",
+    "ExplainQuery",
+    "Explanation",
+    "ProposalFact",
+    "render_explanation",
     "ConsultationQuery",
     "ConsultationView",
     "render_consultations",

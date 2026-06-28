@@ -33,6 +33,7 @@ from ..store import open_storage, open_store, prl_shard_name
 from .chunk_index import ChunkIndex
 from .consultation_read import ConsultationQuery, render_consultations
 from .fusion_index import FusionIndex
+from .explain_read import ExplainQuery, render_explanation
 from .recall import RecallEngine
 from .semantic import LocalEmbedder, SemanticIndex
 from .standing_read import StandingQuery, render_standing
@@ -102,6 +103,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_st.add_argument("--config", help="path to the PRL config JSON")
     p_st.add_argument("--storage-dir", dest="storage_dir", help="override the DSM storage dir")
     p_st.add_argument("--rr-index-dir", dest="rr_index_dir",
+                      help="directory for RR's derived index (default: <storage-dir>/_rr_index)")
+
+    p_ex = sub.add_parser("explain",
+                          help="reconstruct WHY a claim holds its standing, from certified acts (read-only)")
+    p_ex.add_argument("--claim", required=True, dest="claim", help="the claim_id to explain")
+    p_ex.add_argument("--config", help="path to the PRL config JSON")
+    p_ex.add_argument("--storage-dir", dest="storage_dir", help="override the DSM storage dir")
+    p_ex.add_argument("--rr-index-dir", dest="rr_index_dir",
                       help="directory for RR's derived index (default: <storage-dir>/_rr_index)")
 
     return parser
@@ -269,6 +278,21 @@ def cmd_standing(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_explain(args: argparse.Namespace) -> int:
+    """Reconstruct WHY a claim holds its standing — Proposal → Resolution(s) → derived
+    standing — from certified acts only (RR read-only; every line backed by a receipt)."""
+    try:
+        config = _read_config(args)
+        rr_dir = args.rr_index_dir or (Path(config.storage_dir) / "_rr_index")
+        explanation = ExplainQuery(open_storage(config), rr_dir).explain(args.claim)
+    except PRLError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+    print(render_explanation(explanation))
+    return 0
+
+
 def cmd_ask(args: argparse.Namespace) -> int:
     """Full in-memory recall: collect sessions → build map → bind → semantic
     search → structural enrichment → ranked, explainable hits. No LLM, no
@@ -354,4 +378,6 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_resolve(args)
     if args.command == "standing":
         return cmd_standing(args)
+    if args.command == "explain":
+        return cmd_explain(args)
     return 1  # pragma: no cover (argparse 'required' guards this)
