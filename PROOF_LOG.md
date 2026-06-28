@@ -19,3 +19,12 @@ Append-only record of hypotheses tested and the rule each one fired. One entry p
 - **Experiment:** R-consult v2 implementation + ConsultationQuery + CLI consultations + RR e2e tests.
 - **Change:** Consultation Knowledge Acts are now writable and readable/displayable.
 - **Rule fired:** HOLD / evidence added, no conceptual promotion.
+
+---
+
+## PRL Agent Consultation v3 — real agent invocation (ADR-PRL-0008)
+
+- **Hypothesis:** a real agent produces a DSM-certified Knowledge Act without knowing PRL.
+- **Experiment:** R-consult v3 + OpenAIClient + real `prl consult` transcript (gpt-4o, real receipt `v1:d1df9edab5ed4d0e00e82c433ba03e00da27a856ee47c8972de1c3dde2470779`).
+- **Change:** external commercial model contributed a certified, retrievable project act.
+- **Rule fired:** PROMOTION / first real-agent certified act.
