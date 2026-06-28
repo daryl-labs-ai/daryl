@@ -24,6 +24,7 @@ from .agent_client import AgentClient, AgentClientError, OpenAIClient
 from .binder import bind_sessions
 from .chatgpt import ChatGPTCollector
 from .consultation_adapter import ConsultationAdapter
+from .resolution import make_resolution
 
 __all__ = [
     "Collector",
@@ -38,4 +39,5 @@ __all__ = [
     "AgentClient",
     "AgentClientError",
     "OpenAIClient",
+    "make_resolution",
 ]
