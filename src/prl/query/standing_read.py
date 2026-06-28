@@ -39,6 +39,16 @@ class StandingView:
     last_receipt: str           # DSM receipt of the latest resolution ("" if none)
 
 
+@dataclass(frozen=True)
+class ResolutionFact:
+    """One resolution act, reduced to the facts R-explain needs to answer
+    'who decided, with which certified act' — each backed by a DSM receipt."""
+
+    decision: str    # accepted | rejected | superseded | withdrawn
+    resolver: str    # the human/witnessed producer (MEF.producer)
+    receipt: str     # the resolution Entry's DSM hash
+
+
 def render_standing(view: StandingView) -> str:
     """Pure display."""
     if not view.decisions:
@@ -89,3 +99,16 @@ class StandingQuery:
             decisions=tuple(n.decision for _e, n in res),
             last_receipt=str(getattr(last_entry, "hash", "") or ""),
         )
+
+    def resolutions_of(self, claim_id: str) -> list[ResolutionFact]:
+        """The resolution acts targeting ``claim_id`` as facts (decision, resolver,
+        receipt), in authoritative record order. Read-only; the *standing* is still
+        derived by ``standing_of`` — this only exposes the acts behind it (R-explain)."""
+        return [
+            ResolutionFact(
+                decision=node.decision,
+                resolver=node.mef.producer,
+                receipt=str(getattr(entry, "hash", "") or ""),
+            )
+            for entry, node in self._resolutions_for(claim_id)
+        ]
