@@ -24,6 +24,7 @@ from ..collectors import (
     FullTextSource,
     OpenAIClient,
     bind_sessions,
+    make_resolution,
 )
 from ..config import PRLConfig
 from ..exceptions import PRLError
@@ -34,6 +35,7 @@ from .consultation_read import ConsultationQuery, render_consultations
 from .fusion_index import FusionIndex
 from .recall import RecallEngine
 from .semantic import LocalEmbedder, SemanticIndex
+from .standing_read import StandingQuery, render_standing
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -82,6 +84,25 @@ def build_parser() -> argparse.ArgumentParser:
                       help="confidence in the OBSERVATION (the agent answered), not its truth")
     p_do.add_argument("--propose", action="store_true",
                       help="record as Observation+Proposal instead of Observation (explicit only)")
+
+    p_res = sub.add_parser("resolve",
+                           help="human-ratify a claim → certified Resolution act (ADR-0008, Resolution v1)")
+    p_res.add_argument("--claim", required=True, dest="claim", help="the target claim_id to resolve")
+    p_res.add_argument("--decision", required=True,
+                       choices=["accepted", "rejected", "superseded", "withdrawn"],
+                       help="the governance decision (Accepted ≠ True)")
+    p_res.add_argument("--producer", default="human:cli",
+                       help="the human/witnessed ratifier (e.g. human:<id>); agents never ratify")
+    p_res.add_argument("--config", help="path to the PRL config JSON")
+    p_res.add_argument("--storage-dir", dest="storage_dir", help="override the DSM storage dir")
+
+    p_st = sub.add_parser("standing",
+                          help="show a claim's DERIVED standing (read-only, RR; never stored)")
+    p_st.add_argument("--claim", required=True, dest="claim", help="the claim_id to derive standing for")
+    p_st.add_argument("--config", help="path to the PRL config JSON")
+    p_st.add_argument("--storage-dir", dest="storage_dir", help="override the DSM storage dir")
+    p_st.add_argument("--rr-index-dir", dest="rr_index_dir",
+                      help="directory for RR's derived index (default: <storage-dir>/_rr_index)")
 
     return parser
 
@@ -202,6 +223,52 @@ def cmd_consult(args: argparse.Namespace) -> int:
     return 0
 
 
+def _read_config(args: argparse.Namespace) -> PRLConfig:
+    """Resolve a config for a read/governance command. ``declared_projects`` is
+    irrelevant to these commands; a placeholder satisfies the model when only a
+    storage dir is given."""
+    config = PRLConfig.load(Path(args.config)) if getattr(args, "config", None) \
+        else PRLConfig(declared_projects=[Path(".")])
+    if getattr(args, "storage_dir", None):
+        config = config.model_copy(update={"storage_dir": Path(args.storage_dir)})
+    return config
+
+
+def cmd_resolve(args: argparse.Namespace) -> int:
+    """Human-ratify a claim → certified Resolution act (Resolution v1). Write via
+    prl/store; the agent path cannot reach this. An act, not a mutation — standing
+    is derived later, not set here."""
+    try:
+        config = _read_config(args)
+        node = make_resolution(
+            target_claim_id=args.claim, decision=args.decision, producer=args.producer)
+        res = open_store(config).commit_act(node)
+    except PRLError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+    print(f"✓ resolved claim: {args.claim}")
+    print(f"✓ decision: {args.decision}  (Accepted ≠ True)")
+    print(f"✓ producer: {args.producer}")
+    print(f"✓ DSM receipt: {res.tip_hash}")
+    return 0
+
+
+def cmd_standing(args: argparse.Namespace) -> int:
+    """Show a claim's DERIVED standing (RR read-only; computed by replaying acts,
+    never a stored field)."""
+    try:
+        config = _read_config(args)
+        rr_dir = args.rr_index_dir or (Path(config.storage_dir) / "_rr_index")
+        view = StandingQuery(open_storage(config), rr_dir).standing_of(args.claim)
+    except PRLError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+    print(render_standing(view))
+    return 0
+
+
 def cmd_ask(args: argparse.Namespace) -> int:
     """Full in-memory recall: collect sessions → build map → bind → semantic
     search → structural enrichment → ranked, explainable hits. No LLM, no
@@ -283,4 +350,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_consultations(args)
     if args.command == "consult":
         return cmd_consult(args)
+    if args.command == "resolve":
+        return cmd_resolve(args)
+    if args.command == "standing":
+        return cmd_standing(args)
     return 1  # pragma: no cover (argparse 'required' guards this)

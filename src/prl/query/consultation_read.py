@@ -33,6 +33,7 @@ class ConsultationView:
     confidence: float
     receipt: str       # the DSM Entry hash (certification: "v1:<sha256>")
     answer: str
+    claim_id: str = ""  # the MEF claim_id (the identity a Resolution targets — Resolution v1)
 
 
 def view_from_entry(entry: Any) -> ConsultationView:
@@ -51,6 +52,7 @@ def view_from_entry(entry: Any) -> ConsultationView:
         confidence=node.mef.confidence,
         receipt=str(getattr(entry, "hash", "") or ""),
         answer=node.answer,
+        claim_id=node.mef.claim_id,
     )
 
 
@@ -62,6 +64,7 @@ def render_consultations(views: list[ConsultationView]) -> str:
     for v in views:
         lines.append(f"▸ {v.mode.upper()} on {v.subject_id}  [{v.consultation_id}]")
         lines.append(f"    producer: {v.producer}   confidence: {v.confidence:.2f}")
+        lines.append(f"    claim: {v.claim_id}")
         lines.append(f"    DSM receipt: {v.receipt}")
     return "\n".join(lines)
 

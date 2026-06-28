@@ -113,7 +113,10 @@ def test_action_name_per_kind():
     for node, exp in zip(nodes, expected):
         draft = to_entry(node, shard=SHARD, session_id=RUN)
         assert draft.metadata["action_name"] == exp
-    assert set(PRL_ACTION.values()) == set(expected) | {"prl.consultation"}
+    # The 5 historical kinds stay byte-identical (asserted per-node above). PRL_ACTION
+    # stays exhaustive (==): the 5 historical kinds + the additive consultation and
+    # resolution kinds (ADR-PRL-0008). A new action_name must be accounted for here.
+    assert set(PRL_ACTION.values()) == set(expected) | {"prl.consultation", "prl.resolution"}
 
 
 def test_entry_draft_has_shard_and_session():

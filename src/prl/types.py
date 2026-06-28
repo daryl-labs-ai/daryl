@@ -43,12 +43,15 @@ from .exceptions import PRLEntryMappingError, PRLValidationError
 # Enumerated string literals
 # ---------------------------------------------------------------------------
 
-NodeType = Literal["project", "file", "commit", "session", "consultation"]
+NodeType = Literal["project", "file", "commit", "session", "consultation", "resolution"]
 EdgeType = Literal["produced", "modified", "references", "follows", "belongs_to"]
 ToolName = Literal["chatgpt", "claude", "cursor", "vscode", "terminal", "other"]
 
 # Consultation mode (ADR-PRL-0008): Observation by default; Proposal only by explicit adapter flag.
 ConsultationMode = Literal["observation", "proposal"]
+
+# Resolution decision (ADR-PRL-0008 / Resolution v1): a governance act over a claim.
+ResolutionDecision = Literal["accepted", "rejected", "superseded", "withdrawn"]
 
 # node_type / edge → metadata["action_name"] (RR action_index hook, D-1)
 PRL_ACTION: dict[str, str] = {
@@ -58,6 +61,7 @@ PRL_ACTION: dict[str, str] = {
     "session": "prl.session",
     "edge": "prl.edge",
     "consultation": "prl.consultation",  # ADR-PRL-0008 (R-consult v1)
+    "resolution": "prl.resolution",      # ADR-PRL-0008 (Resolution / Standing v1)
 }
 ACTION_TO_MODEL: dict[str, type[BaseModel]] = {}  # filled after model definitions
 
@@ -186,7 +190,35 @@ class ConsultationNode(BaseModel):
     mef: MEF                              # complete or the record cannot be built
 
 
-PRLNode = Union[ProjectNode, FileNode, CommitNode, SessionNode, Edge, ConsultationNode]
+class ResolutionNode(BaseModel):
+    """A governance act over a claim (ADR-PRL-0008, Resolution v1). Human/witnessed:
+    only a human (or witnessed) producer ratifies — never an agent. It is an **act**
+    (append-only), not a mutation; a claim's *standing* is **derived** by replaying
+    these acts (it is never a stored field). ``decision`` carries the governance
+    outcome; ``target_claim_id`` is the ``MEF.claim_id`` of the claim it acts on.
+
+    There is deliberately **no boolean truth field**: Accepted ≠ True (ADR-0001).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    node_type: Literal["resolution"] = "resolution"
+    resolution_id: str
+    target_claim_id: str                  # the MEF.claim_id this resolution acts on
+    decision: ResolutionDecision
+    mef: MEF                              # the resolver's own frame; producer = human/witnessed
+
+    @field_validator("target_claim_id", "resolution_id")
+    @classmethod
+    def _non_empty(cls, value: str) -> str:
+        if not str(value).strip():
+            raise ValueError("ResolutionNode resolution_id / target_claim_id must be non-empty")
+        return value
+
+
+PRLNode = Union[
+    ProjectNode, FileNode, CommitNode, SessionNode, Edge, ConsultationNode, ResolutionNode
+]
 
 ACTION_TO_MODEL.update(
     {
@@ -196,6 +228,7 @@ ACTION_TO_MODEL.update(
         "prl.session": SessionNode,
         "prl.edge": Edge,
         "prl.consultation": ConsultationNode,
+        "prl.resolution": ResolutionNode,
     }
 )
 

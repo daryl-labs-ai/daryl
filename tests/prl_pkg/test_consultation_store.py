@@ -13,7 +13,7 @@ from dsm.rr.index import RRIndexBuilder
 from dsm.rr.navigator import RRNavigator
 from dsm.verify import verify_shard
 
-from prl.collectors import ConsultationAdapter
+from prl.collectors import ConsultationAdapter, make_resolution
 from prl.store import CONSULTATION_SHARD, ActResult, PRLStore
 from prl.types import ConsultationNode, from_entry
 
@@ -139,3 +139,76 @@ def test_cli_consult_writes_certified_act_then_readable(tmp_path, capsys, monkey
     assert rc2 == 0
     assert "OBSERVATION on KO-123" in out2
     assert "openai:gpt-5 (consult-adapter v1)" in out2
+
+
+# --- Resolution / Standing v1: proposal → human resolve → derived standing (kernel) --
+
+def test_resolve_then_standing_derived(tmp_path):
+    """Step 5 of the MVP scenario: a Proposal is human-ratified → certified Resolution
+    act → the claim's standing is DERIVED as 'accepted' via RR (never stored)."""
+    from prl.query import cli
+    from prl.query.standing_read import StandingQuery
+
+    store = _store(tmp_path)
+    # a Proposal carries the claim the human will resolve
+    proposal = ConsultationAdapter().to_act(
+        subject_id="KO-9", answer="X", producer="claude via adapter v1", confidence=0.7,
+        propose=True)
+    store.commit_act(proposal)
+    claim = proposal.mef.claim_id
+
+    # before resolution: derived standing is 'proposed'
+    assert StandingQuery(store._storage, tmp_path / "rr0").standing_of(claim).standing == "proposed"
+
+    # human ratifies via CLI (write a Resolution act)
+    rc = cli.main(["resolve", "--claim", claim, "--decision", "accepted",
+                   "--producer", "human:mohamed", "--storage-dir", str(tmp_path)])
+    assert rc == 0
+
+    # standing is now DERIVED as 'accepted' (computed from acts, no stored field)
+    view = StandingQuery(store._storage, tmp_path / "rr1").standing_of(claim)
+    assert view.standing == "accepted"
+    assert view.last_receipt  # the Resolution's DSM receipt
+
+
+def test_cli_standing_e2e(tmp_path, capsys):
+    from prl.query import cli
+
+    store = _store(tmp_path)
+    proposal = ConsultationAdapter().to_act(
+        subject_id="KO-9", answer="X", producer="claude via adapter v1", confidence=0.7,
+        propose=True)
+    store.commit_act(proposal)
+    claim = proposal.mef.claim_id
+
+    cli.main(["resolve", "--claim", claim, "--decision", "accepted", "--storage-dir", str(tmp_path)])
+    capsys.readouterr()
+    rc = cli.main(["standing", "--claim", claim, "--storage-dir", str(tmp_path),
+                   "--rr-index-dir", str(tmp_path / "rr")])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "ACCEPTED" in out
+
+
+def test_standing_latest_resolution_wins_through_kernel(tmp_path):
+    """Multiple resolutions on one claim through the real kernel: standing is the
+    LATEST decision (append order), not whatever order RR's resolve_entries returns.
+    Regression guard — resolve_entries regroups by shard and does not preserve the
+    navigate_action ordering, so derivation must replay by record order."""
+    from prl.query.standing_read import StandingQuery
+
+    store = _store(tmp_path)
+    proposal = ConsultationAdapter().to_act(
+        subject_id="KO-9", answer="X", producer="claude via adapter v1", confidence=0.7,
+        propose=True)
+    store.commit_act(proposal)
+    claim = proposal.mef.claim_id
+
+    store.commit_act(make_resolution(
+        target_claim_id=claim, decision="accepted", producer="human:mohamed", claim_id=claim))
+    store.commit_act(make_resolution(
+        target_claim_id=claim, decision="superseded", producer="human:mohamed", claim_id=claim))
+
+    view = StandingQuery(store._storage, tmp_path / "rr").standing_of(claim)
+    assert view.standing == "superseded"                     # latest act wins
+    assert view.decisions == ("accepted", "superseded")      # in append order
