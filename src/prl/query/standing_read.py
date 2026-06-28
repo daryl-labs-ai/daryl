@@ -2,19 +2,22 @@
 
 The load-bearing rule: **standing is never a stored or mutated field.** A claim's
 current standing is *computed by replaying its acts* — read the ``prl.resolution``
-acts targeting the claim and derive the outcome. Read-only, RR-only: this module
-imports only ``dsm.rr.*`` and *receives* a storage instance (so no
-``LEGITIMATE_WRITERS`` entry, like ``structural.py`` / ``consultation_read.py``).
+acts targeting the claim and derive the outcome. Read-only.
+
+Reads go through a :class:`RegistryProjection` (the registry retrieval seam, abstracted
+as a PRL-owned contract — Identity across projections v1). The default projection is RR
+(``RRNavigator``); a second projection (e.g. SQLite) implements the same surface, so the
+*same* query code runs on either — identity is projection-invariant by construction.
 
 v1 derivation: a claim with no resolution is ``proposed``; otherwise its standing is
-the decision of the **latest** resolution (RR/append order). ``superseded`` and
+the decision of the **latest** resolution (authoritative record order). ``superseded`` and
 ``withdrawn`` are themselves new resolution acts — never edits.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol
 
 from dsm.rr.index import RRIndexBuilder
 from dsm.rr.navigator import RRNavigator
@@ -22,11 +25,24 @@ from dsm.rr.navigator import RRNavigator
 from ..types import ResolutionNode, from_entry
 
 
-def _record_entry_id(rec: Any) -> Any:
-    """The entry id of an RR action record (dict from real RR, or attr on a stub)."""
-    if isinstance(rec, dict):
-        return rec.get("entry_id") or rec.get("id")
-    return getattr(rec, "entry_id", None) or getattr(rec, "id", None)
+class RegistryProjection(Protocol):
+    """The registry retrieval seam (ADR-PRL-0004 Ch5: "the registry is one projection
+    among many"). A projection enumerates certified acts by kind and resolves them to
+    Entry-shaped objects. Identity (``claim_id``) lives in the resolved ``content`` and is
+    filtered in PRL code, never an index axis.
+
+    Contract:
+    - ``navigate_action(action_name)`` returns records in **authoritative order**
+      (ascending, stable). Each record exposes an ``entry_id`` (dict key or attribute).
+    - ``resolve_entries(records)`` returns Entry-shaped objects (``.id`` / ``.hash`` /
+      ``.content`` / ``.metadata['action_name']``); it does **not** guarantee order, so
+      consumers replay in the records' order and join record→entry by id.
+    - The receipt is the resolved entry's ``.hash`` — **projection-relative** (it certifies
+      that projection's storage; a substrate swap would re-issue it, not carry it).
+    """
+
+    def navigate_action(self, action_name: str, limit: int | None = ...) -> list[Any]: ...
+    def resolve_entries(self, records: list[Any], limit: int | None = ...) -> list[Any]: ...
 
 
 @dataclass(frozen=True)
@@ -42,11 +58,11 @@ class StandingView:
 @dataclass(frozen=True)
 class ResolutionFact:
     """One resolution act, reduced to the facts R-explain needs to answer
-    'who decided, with which certified act' — each backed by a DSM receipt."""
+    'who decided, with which certified act' — each backed by a receipt."""
 
     decision: str    # accepted | rejected | superseded | withdrawn
     resolver: str    # the human/witnessed producer (MEF.producer)
-    receipt: str     # the resolution Entry's DSM hash
+    receipt: str     # the resolution Entry's hash (projection-relative)
 
 
 def render_standing(view: StandingView) -> str:
@@ -58,27 +74,28 @@ def render_standing(view: StandingView) -> str:
 
 
 class StandingQuery:
-    """Derives a claim's standing from its resolution acts via RR (read-only)."""
+    """Derives a claim's standing from its resolution acts via a registry projection
+    (read-only). Runs unchanged on RR or any other :class:`RegistryProjection`."""
 
-    def __init__(self, storage: Any, index_dir: Any, *, _navigator: RRNavigator | None = None):
+    def __init__(self, storage: Any, index_dir: Any, *, _navigator: RegistryProjection | None = None):
         if _navigator is None:
             builder = RRIndexBuilder(storage=storage, index_dir=str(index_dir))
             builder.build()
             _navigator = RRNavigator(builder, storage)
-        self._nav = _navigator
+        self._nav: RegistryProjection = _navigator
 
     def _resolutions_for(self, claim_id: str) -> list[tuple[Any, ResolutionNode]]:
-        # navigate_action returns records in RR build-time order — timestamp ascending
-        # with a stable insertion tiebreaker (Phase 7a Amendement A), i.e. append order.
-        # resolve_entries regroups by shard and does NOT preserve that order, so we
-        # re-key the resolved entries by id and replay them in the records' order. That
-        # is what makes "latest resolution wins" deterministic (see standing_of).
-        records = list(self._nav.navigate_action("prl.resolution"))
+        # Authoritative order is the *records'* order: navigate_action is ascending;
+        # resolve_entries does NOT preserve that order, so replay in records' order and
+        # join record -> entry by id (never trust resolve_entries order). This holds for
+        # any projection that honours the RegistryProjection contract.
+        records = self._nav.navigate_action("prl.resolution")
         entries = self._nav.resolve_entries(records)
         by_id = {getattr(e, "id", None): e for e in entries}
         out: list[tuple[Any, ResolutionNode]] = []
         for rec in records:
-            entry = by_id.get(_record_entry_id(rec))
+            eid = rec.get("entry_id") if isinstance(rec, dict) else getattr(rec, "entry_id", None)
+            entry = by_id.get(eid)
             if entry is None:
                 continue
             node = from_entry(entry)
@@ -92,7 +109,7 @@ class StandingQuery:
         res = self._resolutions_for(claim_id)
         if not res:
             return StandingView(claim_id=claim_id, standing="proposed", decisions=(), last_receipt="")
-        last_entry, last_node = res[-1]  # v1: latest by RR/append order
+        last_entry, last_node = res[-1]  # latest by authoritative record order
         return StandingView(
             claim_id=claim_id,
             standing=last_node.decision,

@@ -104,6 +104,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_st.add_argument("--storage-dir", dest="storage_dir", help="override the DSM storage dir")
     p_st.add_argument("--rr-index-dir", dest="rr_index_dir",
                       help="directory for RR's derived index (default: <storage-dir>/_rr_index)")
+    p_st.add_argument("--projection", choices=["rr", "sqlite"], default="rr",
+                      help="read projection (default rr; sqlite needs --db)")
+    p_st.add_argument("--db", help="SQLite projection path (with --projection sqlite)")
 
     p_ex = sub.add_parser("explain",
                           help="reconstruct WHY a claim holds its standing, from certified acts (read-only)")
@@ -112,6 +115,17 @@ def build_parser() -> argparse.ArgumentParser:
     p_ex.add_argument("--storage-dir", dest="storage_dir", help="override the DSM storage dir")
     p_ex.add_argument("--rr-index-dir", dest="rr_index_dir",
                       help="directory for RR's derived index (default: <storage-dir>/_rr_index)")
+    p_ex.add_argument("--projection", choices=["rr", "sqlite"], default="rr",
+                      help="read projection (default rr; sqlite needs --db)")
+    p_ex.add_argument("--db", help="SQLite projection path (with --projection sqlite)")
+
+    p_proj = sub.add_parser("project-sqlite",
+                            help="materialize a read-only SQLite projection of certified acts (Identity v1)")
+    p_proj.add_argument("--config", help="path to the PRL config JSON")
+    p_proj.add_argument("--storage-dir", dest="storage_dir", help="override the DSM storage dir")
+    p_proj.add_argument("--rr-index-dir", dest="rr_index_dir",
+                        help="directory for RR's derived index (default: <storage-dir>/_rr_index)")
+    p_proj.add_argument("--db", required=True, help="SQLite projection path to (re)build")
 
     return parser
 
@@ -264,12 +278,19 @@ def cmd_resolve(args: argparse.Namespace) -> int:
 
 
 def cmd_standing(args: argparse.Namespace) -> int:
-    """Show a claim's DERIVED standing (RR read-only; computed by replaying acts,
-    never a stored field)."""
+    """Show a claim's DERIVED standing (read-only; computed by replaying acts, never a
+    stored field). ``--projection sqlite`` reads the second projection instead of RR."""
     try:
-        config = _read_config(args)
-        rr_dir = args.rr_index_dir or (Path(config.storage_dir) / "_rr_index")
-        view = StandingQuery(open_storage(config), rr_dir).standing_of(args.claim)
+        if getattr(args, "projection", "rr") == "sqlite":
+            if not args.db:
+                print("error: --projection sqlite requires --db", file=sys.stderr)
+                return 2
+            from ..projections import SqliteProjection
+            view = StandingQuery(None, None, _navigator=SqliteProjection(args.db)).standing_of(args.claim)
+        else:
+            config = _read_config(args)
+            rr_dir = args.rr_index_dir or (Path(config.storage_dir) / "_rr_index")
+            view = StandingQuery(open_storage(config), rr_dir).standing_of(args.claim)
     except PRLError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
@@ -280,16 +301,40 @@ def cmd_standing(args: argparse.Namespace) -> int:
 
 def cmd_explain(args: argparse.Namespace) -> int:
     """Reconstruct WHY a claim holds its standing — Proposal → Resolution(s) → derived
-    standing — from certified acts only (RR read-only; every line backed by a receipt)."""
+    standing — from certified acts only (every line backed by a receipt). ``--projection
+    sqlite`` reconstructs from the second projection; the result must be identical to RR."""
     try:
-        config = _read_config(args)
-        rr_dir = args.rr_index_dir or (Path(config.storage_dir) / "_rr_index")
-        explanation = ExplainQuery(open_storage(config), rr_dir).explain(args.claim)
+        if getattr(args, "projection", "rr") == "sqlite":
+            if not args.db:
+                print("error: --projection sqlite requires --db", file=sys.stderr)
+                return 2
+            from ..projections import SqliteProjection
+            explanation = ExplainQuery(None, None, _navigator=SqliteProjection(args.db)).explain(args.claim)
+        else:
+            config = _read_config(args)
+            rr_dir = args.rr_index_dir or (Path(config.storage_dir) / "_rr_index")
+            explanation = ExplainQuery(open_storage(config), rr_dir).explain(args.claim)
     except PRLError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
     print(render_explanation(explanation))
+    return 0
+
+
+def cmd_project_sqlite(args: argparse.Namespace) -> int:
+    """Materialize a read-only SQLite projection of the certified acts (Identity v1).
+    Reads via RR; writes only SQLite (DSM stays the certifier; nothing re-minted)."""
+    try:
+        from ..projections import build_sqlite_projection
+        config = _read_config(args)
+        rr_dir = args.rr_index_dir or (Path(config.storage_dir) / "_rr_index")
+        n = build_sqlite_projection(open_storage(config), rr_dir, args.db)
+    except PRLError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+    print(f"✓ sqlite projection built: {n} acts → {args.db}")
     return 0
 
 
@@ -380,4 +425,6 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_standing(args)
     if args.command == "explain":
         return cmd_explain(args)
+    if args.command == "project-sqlite":
+        return cmd_project_sqlite(args)
     return 1  # pragma: no cover (argparse 'required' guards this)

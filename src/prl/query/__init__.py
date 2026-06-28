@@ -15,6 +15,7 @@ from .cli import (
     cmd_consultations,
     cmd_explain,
     cmd_index,
+    cmd_project_sqlite,
     cmd_resolve,
     cmd_standing,
     cmd_status,
@@ -25,7 +26,13 @@ from .explain_read import ExplainQuery, Explanation, ProposalFact, render_explan
 from .fusion_index import DEFAULT_PREVIEW_GATE, DEFAULT_RRF_K, FusionIndex
 from .recall import RecallEngine, RecallHit
 from .semantic import Embedder, LocalEmbedder, SemanticError, SemanticIndex
-from .standing_read import ResolutionFact, StandingQuery, StandingView, render_standing
+from .standing_read import (
+    RegistryProjection,
+    ResolutionFact,
+    StandingQuery,
+    StandingView,
+    render_standing,
+)
 from .structural import PRLAdjacencyIndex, StructuralQuery
 
 __all__ = [
@@ -39,9 +46,11 @@ __all__ = [
     "cmd_resolve",
     "cmd_standing",
     "cmd_explain",
+    "cmd_project_sqlite",
     "StandingQuery",
     "StandingView",
     "ResolutionFact",
+    "RegistryProjection",
     "render_standing",
     "ExplainQuery",
     "Explanation",
