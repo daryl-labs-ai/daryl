@@ -20,6 +20,7 @@ from dsm.rr.index import RRIndexBuilder
 from dsm.rr.navigator import RRNavigator
 
 from ..types import ConsultationNode, from_entry
+from .standing_read import RegistryProjection
 
 
 @dataclass(frozen=True)
@@ -77,7 +78,7 @@ class ConsultationQuery:
         index_dir: directory for RR's derived index files.
     """
 
-    def __init__(self, storage: Any, index_dir: Any, *, _navigator: RRNavigator | None = None):
+    def __init__(self, storage: Any, index_dir: Any, *, _navigator: RegistryProjection | None = None):
         if _navigator is None:
             builder = RRIndexBuilder(storage=storage, index_dir=str(index_dir))
             builder.build()

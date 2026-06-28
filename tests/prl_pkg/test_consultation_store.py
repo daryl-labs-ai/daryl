@@ -261,3 +261,87 @@ def test_cli_explain_e2e(tmp_path, capsys):
     assert "resolver=human:mohamed" in out
     assert "standing   ACCEPTED (derived)" in out
     assert out.count("receipt v1:") == 2
+
+
+# --- Identity across projections v1: RR == SQLite (kernel) --------------------------
+
+def test_identity_rr_equals_sqlite_projection(tmp_path):
+    """Second epoch #3: the same acts, the same claim_id, two registry projections (RR and
+    SQLite) → identical standing AND explanation, with receipts carried verbatim. The same
+    StandingQuery/ExplainQuery code runs on both projections."""
+    from prl.projections import SqliteProjection, build_sqlite_projection
+    from prl.query.explain_read import ExplainQuery
+    from prl.query.standing_read import StandingQuery
+
+    store = _store(tmp_path)
+    proposal = ConsultationAdapter().to_act(
+        subject_id="KO-7", answer="derived only", producer="openai:gpt-4o (consult-adapter v1)",
+        confidence=0.7, propose=True)
+    p_res = store.commit_act(proposal)
+    claim = proposal.mef.claim_id
+    r_res = store.commit_act(make_resolution(
+        target_claim_id=claim, decision="accepted", producer="human:mohamed"))
+
+    db = str(tmp_path / "proj.sqlite")
+    n = build_sqlite_projection(store._storage, tmp_path / "rr", db)
+    assert n == 2
+    sql = SqliteProjection(db)
+
+    rr_explain = ExplainQuery(store._storage, tmp_path / "rr2").explain(claim)
+    sq_explain = ExplainQuery(None, None, _navigator=sql).explain(claim)
+    assert rr_explain == sq_explain                       # identical Explanation (by value)
+    assert StandingQuery(None, None, _navigator=sql).standing_of(claim) == \
+           StandingQuery(store._storage, tmp_path / "rr3").standing_of(claim)
+
+    # identity + receipts carried verbatim across the projection
+    assert sq_explain.proposal.receipt == p_res.tip_hash
+    assert [r.receipt for r in sq_explain.resolutions] == [r_res.tip_hash]
+    assert sq_explain.standing == "accepted"
+
+
+def test_identity_latest_wins_survives_projection(tmp_path):
+    """The ordering invariant (latest-wins) must survive materialization into SQLite."""
+    from prl.projections import SqliteProjection, build_sqlite_projection
+    from prl.query.standing_read import StandingQuery
+
+    store = _store(tmp_path)
+    proposal = ConsultationAdapter().to_act(
+        subject_id="KO-7", answer="X", producer="openai:gpt-4o (consult-adapter v1)",
+        confidence=0.7, propose=True)
+    store.commit_act(proposal)
+    claim = proposal.mef.claim_id
+    store.commit_act(make_resolution(target_claim_id=claim, decision="accepted", producer="human:a"))
+    store.commit_act(make_resolution(target_claim_id=claim, decision="superseded", producer="human:b"))
+
+    db = str(tmp_path / "proj.sqlite")
+    build_sqlite_projection(store._storage, tmp_path / "rr", db)
+    sq = StandingQuery(None, None, _navigator=SqliteProjection(db)).standing_of(claim)
+    rr = StandingQuery(store._storage, tmp_path / "rr2").standing_of(claim)
+    assert sq == rr
+    assert sq.standing == "superseded" and sq.decisions == ("accepted", "superseded")
+
+
+def test_cli_project_sqlite_then_explain_e2e(tmp_path, capsys):
+    from prl.query import cli
+
+    store = _store(tmp_path)
+    proposal = ConsultationAdapter().to_act(
+        subject_id="KO-7", answer="X", producer="openai:gpt-4o (consult-adapter v1)",
+        confidence=0.7, propose=True)
+    store.commit_act(proposal)
+    claim = proposal.mef.claim_id
+    cli.main(["resolve", "--claim", claim, "--decision", "accepted",
+              "--producer", "human:mohamed", "--storage-dir", str(tmp_path)])
+    capsys.readouterr()
+
+    db = str(tmp_path / "proj.sqlite")
+    rc = cli.main(["project-sqlite", "--storage-dir", str(tmp_path),
+                   "--rr-index-dir", str(tmp_path / "rr"), "--db", db])
+    assert rc == 0 and "sqlite projection built" in capsys.readouterr().out
+
+    rc = cli.main(["explain", "--claim", claim, "--projection", "sqlite", "--db", db])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert f"why {claim} is ACCEPTED" in out
+    assert "resolver=human:mohamed" in out
+    assert "standing   ACCEPTED (derived)" in out
