@@ -143,3 +143,27 @@ agent became a governed decision that is retrievable, explainable, and reusable*
 continuity), with real agents, without cheating. Only then does it graduate to the manifesto as an
 observed property — not before. It does not *replace* the manifesto; it is a consequence of it,
 pending its proof. (R-consult v3 + Resolution/Standing are what unlock the demo, hence this line.)
+
+## 8. "Identity is never defined by its carrier" (transversal principle — incubating, 2 of 3 legs)
+
+A candidate general principle of Daryl, broader than identity-of-knowledge:
+
+> **Identity is never defined by its carrier.** The substrate is interchangeable; the referent is not.
+
+It already stands on **two proven legs** (see `PROOF_LOG.md`):
+
+- **`claim_id` is not storage** — proven (Identity across projections v1: the same `claim_id` threads
+  the chain identically across RR and a SQLite read projection).
+- **`agent_id` is not `model_id`** — proven (Structured contributor attribution v1: the same
+  `agent_id` `agent.architect` produced certified acts across `openai:gpt-4o` and `gpt-5`).
+
+If it holds, the principle would later cover any fundamental referent (`org_id`, `team_id`,
+`policy_id`, `workflow_id`): each must keep its identity independent of the substrate that carries it.
+This is *the* generalization of the project's earliest principle — *knowledge is not its
+representation* — applied beyond knowledge.
+
+**Promotion gate (falsifiable).** Two legs make it **incubating, not canonical.** It graduates to the
+manifesto only when a **third referent** demonstrates the same property — most naturally **registry /
+organization identity** (Second epoch #5: identity must survive having no single registry). Until a
+third independent referent proves it, the principle stays here — a strong hypothesis, not a law. It
+does not replace the manifesto's four laws; it would *generalize* them.
