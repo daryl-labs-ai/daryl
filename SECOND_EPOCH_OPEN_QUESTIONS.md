@@ -81,6 +81,55 @@ is a discovery (it was a property of scale-one), not a failure.
   certification, MEF non-strippability, RR-only reads, derived standing, identity continuity? The
   question is which properties are intrinsic to the protocol and which silently assumed one registry.
 
+## 6. Agent identity across providers and runs
+- **Demonstrated property.** A contribution is attributed via a **flat `producer` string** (e.g.
+  `"openai:gpt-4o (consult-adapter v1)"` — provider + model + adapter collapsed into one declared
+  identity; ADR-PRL-0007/0008). Enough for v3.
+- **Tension at scale.** A logical agent may change model; a model may serve several agents; a provider
+  may disappear; runs differ. A flat `producer` cannot express *"the same logical contributor across
+  these changes"* — needed for multi-agent collaboration, agent reputation, specialization,
+  comparison, "who contributed what", "which agent tends to be reliable", "which agents disagree".
+- **Invariant under test.** Are contributions attributable to the **same logical intelligence** when
+  the provider, model, adapter, or session changes? The load-bearing rule: **`agent_id` must not be
+  `model_id`** — a logical agent can change model, a model can serve many agents, a provider can vanish;
+  contribution identity must survive all of that. (Likely future structure: `agent_id` / `provider` /
+  `model` / `adapter` / `run_id` as distinct fields, vs today's single string.) This is the
+  contributor's mirror of #3: **`agent_id` must not be `model_id`** is to the contributor what
+  **`claim_id` must not depend on storage** is to the object — identity must not be its carrier.
+- **Why this comes after #3.** `claim_id` is the identity of the *knowledge object*; `agent_id` is the
+  identity of the *contributor*. Both are fundamental, but the **object comes first** — a contributor
+  identity is only meaningful once the objects it contributes to have stable identity.
+
+## Identity is not its carrier (a theme across #3, #6, #5)
+
+Three of these frontiers are the **same invariant** seen from three angles — *identity must not depend
+on the substrate that happens to carry it*:
+
+- **the knowledge object** — `claim_id` must not depend on storage (#3 — proven for a read projection).
+- **the contributor** — `agent_id` must not be `model_id` (#6).
+- **the registry / organization** — identity must survive having no single registry (#5).
+
+A **theme, not an order**: #3 came first only because an object must have a stable identity before a
+contributor's identity means anything. The other two remain open — naming the theme recognizes that
+they test one principle in three places; it is not a commitment to sequence them.
+
+The principle is likely **transversal**, beyond identity-of-knowledge: any future referent — `org_id`,
+`team_id`, `policy_id`, `workflow_id` — would have to satisfy *identity is never defined by its
+carrier*. (Candidate for a general Daryl framing once a second referent proves it; incubating, not
+canonized.)
+
+## Two families of invariants
+
+The six frontiers are not independent — they fall into two families:
+
+- **Identity** — *is it still the same thing when the carrier changes?*  `claim_id` (#3) → `agent_id`
+  (#6) → registry / organization identity (#5).
+- **Behavior** — *does the system still act correctly under load?*  derived standing at scale (#1) →
+  concurrent resolutions (#2) → knowledge compiler (#4).
+
+Identity asks whether the *referent* survives; behavior asks whether the *system* holds. Two different
+kinds of invariant — still a map, not a schedule.
+
 ---
 
 ## How to read this file

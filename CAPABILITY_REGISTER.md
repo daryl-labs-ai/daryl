@@ -8,23 +8,24 @@
   CAPABILITY REGISTER
 
   Proven assets          5
-  Robustness frontiers   5   (1 designing · 4 idea)
+  Robustness frontiers   6   (1 proven · 5 idea)
   Product surfaces      10
   Canonical law          8
 
-  Current milestone
-  → Identity across projections (grounding)
+  Current focus 🔥
+  → (next frontier — to choose)
 
   PROOF VELOCITY
-  Last proof       2026-06-28  R-explain v1 — MVP completed end-to-end
-  Previous proof   2026-06-28  Resolution / Standing v1
-  Days since last  0   (as of 2026-06-28)
-  Recent cadence   2026-06-27 → 2026-06-28 : 5 assets proven
+  Last proof       2026-06-28  Identity across projections v1 — RR ≡ SQLite
+  Previous proof   2026-06-28  R-explain v1 — MVP completed end-to-end
+  Recent cadence   2026-06-27 → 2026-06-28 : 5 assets + 1 frontier proven
+  (the date is the datum; days elapsed is a view — let Git compute it)
 
 ──────────────────────────────────────────────
 ```
-*(Counts and velocity mirror the tables below — update them in the same edit as any row move. "Days
-since last" is recomputed on each edit; a long gap is a health signal, not a failure.)*
+*(Counts and velocity mirror the tables below — update them in the same edit as any row move. The
+last-proof **date** is the datum; elapsed time is a view (Git computes it). A long gap is a health
+signal, not a failure. 🔥 marks the single item under active work — one focus at a time.)*
 
 Most projects keep a roadmap (what they intend to build). This is the rarer, more honest artifact:
 a register of capabilities **by level of proof**, split by **what Daryl already owns** vs **what it
@@ -68,11 +69,12 @@ Not features — **tests of whether the proven invariants survive at scale** (se
 
 | Status | Frontier | Notes |
 |---|---|---|
-| 🟡 Designing | Identity across projections | **logically prior** — the next experiment; grounding not started |
+| 🟢 Proven | Identity across projections | PR #82 · real gate KO-7: `explain` RR ≡ `--projection sqlite` · read projection (reserve: certification substrate stays DSM, receipt projection-relative) |
 | ⚪ Idea | Concurrent resolutions | governance when incompatible human resolutions collide |
 | ⚪ Idea | Derived standing at scale | keep "derived, never authoritative" when replay gets costly |
 | ⚪ Idea | Knowledge compiler (multi-agent merge) | many Acts → one coherent Object; parked/incubating |
 | ⚪ Idea | Distributed Fabric | which invariants hold with no single registry |
+| ⚪ Idea | Agent identity across providers and runs | `SECOND_EPOCH` #6 · `agent_id` ≠ `model_id` — contributor identity, distinct axis from `claim_id` |
 
 ## 3 · Product surfaces — what Daryl must build
 
@@ -115,3 +117,20 @@ gate output); 🟢→🏛 needs entry into the law (an Accepted ADR or a graduat
 recorded in `PROOF_LOG.md`). In the same edit, update the **dashboard counts** and the **proof
 velocity** (last/previous proof + date). Never promote on intention. This register is the dashboard;
 the dated evidence lives in `PROOF_LOG.md` and `EVIDENCE_BOOK.md`.
+
+**Regression rule.** A capability may move **🟢 → 🔵** (or lower) if a contradicting real transcript
+invalidates the previous proof. A backward move requires a `PROOF_LOG.md` entry explaining why, and a
+demotion note on the row. Demotion is not failure — it is the system correcting a belief, the same
+mechanism that lets it promote one.
+
+---
+
+## Capability lifecycle
+
+```
+  Idea  →  Designing  →  Implemented  →  Proven  →  Canonical
+
+  Regression is allowed.
+  A capability may move backwards when new evidence contradicts a previous proof.
+  Every backward movement requires a PROOF_LOG entry.
+```
