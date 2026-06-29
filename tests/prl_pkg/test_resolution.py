@@ -20,19 +20,20 @@ from prl.types import ResolutionNode, from_entry, to_entry
 # --- make_resolution (human/witnessed act) ---------------------------------
 
 def test_make_resolution_is_human_act():
-    r = make_resolution(target_claim_id="claim-1", decision="accepted", producer="human:mohamed")
+    r = make_resolution(target_claim_id="claim-1", decision="accepted", agent_id="mohamed.azizi")
     assert isinstance(r, ResolutionNode)
     assert r.target_claim_id == "claim-1" and r.decision == "accepted"
-    assert r.mef.producer == "human:mohamed" and r.mef.confidence == 1.0
+    assert r.mef.agent_id == "mohamed.azizi" and r.mef.confidence == 1.0
+    assert r.mef.carrier is not None and r.mef.carrier.provider == "human"  # human-ness in carrier
 
 
 def test_invalid_decision_refused():
     with pytest.raises(ValidationError):
-        make_resolution(target_claim_id="c", decision="maybe", producer="human:x")  # type: ignore[arg-type]
+        make_resolution(target_claim_id="c", decision="maybe", agent_id="mohamed.azizi")  # type: ignore[arg-type]
 
 
 def test_resolution_round_trips_with_action_name():
-    r = make_resolution(target_claim_id="c", decision="rejected", producer="human:x")
+    r = make_resolution(target_claim_id="c", decision="rejected", agent_id="mohamed.azizi")
     draft = to_entry(r, shard="prl_consultations", session_id="run")
     assert draft.metadata["action_name"] == "prl.resolution"
     assert from_entry(draft) == r
@@ -77,7 +78,7 @@ def test_standing_proposed_when_no_resolution():
 
 
 def test_standing_accepted_from_one_resolution():
-    r = make_resolution(target_claim_id="claim-A", decision="accepted", producer="human:x")
+    r = make_resolution(target_claim_id="claim-A", decision="accepted", agent_id="mohamed.azizi")
     v = StandingQuery(None, None, _navigator=_Nav([r])).standing_of("claim-A")
     assert v.standing == "accepted" and v.decisions == ("accepted",)
     assert v.last_receipt.startswith("v1:")
@@ -86,9 +87,9 @@ def test_standing_accepted_from_one_resolution():
 def test_standing_latest_wins_and_filters_by_claim():
     # Built in append order accepted → superseded; the stub hands them back reversed,
     # proving the derivation replays by record order (latest wins), not resolve order.
-    a = make_resolution(target_claim_id="claim-A", decision="accepted", producer="human:x")
-    s = make_resolution(target_claim_id="claim-A", decision="superseded", producer="human:x")
-    other = make_resolution(target_claim_id="claim-B", decision="rejected", producer="human:x")
+    a = make_resolution(target_claim_id="claim-A", decision="accepted", agent_id="mohamed.azizi")
+    s = make_resolution(target_claim_id="claim-A", decision="superseded", agent_id="mohamed.azizi")
+    other = make_resolution(target_claim_id="claim-B", decision="rejected", agent_id="mohamed.azizi")
     nav = _Nav([a, s, other])
     v = StandingQuery(None, None, _navigator=nav).standing_of("claim-A")
     assert v.standing == "superseded"               # latest decision wins

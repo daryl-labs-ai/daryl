@@ -61,8 +61,10 @@ class ResolutionFact:
     'who decided, with which certified act' — each backed by a receipt."""
 
     decision: str    # accepted | rejected | superseded | withdrawn
-    resolver: str    # the human/witnessed producer (MEF.producer)
+    resolver: str    # the legacy producer display (MEF.producer)
     receipt: str     # the resolution Entry's hash (projection-relative)
+    agent_id: str = ""  # the logical contributor (ADR-0009); "" = unknown (pre-0009)
+    carrier: str = ""   # the execution carrier-of-record, e.g. "human" (ADR-0009)
 
 
 def render_standing(view: StandingView) -> str:
@@ -126,6 +128,8 @@ class StandingQuery:
                 decision=node.decision,
                 resolver=node.mef.producer,
                 receipt=str(getattr(entry, "hash", "") or ""),
+                agent_id=node.mef.agent_id or "",
+                carrier=node.mef.carrier.short() if node.mef.carrier is not None else "",
             )
             for entry, node in self._resolutions_for(claim_id)
         ]

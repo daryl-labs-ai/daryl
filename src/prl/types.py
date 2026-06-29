@@ -145,12 +145,43 @@ class Edge(BaseModel):
         return value
 
 
+class Carrier(BaseModel):
+    """The execution **carrier-of-record** (ADR-PRL-0009): *what executed* an act, kept
+    alongside the logical ``agent_id`` — never its source. ``provider`` names the carrier
+    (``openai`` / ``anthropic`` / ``local`` / ``human``); ``model`` / ``adapter`` are null
+    for a human contributor. The *type* (human vs agent) lives here, not in ``agent_id``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    provider: str            # openai | anthropic | local | human
+    model: str | None = None    # e.g. "gpt-4o" (null for a human)
+    adapter: str | None = None  # e.g. "consult-adapter v1" (null for a human)
+
+    @field_validator("provider")
+    @classmethod
+    def _provider_non_empty(cls, value: str) -> str:
+        if not str(value).strip():
+            raise ValueError("Carrier.provider must be non-empty")
+        return value
+
+    def short(self) -> str:
+        """A short display of the carrier-of-record: ``provider:model`` (agents) or just
+        ``provider`` (humans, no model)."""
+        return f"{self.provider}:{self.model}" if self.model else self.provider
+
+
 class MEF(BaseModel):
     """Minimal Epistemic Frame (ADR-PRL-0004 Ch2) — the non-strippable transport
-    contract. All fields are required: a record cannot be constructed without a
+    contract. The historical fields are required: a record cannot be constructed without a
     complete MEF, so "MEF complete or refuse" is enforced by the type, not by a
     convention. ``regime`` is a free string here (its exact taxonomy is ADR-0003 /
-    open question 8.a — not canonized at this layer)."""
+    open question 8.a — not canonized at this layer).
+
+    ADR-PRL-0009 adds the **structured contributor attribution**: ``agent_id`` (the stable
+    logical contributor, frame-level — *who contributes?*) and ``carrier`` (the execution
+    carrier-of-record). Both are **optional** so acts written before 0009 still read with
+    ``agent_id = None`` (no read-time inference, unknown means unknown). New acts MUST set
+    ``agent_id`` at the producer. ``agent_id`` is never derived from the carrier."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -158,7 +189,9 @@ class MEF(BaseModel):
     regime: str          # e.g. "observed.declared" | "derived.proposed" (v1; see ADR-0003 / 8.a)
     confidence: float
     contested: bool
-    producer: str        # attribution: "model via adapter vN" (mandatory, ADR-0007/0008)
+    producer: str        # legacy display projection (ADR-0009); not the source of truth
+    agent_id: str | None = None   # the logical contributor (ADR-0009); None on pre-0009 acts
+    carrier: Carrier | None = None  # the execution carrier-of-record (ADR-0009)
 
     @field_validator("confidence")
     @classmethod
@@ -172,6 +205,14 @@ class MEF(BaseModel):
     def _non_empty(cls, value: str) -> str:
         if not str(value).strip():
             raise ValueError("MEF claim_id / regime / producer must be non-empty")
+        return value
+
+    @field_validator("agent_id")
+    @classmethod
+    def _agent_id_non_empty(cls, value: str | None) -> str | None:
+        # Optional, but if present it must be a real logical id (never empty / whitespace).
+        if value is not None and not str(value).strip():
+            raise ValueError("MEF.agent_id, when set, must be non-empty")
         return value
 
 
