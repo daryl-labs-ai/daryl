@@ -8,7 +8,7 @@
   CAPABILITY REGISTER
 
   Proven assets          5
-  Robustness frontiers   6   (1 proven · 5 idea)
+  Robustness frontiers   6   (2 proven · 4 idea)
   Product surfaces      10
   Canonical law          8
 
@@ -16,9 +16,9 @@
   → (next frontier — to choose)
 
   PROOF VELOCITY
-  Last proof       2026-06-28  Identity across projections v1 — RR ≡ SQLite
-  Previous proof   2026-06-28  R-explain v1 — MVP completed end-to-end
-  Recent cadence   2026-06-27 → 2026-06-28 : 5 assets + 1 frontier proven
+  Last proof       2026-06-28  Agent identity v1 — agent_id ≠ model_id
+  Previous proof   2026-06-28  Identity across projections v1 — RR ≡ SQLite
+  Recent cadence   2026-06-27 → 2026-06-28 : 5 assets + 2 frontiers proven
   (the date is the datum; days elapsed is a view — let Git compute it)
 
 ──────────────────────────────────────────────
@@ -74,7 +74,7 @@ Not features — **tests of whether the proven invariants survive at scale** (se
 | ⚪ Idea | Derived standing at scale | keep "derived, never authoritative" when replay gets costly |
 | ⚪ Idea | Knowledge compiler (multi-agent merge) | many Acts → one coherent Object; parked/incubating |
 | ⚪ Idea | Distributed Fabric | which invariants hold with no single registry |
-| ⚪ Idea | Agent identity across providers and runs | `SECOND_EPOCH` #6 · `agent_id` ≠ `model_id` — contributor identity, distinct axis from `claim_id` |
+| 🟢 Proven | Agent identity across providers and runs | PR #84 (ADR-0009) · real gate: same `agent_id` `agent.architect` across `openai:gpt-4o` / `gpt-5`, both certified · `agent_id` ≠ `model_id` |
 
 ## 3 · Product surfaces — what Daryl must build
 
