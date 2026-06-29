@@ -76,6 +76,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_do = sub.add_parser("consult",
                           help="consult a real agent → DSM-certified Knowledge Act (ADR-0008, v3)")
     p_do.add_argument("prompt", help="the prompt sent to the real agent")
+    p_do.add_argument("--agent-id", dest="agent_id", required=True,
+                      help="logical contributor id, e.g. agent.architect (ADR-0009; required, not inferred)")
     p_do.add_argument("--provider", default="openai", help="agent provider (default: openai)")
     p_do.add_argument("--model", required=True, help="model name (e.g. gpt-5)")
     p_do.add_argument("--subject", required=True, help="the Knowledge Object / subject id")
@@ -92,8 +94,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_res.add_argument("--decision", required=True,
                        choices=["accepted", "rejected", "superseded", "withdrawn"],
                        help="the governance decision (Accepted ≠ True)")
-    p_res.add_argument("--producer", default="human:cli",
-                       help="the human/witnessed ratifier (e.g. human:<id>); agents never ratify")
+    p_res.add_argument("--agent-id", dest="agent_id", required=True,
+                       help="logical human contributor id, e.g. mohamed.azizi (ADR-0009; "
+                            "no human: prefix — human-ness is in the carrier)")
     p_res.add_argument("--config", help="path to the PRL config JSON")
     p_res.add_argument("--storage-dir", dest="storage_dir", help="override the DSM storage dir")
 
@@ -232,15 +235,15 @@ def cmd_consult(args: argparse.Namespace) -> int:
         client = _make_agent_client(args.provider)  # real model (test monkeypatches this)
         node = ConsultationAdapter().consult(
             client, subject_id=args.subject, prompt=args.prompt, model=args.model,
-            confidence=args.confidence, propose=args.propose,
+            agent_id=args.agent_id, confidence=args.confidence, propose=args.propose,
         )
         res = open_store(config).commit_act(node)
     except PRLError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
-    print(f"✓ provider: {args.provider}")
-    print(f"✓ model: {args.model}")
+    print(f"✓ agent_id: {args.agent_id}")
+    print(f"✓ carrier: {args.provider}:{args.model}")
     print(f"✓ act: {node.mode}")
     print(f"✓ DSM receipt: {res.tip_hash}")
     return 0
@@ -264,7 +267,7 @@ def cmd_resolve(args: argparse.Namespace) -> int:
     try:
         config = _read_config(args)
         node = make_resolution(
-            target_claim_id=args.claim, decision=args.decision, producer=args.producer)
+            target_claim_id=args.claim, decision=args.decision, agent_id=args.agent_id)
         res = open_store(config).commit_act(node)
     except PRLError as exc:
         print(f"error: {exc}", file=sys.stderr)
@@ -272,7 +275,7 @@ def cmd_resolve(args: argparse.Namespace) -> int:
 
     print(f"✓ resolved claim: {args.claim}")
     print(f"✓ decision: {args.decision}  (Accepted ≠ True)")
-    print(f"✓ producer: {args.producer}")
+    print(f"✓ agent_id: {args.agent_id}   carrier: human")
     print(f"✓ DSM receipt: {res.tip_hash}")
     return 0
 

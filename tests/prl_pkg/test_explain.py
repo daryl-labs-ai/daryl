@@ -53,13 +53,13 @@ class _Nav:
 
 def _proposal(subject="KO-7", answer="X", producer="openai:gpt-4o (consult-adapter v1)"):
     node = ConsultationAdapter().to_act(subject_id=subject, answer=answer, producer=producer,
-                                        confidence=0.7, propose=True)
+                                        agent_id="agent.test", confidence=0.7, propose=True)
     return node, node.mef.claim_id
 
 
 def test_explain_full_chain():
     prop, claim = _proposal()
-    res = make_resolution(target_claim_id=claim, decision="accepted", producer="human:mohamed")
+    res = make_resolution(target_claim_id=claim, decision="accepted", agent_id="mohamed.azizi")
     nav = _Nav(consultations=[_consult_item(prop)], resolutions=[_res_item(res)])
     e = ExplainQuery(None, None, _navigator=nav).explain(claim)
 
@@ -68,13 +68,14 @@ def test_explain_full_chain():
     assert e.proposal.receipt.startswith("v1:")
     assert len(e.resolutions) == 1
     assert e.resolutions[0].decision == "accepted"
-    assert e.resolutions[0].resolver == "human:mohamed"
+    assert e.resolutions[0].agent_id == "mohamed.azizi"
+    assert e.resolutions[0].carrier == "human"
     assert e.resolutions[0].receipt.startswith("v1:")
     assert e.standing == "accepted"
 
 
 def test_explain_no_proposal_is_not_fabricated():
-    res = make_resolution(target_claim_id="claim-X", decision="accepted", producer="human:x")
+    res = make_resolution(target_claim_id="claim-X", decision="accepted", agent_id="mohamed.azizi")
     nav = _Nav(resolutions=[_res_item(res)])
     e = ExplainQuery(None, None, _navigator=nav).explain("claim-X")
     assert e.proposal is None
@@ -93,8 +94,8 @@ def test_explain_no_resolution_is_proposed():
 
 def test_explain_multi_resolution_lists_all_standing_is_latest():
     prop, claim = _proposal()
-    a = make_resolution(target_claim_id=claim, decision="accepted", producer="human:a")
-    s = make_resolution(target_claim_id=claim, decision="superseded", producer="human:b")
+    a = make_resolution(target_claim_id=claim, decision="accepted", agent_id="mohamed.azizi")
+    s = make_resolution(target_claim_id=claim, decision="superseded", agent_id="alex.doe")
     nav = _Nav(consultations=[_consult_item(prop)],
                resolutions=[_res_item(a), _res_item(s)])  # ascending; resolve_entries reverses
     e = ExplainQuery(None, None, _navigator=nav).explain(claim)
@@ -105,7 +106,8 @@ def test_explain_multi_resolution_lists_all_standing_is_latest():
 def test_explain_observation_is_not_a_proposal():
     # An Observation (mode != proposal) must NOT become a Proposal facet.
     obs = ConsultationAdapter().to_act(subject_id="KO-7", answer="X",
-                                       producer="claude via adapter v1", confidence=0.6)
+                                       producer="claude via adapter v1", agent_id="agent.test",
+                                       confidence=0.6)
     nav = _Nav(consultations=[_consult_item(obs)])
     e = ExplainQuery(None, None, _navigator=nav).explain(obs.mef.claim_id)
     assert e.proposal is None
@@ -113,7 +115,7 @@ def test_explain_observation_is_not_a_proposal():
 
 def test_render_has_receipt_on_every_meaningful_line():
     prop, claim = _proposal()
-    res = make_resolution(target_claim_id=claim, decision="accepted", producer="human:mohamed")
+    res = make_resolution(target_claim_id=claim, decision="accepted", agent_id="mohamed.azizi")
     nav = _Nav(consultations=[_consult_item(prop)], resolutions=[_res_item(res)])
     out = render_explanation(ExplainQuery(None, None, _navigator=nav).explain(claim))
     assert out.startswith(f"why {claim} is ACCEPTED")

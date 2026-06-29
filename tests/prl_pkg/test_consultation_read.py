@@ -38,9 +38,10 @@ class _StubNav:
 
 def _acts():
     a = ConsultationAdapter()
-    obs = a.to_act(subject_id="ko-1", answer="A", producer="claude via adapter v1", confidence=0.6)
-    prop = a.to_act(subject_id="ko-2", answer="B", producer="gpt via adapter v1", confidence=0.8,
-                    propose=True)
+    obs = a.to_act(subject_id="ko-1", answer="A", producer="claude via adapter v1",
+                   agent_id="agent.test", confidence=0.6)
+    prop = a.to_act(subject_id="ko-2", answer="B", producer="gpt via adapter v1",
+                    agent_id="agent.test", confidence=0.8, propose=True)
     return obs, prop
 
 

@@ -68,10 +68,10 @@ def _build_both(tmp_path, proposal, resolutions):
 def test_same_query_code_two_projections_identical(tmp_path):
     prop = ConsultationAdapter().to_act(
         subject_id="KO-7", answer="X", producer="openai:gpt-4o (consult-adapter v1)",
-        confidence=0.7, propose=True)
+        agent_id="agent.test", confidence=0.7, propose=True)
     claim = prop.mef.claim_id
-    a = make_resolution(target_claim_id=claim, decision="accepted", producer="human:mohamed")
-    s = make_resolution(target_claim_id=claim, decision="superseded", producer="human:b")
+    a = make_resolution(target_claim_id=claim, decision="accepted", agent_id="mohamed.azizi")
+    s = make_resolution(target_claim_id=claim, decision="superseded", agent_id="alex.doe")
     sql, rr = _build_both(
         tmp_path, (prop, "cP", "v1:cP"),
         [(a, "rA", "v1:rA"), (s, "rS", "v1:rS")])  # ascending
@@ -93,8 +93,9 @@ def test_same_query_code_two_projections_identical(tmp_path):
 
 def test_sqlite_projection_navigate_and_resolve(tmp_path):
     prop = ConsultationAdapter().to_act(subject_id="KO-7", answer="X", producer="p",
-                                        confidence=0.5, propose=True)
-    a = make_resolution(target_claim_id=prop.mef.claim_id, decision="accepted", producer="human:x")
+                                        agent_id="agent.test", confidence=0.5, propose=True)
+    a = make_resolution(target_claim_id=prop.mef.claim_id, decision="accepted",
+                        agent_id="mohamed.azizi")
     sql, _ = _build_both(tmp_path, (prop, "cP", "v1:cP"), [(a, "rA", "v1:rA")])
 
     recs = sql.navigate_action("prl.resolution")
@@ -106,7 +107,7 @@ def test_sqlite_projection_navigate_and_resolve(tmp_path):
 
 def test_no_resolution_is_proposed_and_no_fabrication(tmp_path):
     prop = ConsultationAdapter().to_act(subject_id="KO-7", answer="X", producer="p",
-                                        confidence=0.5, propose=True)
+                                        agent_id="agent.test", confidence=0.5, propose=True)
     claim = prop.mef.claim_id
     sql, rr = _build_both(tmp_path, (prop, "cP", "v1:cP"), [])
     assert StandingQuery(None, None, _navigator=sql).standing_of(claim).standing == "proposed"

@@ -34,6 +34,8 @@ class ProposalFact:
     answer: str
     receipt: str       # the Proposal Entry's hash (projection-relative)
     subject_id: str
+    agent_id: str = ""  # the logical contributor (ADR-0009); "" = unknown (pre-0009)
+    carrier: str = ""   # the execution carrier-of-record, e.g. "openai:gpt-4o" (ADR-0009)
 
 
 @dataclass(frozen=True)
@@ -52,12 +54,13 @@ def render_explanation(explanation: Explanation) -> str:
     lines = [f"why {e.claim_id} is {e.standing.upper()}"]
     if e.proposal is not None:
         p = e.proposal
-        lines.append(f"  proposal   producer={p.producer}   receipt {p.receipt}")
+        lines.append(f"  proposal   agent={p.agent_id or '(unknown)'}   "
+                     f"carrier={p.carrier or '(unknown)'}   receipt {p.receipt}")
     else:
         lines.append("  proposal   (none on chain)")
     for r in e.resolutions:
-        lines.append(
-            f"  resolution decision={r.decision}   resolver={r.resolver}   receipt {r.receipt}")
+        lines.append(f"  resolution decision={r.decision}   agent={r.agent_id or '(unknown)'}   "
+                     f"carrier={r.carrier or '(unknown)'}   receipt {r.receipt}")
     if not e.resolutions:
         lines.append("  standing   PROPOSED (no resolution)")
     else:
@@ -87,7 +90,8 @@ class ExplainQuery:
             if v.mode == "proposal" and v.claim_id == claim_id:
                 proposal = ProposalFact(
                     producer=v.producer, confidence=v.confidence, answer=v.answer,
-                    receipt=v.receipt, subject_id=v.subject_id)
+                    receipt=v.receipt, subject_id=v.subject_id,
+                    agent_id=v.agent_id, carrier=v.carrier)
                 break
         resolutions = tuple(self._standing.resolutions_of(claim_id))
         standing = self._standing.standing_of(claim_id).standing  # derived, single source

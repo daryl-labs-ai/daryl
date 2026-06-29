@@ -18,13 +18,13 @@ def _adapter() -> ConsultationAdapter:
 
 def test_default_mode_is_observation():
     act = _adapter().to_act(subject_id="ko-1", answer="X", producer="claude via adapter v1",
-                            confidence=0.6)
+                            agent_id="agent.test", confidence=0.6)
     assert act.mode == "observation"  # ADR-0008: answers are Observations by default
 
 
 def test_proposal_only_on_explicit_flag():
     act = _adapter().to_act(subject_id="ko-1", answer="X", producer="gpt via adapter v1",
-                            confidence=0.6, propose=True)
+                            agent_id="agent.test", confidence=0.6, propose=True)
     assert act.mode == "proposal"
     assert act.mef.regime == "derived.proposed"  # v1 default for a proposal
 
@@ -33,7 +33,8 @@ def test_proposal_only_on_explicit_flag():
 
 def test_producer_attribution_mandatory():
     with pytest.raises(ValidationError):
-        _adapter().to_act(subject_id="ko-1", answer="X", producer="   ", confidence=0.6)
+        _adapter().to_act(subject_id="ko-1", answer="X", producer="   ", agent_id="agent.test",
+                          confidence=0.6)
 
 
 def test_mef_refuses_incomplete():
@@ -55,7 +56,7 @@ def test_consultation_node_requires_complete_mef():
 
 def test_round_trip_through_entry():
     act = _adapter().to_act(subject_id="ko-1", answer="the answer", producer="claude via adapter v1",
-                            confidence=0.7, contested=False)
+                            agent_id="agent.test", confidence=0.7, contested=False)
     draft = to_entry(act, shard="prl_consultations", session_id="run-1")
     assert draft.metadata["action_name"] == "prl.consultation"
     back = from_entry(draft)
@@ -65,6 +66,6 @@ def test_round_trip_through_entry():
 
 def test_explicit_regime_override_kept():
     act = _adapter().to_act(subject_id="ko-1", answer="X", producer="local via adapter v1",
-                            confidence=0.9, regime="observed.witnessed")
+                            agent_id="agent.test", confidence=0.9, regime="observed.witnessed")
     assert act.mef.regime == "observed.witnessed"
     assert act.mef.producer == "local via adapter v1"

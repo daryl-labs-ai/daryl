@@ -35,6 +35,8 @@ class ConsultationView:
     receipt: str       # the DSM Entry hash (certification: "v1:<sha256>")
     answer: str
     claim_id: str = ""  # the MEF claim_id (the identity a Resolution targets — Resolution v1)
+    agent_id: str = ""  # the logical contributor (ADR-0009); "" = unknown (pre-0009 act)
+    carrier: str = ""   # the execution carrier-of-record, e.g. "openai:gpt-4o" (ADR-0009)
 
 
 def view_from_entry(entry: Any) -> ConsultationView:
@@ -54,6 +56,8 @@ def view_from_entry(entry: Any) -> ConsultationView:
         receipt=str(getattr(entry, "hash", "") or ""),
         answer=node.answer,
         claim_id=node.mef.claim_id,
+        agent_id=node.mef.agent_id or "",  # None (pre-0009) → "" (unknown); never inferred
+        carrier=node.mef.carrier.short() if node.mef.carrier is not None else "",
     )
 
 
@@ -64,6 +68,7 @@ def render_consultations(views: list[ConsultationView]) -> str:
     lines: list[str] = []
     for v in views:
         lines.append(f"▸ {v.mode.upper()} on {v.subject_id}  [{v.consultation_id}]")
+        lines.append(f"    agent: {v.agent_id or '(unknown)'}   carrier: {v.carrier or '(unknown)'}")
         lines.append(f"    producer: {v.producer}   confidence: {v.confidence:.2f}")
         lines.append(f"    claim: {v.claim_id}")
         lines.append(f"    DSM receipt: {v.receipt}")

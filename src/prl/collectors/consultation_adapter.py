@@ -21,7 +21,7 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING
 
-from ..types import MEF, ConsultationMode, ConsultationNode
+from ..types import MEF, Carrier, ConsultationMode, ConsultationNode
 
 if TYPE_CHECKING:  # avoid importing the client at runtime; consult receives one
     from .agent_client import AgentClient
@@ -43,7 +43,9 @@ class ConsultationAdapter:
         subject_id: str,
         answer: str,
         producer: str,
+        agent_id: str,
         confidence: float,
+        carrier: Carrier | None = None,
         propose: bool = False,
         regime: str | None = None,
         contested: bool = False,
@@ -52,8 +54,9 @@ class ConsultationAdapter:
         """Build a :class:`ConsultationNode` from an agent answer.
 
         ``propose`` must be set **explicitly** to produce a Proposal; otherwise the act
-        is an Observation. ``producer`` and ``confidence`` are required (the MEF refuses
-        to build otherwise). Pure — builds the record, writes nothing.
+        is an Observation. ``agent_id`` (the logical contributor, ADR-0009), ``producer``
+        and ``confidence`` are required; ``agent_id`` is **never** derived from the
+        ``carrier``. Pure — builds the record, writes nothing.
         """
         mode: ConsultationMode = "proposal" if propose else "observation"
         if regime is None:
@@ -64,7 +67,9 @@ class ConsultationAdapter:
             regime=regime,
             confidence=confidence,
             contested=contested,
-            producer=producer,  # mandatory attribution; MEF._non_empty enforces it
+            producer=producer,  # legacy display projection (ADR-0009)
+            agent_id=agent_id,  # logical contributor; caller-supplied, not derived from carrier
+            carrier=carrier,    # execution carrier-of-record
         )
         return ConsultationNode(
             consultation_id=f"consult_{uuid.uuid4().hex[:12]}",
@@ -81,21 +86,26 @@ class ConsultationAdapter:
         subject_id: str,
         prompt: str,
         model: str,
+        agent_id: str,
         confidence: float = 1.0,
         propose: bool = False,
     ) -> ConsultationNode:
         """R-consult v3: call a **real agent** and map its native answer to a Knowledge
         Act. The model is unaware of PRL; ``client`` is injected (so tests use a fake,
-        no network). Producer attribution = provider + model + adapter version (ADR-0007).
+        no network).
 
-        ``confidence`` is confidence in the *Observation* (the agent did answer this) —
-        **not** in the truth of the answer (Accepted ≠ True). Default 1.0 (we recorded
-        exactly what the model returned). Default mode = Observation; ``propose`` is the
-        only way to a Proposal.
+        ``agent_id`` (ADR-0009) is the **logical contributor** (e.g. ``agent.architect``),
+        **required and caller-supplied** — never inferred from provider/model. The
+        execution **carrier-of-record** (provider/model/adapter) is recorded alongside; the
+        legacy ``producer`` string stays a display projection. ``confidence`` is confidence
+        in the *Observation* (the agent did answer this), not the truth of the answer.
         """
         answer = client.complete(prompt, model=model)
-        producer = f"{getattr(client, 'provider', 'agent')}:{model} (consult-adapter v1)"
+        provider = getattr(client, "provider", "agent")
+        adapter = "consult-adapter v1"
+        producer = f"{provider}:{model} ({adapter})"  # legacy display, unchanged
+        carrier = Carrier(provider=provider, model=model, adapter=adapter)
         return self.to_act(
-            subject_id=subject_id, answer=answer, producer=producer,
-            confidence=confidence, propose=propose,
+            subject_id=subject_id, answer=answer, producer=producer, agent_id=agent_id,
+            carrier=carrier, confidence=confidence, propose=propose,
         )
