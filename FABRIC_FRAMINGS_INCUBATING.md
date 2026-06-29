@@ -157,13 +157,24 @@ It already stands on **two proven legs** (see `PROOF_LOG.md`):
 - **`agent_id` is not `model_id`** — proven (Structured contributor attribution v1: the same
   `agent_id` `agent.architect` produced certified acts across `openai:gpt-4o` and `gpt-5`).
 
-If it holds, the principle would later cover any fundamental referent (`org_id`, `team_id`,
-`policy_id`, `workflow_id`): each must keep its identity independent of the substrate that carries it.
-This is *the* generalization of the project's earliest principle — *knowledge is not its
-representation* — applied beyond knowledge.
+The precise current status (do not overstate it):
 
-**Promotion gate (falsifiable).** Two legs make it **incubating, not canonical.** It graduates to the
-manifesto only when a **third referent** demonstrates the same property — most naturally **registry /
-organization identity** (Second epoch #5: identity must survive having no single registry). Until a
-third independent referent proves it, the principle stays here — a strong hypothesis, not a law. It
-does not replace the manifesto's four laws; it would *generalize* them.
+> *Identity is never defined by its carrier — **proven** for `claim_id` — **proven** for `agent_id` —
+> **not yet testable** for registry / organization identity, because the referent is absent.*
+
+This is stronger than "not yet proven": **the third leg has no object yet.** Grounding #5
+(`IDENTITY_REGISTRY_GROUNDING.md`, NOT PROVEN) found no `org_id`/`tenant`/`registry_id` in code, and
+`project_id`/`run_id`/`shard` do not replace it. So #5 was split: **#5a — organization identity (the
+referent)** is the only sub-question that can become this third leg; **#5b — distributed certification**
+is a kernel-shaped substrate question, separate.
+
+If it holds, the principle would later cover any fundamental referent (`org_id`, `team_id`,
+`policy_id`, `workflow_id`). It is *the* generalization of the project's earliest principle — *knowledge
+is not its representation* — applied beyond knowledge.
+
+**Promotion gate (falsifiable).** Two legs make it **incubating, not canonical** (2/3). It graduates to
+the manifesto only when a **third referent** is *established and then shown to survive its carrier* —
+specifically **#5a organization identity** (`org_id` independent of project/storage/shard/deployment).
+Until a third independent referent exists and proves it, the principle stays here — a strong hypothesis
+with no object for its third leg, not a law. It does not replace the manifesto's four laws; it would
+*generalize* them.
