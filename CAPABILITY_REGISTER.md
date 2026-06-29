@@ -8,12 +8,12 @@
   CAPABILITY REGISTER
 
   Proven assets          5
-  Robustness frontiers   6   (2 proven · 4 idea)
+  Robustness frontiers   7   (2 proven · 1 designing · 4 idea)
   Product surfaces      10
   Canonical law          8
 
   Current focus 🔥
-  → (next frontier — to choose)
+  → #5a Organization identity (the referent) — grounding done, NOT PROVEN
 
   PROOF VELOCITY
   Last proof       2026-06-28  Agent identity v1 — agent_id ≠ model_id
@@ -73,7 +73,8 @@ Not features — **tests of whether the proven invariants survive at scale** (se
 | ⚪ Idea | Concurrent resolutions | governance when incompatible human resolutions collide |
 | ⚪ Idea | Derived standing at scale | keep "derived, never authoritative" when replay gets costly |
 | ⚪ Idea | Knowledge compiler (multi-agent merge) | many Acts → one coherent Object; parked/incubating |
-| ⚪ Idea | Distributed Fabric | which invariants hold with no single registry |
+| 🟡 Designing 🔥 | Organization identity — the referent (#5a) | **🔥 Current focus** · grounding done (NOT PROVEN): no `org_id` referent in code; `project_id`/`run_id`/`shard` don't replace it. Question only: what minimal org referent is missing? PRL-shaped, light |
+| ⚪ Idea | Distributed certification — the substrate (#5b) | deferred · can DSM certification survive no single registry? kernel-shaped, heavy — separate from #5a |
 | 🟢 Proven | Agent identity across providers and runs | PR #84 (ADR-0009) · real gate: same `agent_id` `agent.architect` across `openai:gpt-4o` / `gpt-5`, both certified · `agent_id` ≠ `model_id` |
 
 ## 3 · Product surfaces — what Daryl must build

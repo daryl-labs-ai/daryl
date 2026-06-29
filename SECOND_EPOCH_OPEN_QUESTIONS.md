@@ -73,13 +73,29 @@ is a discovery (it was a property of scale-one), not a failure.
   supersessions, provenance, and standing must all be reconciled into a single coherent state — the
   parked *knowledge compiler* concept, stated here only as a robustness frontier.
 
-## 5. Distributed Fabric
-- **Demonstrated property.** The chain is closed against a single physical registry, read RR-only,
-  certified by one DSM.
-- **Tension at scale.** At larger scale there may be no single physical registry.
-- **Invariant under test.** Which invariants must remain true when there is **no single registry** —
-  certification, MEF non-strippability, RR-only reads, derived standing, identity continuity? The
-  question is which properties are intrinsic to the protocol and which silently assumed one registry.
+> **#5 was split (2026-06-28) after its grounding** (`IDENTITY_REGISTRY_GROUNDING.md`, verdict
+> **NOT PROVEN**): it tangled a light PRL-shaped referent question with a heavy kernel-shaped substrate
+> question. They have different difficulty and are pursued separately.
+
+## 5a. Organization identity — the referent (PRL-shaped, light) 🔥
+- **Demonstrated property.** **None — the referent is absent.** No `org_id` / `organization` / `tenant`
+  / `registry_id` exists in code; `project_id` / `run_id` / `shard` do **not** replace it (grounding
+  #5). So this is not "does registry/org identity survive its carrier?" — *the third leg has no object
+  yet*.
+- **Tension at scale.** Knowledge belongs to **organizations/teams**, not just projects/stores; an
+  org's identity must not be its project, its storage, its shard, or its deployment.
+- **The question — and only this for now.** *What minimal organization referent is missing today, and
+  which existing identifiers fail to replace it?* No design, no schema. If a referent is later
+  established, the invariant becomes: does `org_id` survive its carrier (project/storage/shard/
+  deployment)? — which would be the **third leg** of the transversal principle.
+
+## 5b. Distributed certification — the substrate (kernel-shaped, heavy) — deferred
+- **Demonstrated property.** Certification is a **per-shard hash chain in a single `Storage`**
+  (grounding #5 F2/F4) — and `hash` / `prev_hash` / `Storage` live in the **DSM kernel**, not PRL.
+- **Tension at scale.** Can DSM certification survive the absence of a single physical registry?
+- **Invariant under test.** Which guarantees (hash-chain, receipt semantics, RR-only reads) remain true
+  with **no single registry**? This touches the kernel — **not** a PRL extension. Out of scope of #5a;
+  deferred until the referent question is settled.
 
 ## 6. Agent identity across providers and runs
 - **Demonstrated property.** A contribution is attributed via a **flat `producer` string** (e.g.
@@ -100,18 +116,20 @@ is a discovery (it was a property of scale-one), not a failure.
   identity of the *contributor*. Both are fundamental, but the **object comes first** — a contributor
   identity is only meaningful once the objects it contributes to have stable identity.
 
-## Identity is not its carrier (a theme across #3, #6, #5)
+## Identity is not its carrier (a theme across #3, #6, #5a)
 
 Three of these frontiers are the **same invariant** seen from three angles — *identity must not depend
 on the substrate that happens to carry it*:
 
-- **the knowledge object** — `claim_id` must not depend on storage (#3 — proven for a read projection).
-- **the contributor** — `agent_id` must not be `model_id` (#6).
-- **the registry / organization** — identity must survive having no single registry (#5).
+- **the knowledge object** — `claim_id` must not depend on storage (#3 — **proven**).
+- **the contributor** — `agent_id` must not be `model_id` (#6 — **proven**).
+- **the organization** — `org_id` must not be its carrier (#5a) — **named, not yet testable: the
+  referent does not exist in code yet** (grounding #5, NOT PROVEN). The third leg has *no object* yet.
 
 A **theme, not an order**: #3 came first only because an object must have a stable identity before a
-contributor's identity means anything. The other two remain open — naming the theme recognizes that
-they test one principle in three places; it is not a commitment to sequence them.
+contributor's identity means anything. #5a is different from #3/#6 — those had an existing referent to
+test for decoupling; #5a has **no referent at all**, so its first task is to ask whether one is even
+missing, not to test its survival.
 
 The principle is likely **transversal**, beyond identity-of-knowledge: any future referent — `org_id`,
 `team_id`, `policy_id`, `workflow_id` — would have to satisfy *identity is never defined by its
@@ -120,15 +138,18 @@ canonized.)
 
 ## Two families of invariants
 
-The six frontiers are not independent — they fall into two families:
+The frontiers fall into families:
 
-- **Identity** — *is it still the same thing when the carrier changes?*  `claim_id` (#3) → `agent_id`
-  (#6) → registry / organization identity (#5).
+- **Identity** — *is it still the same thing when the carrier changes?*  `claim_id` (#3, proven) →
+  `agent_id` (#6, proven) → **organization identity** (#5a, referent absent).
 - **Behavior** — *does the system still act correctly under load?*  derived standing at scale (#1) →
   concurrent resolutions (#2) → knowledge compiler (#4).
+- **Substrate** — *does the proof layer itself survive?*  distributed certification (#5b — kernel-shaped,
+  deferred). Distinct from identity and behavior: it asks whether *certification* survives no single
+  registry.
 
-Identity asks whether the *referent* survives; behavior asks whether the *system* holds. Two different
-kinds of invariant — still a map, not a schedule.
+Identity asks whether the *referent* survives; behavior asks whether the *system* holds; substrate asks
+whether the *proof* holds. Still a map, not a schedule.
 
 ---
 
