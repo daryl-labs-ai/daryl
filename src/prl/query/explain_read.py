@@ -47,6 +47,8 @@ class Explanation:
     proposal: ProposalFact | None          # None when no Proposal act is on the chain
     resolutions: tuple[ResolutionFact, ...]  # all resolutions, in record order ( () = proposed )
     standing: str                          # derived (StandingQuery), never recomputed here
+    conflict: bool = False                 # derived (#2): two distinct authorities disagree
+    conflict_parties: tuple[str, ...] = ()  # the agent_ids in disagreement (empty unless conflict)
 
 
 def render_explanation(explanation: Explanation) -> str:
@@ -66,6 +68,10 @@ def render_explanation(explanation: Explanation) -> str:
         lines.append("  standing   PROPOSED (no resolution)")
     else:
         lines.append(f"  standing   {e.standing.upper()} (derived)")
+    if e.conflict:
+        parties = ", ".join(p or "?" for p in e.conflict_parties)
+        lines.append(f"  ⚠ CONFLICT incompatible decisions by {parties} "
+                     f"(standing unchanged — surfaced, not governed)")
     return "\n".join(lines)
 
 
@@ -95,6 +101,8 @@ class ExplainQuery:
                     agent_id=v.agent_id, carrier=v.carrier, org_id=v.org_id)
                 break
         resolutions = tuple(self._standing.resolutions_of(claim_id))
-        standing = self._standing.standing_of(claim_id).standing  # derived, single source
+        view = self._standing.standing_of(claim_id)  # derived, single source (standing + conflict)
         return Explanation(
-            claim_id=claim_id, proposal=proposal, resolutions=resolutions, standing=standing)
+            claim_id=claim_id, proposal=proposal, resolutions=resolutions,
+            standing=view.standing, conflict=view.conflict,
+            conflict_parties=view.conflict_parties)

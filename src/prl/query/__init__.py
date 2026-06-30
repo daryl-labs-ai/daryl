@@ -33,6 +33,7 @@ from .standing_read import (
     StandingQuery,
     StandingView,
     derive_standing,
+    detect_conflict,
     render_standing,
 )
 from .structural import PRLAdjacencyIndex, StructuralQuery
@@ -55,6 +56,7 @@ __all__ = [
     "ResolutionFact",
     "RegistryProjection",
     "derive_standing",
+    "detect_conflict",
     "render_standing",
     "ExplainQuery",
     "Explanation",
