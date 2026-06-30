@@ -42,6 +42,7 @@ from .subject_read import (
     ClaimStanding,
     SubjectStandingsQuery,
     SubjectStandingsView,
+    detect_coherence,
     render_subject_standings,
 )
 
@@ -73,6 +74,7 @@ __all__ = [
     "SubjectStandingsQuery",
     "SubjectStandingsView",
     "ClaimStanding",
+    "detect_coherence",
     "render_subject_standings",
     "ConsultationQuery",
     "ConsultationView",

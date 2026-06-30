@@ -24,6 +24,7 @@ on any projection (Identity across projections v1).
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -51,18 +52,55 @@ class ClaimStanding:
 class SubjectStandingsView:
     """A subject's claims and their standings, **gathered side by side** (not compiled).
     The unit is a *list*, on purpose: #4a proves the referent reaches the governed layer; it
-    does **not** yet produce one coherent Knowledge Object."""
+    does **not** yet produce one coherent Knowledge Object.
+
+    ``coherence`` (#4b v1) is a **derived descriptor of the gathered set** — do the subject's
+    live governed claims `agree`, `disagree`, or are they `unsettled`? It is **read-only,
+    never stored, and never a subject standing**: it describes a *relation among* the claims,
+    it does **not** give the subject an `accepted`/`rejected` value and it does **not** merge,
+    rank, or resolve them. The standing rule, the gather, and per-claim #2 conflict are all
+    untouched."""
 
     subject_id: str
     claims: tuple[ClaimStanding, ...]  # one per distinct claim_id under the subject (record order)
+    coherence: str = "unsettled"       # "aligned" | "divergent" | "unsettled" — derived, not a standing
+    divergent_claims: tuple[str, ...] = ()  # the governed claim_ids in disagreement (empty unless divergent)
+
+
+def detect_coherence(claims: Sequence[ClaimStanding]) -> tuple[str, tuple[str, ...]]:
+    """Derive the **coherence descriptor** of a subject's gathered claims (#4b v1, reading d).
+    Pure; computed from the claims' standings every call, **never stored**. It **surfaces**
+    agreement/disagreement — it does **not** merge, rank, resolve, or give the subject a
+    standing.
+
+    Rule **C-d** — over the subject's **live governed** claims (standing ∈ {``accepted``,
+    ``rejected``}); ``superseded`` / ``withdrawn`` are **closed transitions, excluded** from the
+    agreement check; ``proposed`` / observations are not governed:
+    - ``divergent`` — at least one ``accepted`` **and** at least one ``rejected`` live governed
+      claim → the subject's live claims disagree (**surfaced, never resolved**).
+    - ``aligned``   — there is ≥1 live governed claim and **all** share the same decision.
+    - ``unsettled`` — **no** live governed claim.
+
+    Returns ``(coherence, divergent_claims)`` — ``divergent_claims`` are the governed claim_ids
+    on both sides (empty unless ``divergent``)."""
+    governed = [c for c in claims if c.standing in ("accepted", "rejected")]
+    if not governed:
+        return ("unsettled", ())
+    decisions = {c.standing for c in governed}
+    if "accepted" in decisions and "rejected" in decisions:
+        return ("divergent", tuple(sorted(c.claim_id for c in governed)))
+    return ("aligned", ())
 
 
 def render_subject_standings(view: SubjectStandingsView) -> str:
-    """Pure display. The subject, then one line per claim — standings shown side by side,
-    never merged into a single object standing."""
+    """Pure display. The subject, its coherence descriptor (relation among claims, never a
+    standing), then one line per claim — standings shown side by side, never merged."""
     if not view.claims:
         return f"subject {view.subject_id}: no claims"
-    lines = [f"subject {view.subject_id}: {len(view.claims)} claim(s)  (standings, not compiled)"]
+    head = f"subject {view.subject_id}: {len(view.claims)} claim(s)  (standings, not compiled)"
+    note = {"divergent": "  (claims disagree — surfaced, not resolved)",
+            "aligned": "  (live governed claims agree)", "unsettled": ""}.get(view.coherence, "")
+    lines = [head, f"  coherence: {view.coherence.upper()}{note}"]
     for c in view.claims:
         flag = "  ⚠ CONFLICT" if c.conflict else ""
         lines.append(f"  claim {c.claim_id}  [{c.mode}]  agent={c.agent_id or '(unknown)'}  "
@@ -105,4 +143,9 @@ class SubjectStandingsQuery:
                 agent_id=v.agent_id,
                 carrier=v.carrier,
             ))
-        return SubjectStandingsView(subject_id=subject_id, claims=tuple(claims))
+        # Coherence is read ALONGSIDE the gather (the #2 pattern): the gather is unchanged;
+        # the descriptor never merges the claims and is never a subject standing.
+        coherence, divergent = detect_coherence(claims)
+        return SubjectStandingsView(
+            subject_id=subject_id, claims=tuple(claims),
+            coherence=coherence, divergent_claims=divergent)
