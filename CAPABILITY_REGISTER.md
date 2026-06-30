@@ -8,7 +8,7 @@
   CAPABILITY REGISTER
 
   Proven assets          5
-  Robustness frontiers   7   (3 proven · 4 idea)
+  Robustness frontiers   7   (4 proven · 3 idea)
   Product surfaces      10
   Canonical law         11
 
@@ -16,9 +16,9 @@
   → (next frontier — to choose)
 
   PROOF VELOCITY
-  Last proof       2026-06-28  Org identity v1 — org_id ≠ carrier (3rd referent)
-  Previous proof   2026-06-28  Agent identity v1 — agent_id ≠ model_id
-  Recent cadence   2026-06-27 → 2026-06-28 : 5 assets + 3 frontiers proven
+  Last proof       2026-06-28  Derived standing at scale v1 — O(N)/query → indexed
+  Previous proof   2026-06-28  Org identity v1 — org_id ≠ carrier (3rd referent)
+  Recent cadence   2026-06-27 → 2026-06-28 : 5 assets + 4 frontiers proven
   (the date is the datum; days elapsed is a view — let Git compute it)
 
 ──────────────────────────────────────────────
@@ -71,7 +71,7 @@ Not features — **tests of whether the proven invariants survive at scale** (se
 |---|---|---|
 | 🟢 Proven | Identity across projections | PR #82 · real gate KO-7: `explain` RR ≡ `--projection sqlite` · read projection (reserve: certification substrate stays DSM, receipt projection-relative) |
 | ⚪ Idea | Concurrent resolutions | governance when incompatible human resolutions collide |
-| ⚪ Idea | Derived standing at scale | keep "derived, never authoritative" when replay gets costly |
+| 🟢 Proven | Derived standing at scale (#1) | PR #90 · measured kernel: `StandingIndex` 1 scan (build) vs `StandingQuery` N scans (per-query), identical standing, droppable · `O(N)/query` → `O(N)`-once + `O(k)`/query, *standing never stored* survives the optimization |
 | ⚪ Idea | Knowledge compiler (multi-agent merge) | many Acts → one coherent Object; parked/incubating |
 | 🟢 Proven | Organization identity — the referent (#5a) | PR #88 (ADR-0010) · real gate: same `org.acme` across `openai:gpt-4o`/`gpt-5`, `consultations --org` returns exactly them · `org_id` ≠ carrier (3rd identity referent) |
 | ⚪ Idea | Distributed certification — the substrate (#5b) | deferred · can DSM certification survive no single registry? kernel-shaped, heavy — separate from #5a |
