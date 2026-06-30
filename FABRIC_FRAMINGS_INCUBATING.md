@@ -144,7 +144,14 @@ continuity), with real agents, without cheating. Only then does it graduate to t
 observed property — not before. It does not *replace* the manifesto; it is a consequence of it,
 pending its proof. (R-consult v3 + Resolution/Standing are what unlock the demo, hence this line.)
 
-## 8. "Identity is never defined by its carrier" (transversal principle — incubating, 2 of 3 legs)
+## 8. "Identity is never defined by its carrier" (✅ GRADUATED 2026-06-28 → manifesto)
+
+> **GRADUATED.** The promotion gate below was met: a **third independent referent** — `org_id` ≠
+> carrier (PR #88, real gate: same `org.acme` across `openai:gpt-4o`/`gpt-5`) — joins `claim_id` ∉
+> storage and `agent_id` ≠ `model_id`. The principle now stands on **three legs** and is an **observed
+> property** in `VISION_KNOWLEDGE_FABRIC.md`. Dated proof: Proof Log entries 2026-06-28 (Identity
+> across projections, Structured contributor attribution, Organization referent). The text below is the
+> incubation record of how it was framed before it graduated.
 
 A candidate general principle of Daryl, broader than identity-of-knowledge:
 
