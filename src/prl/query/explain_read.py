@@ -36,6 +36,7 @@ class ProposalFact:
     subject_id: str
     agent_id: str = ""  # the logical contributor (ADR-0009); "" = unknown (pre-0009)
     carrier: str = ""   # the execution carrier-of-record, e.g. "openai:gpt-4o" (ADR-0009)
+    org_id: str = ""    # the owning organization (ADR-0010); "" = unknown (no inference)
 
 
 @dataclass(frozen=True)
@@ -91,7 +92,7 @@ class ExplainQuery:
                 proposal = ProposalFact(
                     producer=v.producer, confidence=v.confidence, answer=v.answer,
                     receipt=v.receipt, subject_id=v.subject_id,
-                    agent_id=v.agent_id, carrier=v.carrier)
+                    agent_id=v.agent_id, carrier=v.carrier, org_id=v.org_id)
                 break
         resolutions = tuple(self._standing.resolutions_of(claim_id))
         standing = self._standing.standing_of(claim_id).standing  # derived, single source

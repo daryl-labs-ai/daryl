@@ -36,6 +36,7 @@ class PRLConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     declared_projects: list[Path]  # D6 — declared folders only
+    org_id: str | None = None  # owning organization (ADR-PRL-0010); optional, declared not derived
     storage_dir: Path = Path.home() / ".daryl" / "prl"
     index_extensions: tuple[str, ...] = _DEFAULT_EXTENSIONS
     max_file_bytes: int = 2_000_000

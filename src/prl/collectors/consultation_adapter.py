@@ -46,6 +46,7 @@ class ConsultationAdapter:
         agent_id: str,
         confidence: float,
         carrier: Carrier | None = None,
+        org_id: str | None = None,
         propose: bool = False,
         regime: str | None = None,
         contested: bool = False,
@@ -77,6 +78,7 @@ class ConsultationAdapter:
             mode=mode,
             answer=answer,
             mef=mef,
+            org_id=org_id,  # owning org (ADR-0010); optional, caller-supplied, not inferred
         )
 
     def consult(
@@ -88,6 +90,7 @@ class ConsultationAdapter:
         model: str,
         agent_id: str,
         confidence: float = 1.0,
+        org_id: str | None = None,
         propose: bool = False,
     ) -> ConsultationNode:
         """R-consult v3: call a **real agent** and map its native answer to a Knowledge
@@ -107,5 +110,5 @@ class ConsultationAdapter:
         carrier = Carrier(provider=provider, model=model, adapter=adapter)
         return self.to_act(
             subject_id=subject_id, answer=answer, producer=producer, agent_id=agent_id,
-            carrier=carrier, confidence=confidence, propose=propose,
+            carrier=carrier, org_id=org_id, confidence=confidence, propose=propose,
         )

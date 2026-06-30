@@ -70,6 +70,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_consult.add_argument("--config", help="path to the PRL config JSON")
     p_consult.add_argument("--storage-dir", dest="storage_dir", help="override the DSM storage dir")
     p_consult.add_argument("--subject", help="filter to one Knowledge Object / subject id")
+    p_consult.add_argument("--org", dest="org", help="filter to one owning organization (ADR-0010)")
     p_consult.add_argument("--rr-index-dir", dest="rr_index_dir",
                            help="directory for RR's derived index (default: <storage-dir>/_rr_index)")
 
@@ -81,6 +82,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_do.add_argument("--provider", default="openai", help="agent provider (default: openai)")
     p_do.add_argument("--model", required=True, help="model name (e.g. gpt-5)")
     p_do.add_argument("--subject", required=True, help="the Knowledge Object / subject id")
+    p_do.add_argument("--org-id", dest="org_id", help="owning organization (ADR-0010; optional, e.g. org.acme)")
     p_do.add_argument("--config", help="path to the PRL config JSON")
     p_do.add_argument("--storage-dir", dest="storage_dir", help="override the DSM storage dir")
     p_do.add_argument("--confidence", type=float, default=1.0,
@@ -97,6 +99,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_res.add_argument("--agent-id", dest="agent_id", required=True,
                        help="logical human contributor id, e.g. mohamed.azizi (ADR-0009; "
                             "no human: prefix — human-ness is in the carrier)")
+    p_res.add_argument("--org-id", dest="org_id", help="owning organization (ADR-0010; optional, e.g. org.acme)")
     p_res.add_argument("--config", help="path to the PRL config JSON")
     p_res.add_argument("--storage-dir", dest="storage_dir", help="override the DSM storage dir")
 
@@ -211,7 +214,8 @@ def cmd_consultations(args: argparse.Namespace) -> int:
 
         storage = open_storage(config)  # raw Storage from the registered store module (read)
         rr_dir = args.rr_index_dir or (Path(config.storage_dir) / "_rr_index")
-        views = ConsultationQuery(storage, rr_dir).list(subject_id=getattr(args, "subject", None))
+        views = ConsultationQuery(storage, rr_dir).list(
+            subject_id=getattr(args, "subject", None), org_id=getattr(args, "org", None))
     except PRLError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
@@ -235,7 +239,8 @@ def cmd_consult(args: argparse.Namespace) -> int:
         client = _make_agent_client(args.provider)  # real model (test monkeypatches this)
         node = ConsultationAdapter().consult(
             client, subject_id=args.subject, prompt=args.prompt, model=args.model,
-            agent_id=args.agent_id, confidence=args.confidence, propose=args.propose,
+            agent_id=args.agent_id, org_id=getattr(args, "org_id", None),
+            confidence=args.confidence, propose=args.propose,
         )
         res = open_store(config).commit_act(node)
     except PRLError as exc:
@@ -267,7 +272,8 @@ def cmd_resolve(args: argparse.Namespace) -> int:
     try:
         config = _read_config(args)
         node = make_resolution(
-            target_claim_id=args.claim, decision=args.decision, agent_id=args.agent_id)
+            target_claim_id=args.claim, decision=args.decision, agent_id=args.agent_id,
+            org_id=getattr(args, "org_id", None))
         res = open_store(config).commit_act(node)
     except PRLError as exc:
         print(f"error: {exc}", file=sys.stderr)
