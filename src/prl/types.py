@@ -78,16 +78,20 @@ class ProjectNode(BaseModel):
     project_id: str  # sha256_uri of the declared root path (deterministic)
     root_path: str
     name: str
+    org_id: str | None = None  # owning organization (ADR-0010); declared, NOT derived from the path
 
     @classmethod
-    def from_root(cls, root_path: str, name: str | None = None) -> "ProjectNode":
+    def from_root(
+        cls, root_path: str, name: str | None = None, org_id: str | None = None,
+    ) -> "ProjectNode":
         """Build a ProjectNode with a deterministic ``project_id`` derived purely
-        from the path string (no filesystem access — no ``resolve()``)."""
+        from the path string (no filesystem access — no ``resolve()``). ``org_id`` is the
+        owning organization (ADR-PRL-0010): **declared**, never derived from the path."""
         from ._canonical import sha256_uri
 
         pid = sha256_uri(canonical_bytes(str(root_path)))
         derived_name = name if name is not None else str(root_path).rstrip("/").split("/")[-1]
-        return cls(project_id=pid, root_path=str(root_path), name=derived_name)
+        return cls(project_id=pid, root_path=str(root_path), name=derived_name, org_id=org_id)
 
 
 class FileNode(BaseModel):
@@ -229,6 +233,7 @@ class ConsultationNode(BaseModel):
     mode: ConsultationMode = "observation"  # default = Observation (ADR-0008 invariant)
     answer: str                           # the agent's answer payload
     mef: MEF                              # complete or the record cannot be built
+    org_id: str | None = None            # owning org (ADR-0010); thin ownership context, BESIDE the MEF
 
 
 class ResolutionNode(BaseModel):
@@ -248,6 +253,7 @@ class ResolutionNode(BaseModel):
     target_claim_id: str                  # the MEF.claim_id this resolution acts on
     decision: ResolutionDecision
     mef: MEF                              # the resolver's own frame; producer = human/witnessed
+    org_id: str | None = None            # owning org (ADR-0010); thin ownership context, BESIDE the MEF
 
     @field_validator("target_claim_id", "resolution_id")
     @classmethod

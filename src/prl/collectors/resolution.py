@@ -30,6 +30,7 @@ def make_resolution(
     decision: ResolutionDecision,
     agent_id: str,
     producer: str | None = None,
+    org_id: str | None = None,
     regime: str = _DEFAULT_RESOLUTION_REGIME,
     confidence: float = 1.0,
     contested: bool = False,
@@ -57,4 +58,5 @@ def make_resolution(
         target_claim_id=target_claim_id,
         decision=decision,
         mef=mef,
+        org_id=org_id,  # owning org (ADR-0010); optional, caller-supplied, not inferred
     )

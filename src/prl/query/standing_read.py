@@ -65,6 +65,7 @@ class ResolutionFact:
     receipt: str     # the resolution Entry's hash (projection-relative)
     agent_id: str = ""  # the logical contributor (ADR-0009); "" = unknown (pre-0009)
     carrier: str = ""   # the execution carrier-of-record, e.g. "human" (ADR-0009)
+    org_id: str = ""    # the owning organization (ADR-0010); "" = unknown (no inference)
 
 
 def render_standing(view: StandingView) -> str:
@@ -130,6 +131,7 @@ class StandingQuery:
                 receipt=str(getattr(entry, "hash", "") or ""),
                 agent_id=node.mef.agent_id or "",
                 carrier=node.mef.carrier.short() if node.mef.carrier is not None else "",
+                org_id=node.org_id or "",
             )
             for entry, node in self._resolutions_for(claim_id)
         ]

@@ -37,6 +37,7 @@ class ConsultationView:
     claim_id: str = ""  # the MEF claim_id (the identity a Resolution targets — Resolution v1)
     agent_id: str = ""  # the logical contributor (ADR-0009); "" = unknown (pre-0009 act)
     carrier: str = ""   # the execution carrier-of-record, e.g. "openai:gpt-4o" (ADR-0009)
+    org_id: str = ""    # the owning organization (ADR-0010); "" = unknown (no inference)
 
 
 def view_from_entry(entry: Any) -> ConsultationView:
@@ -58,6 +59,7 @@ def view_from_entry(entry: Any) -> ConsultationView:
         claim_id=node.mef.claim_id,
         agent_id=node.mef.agent_id or "",  # None (pre-0009) → "" (unknown); never inferred
         carrier=node.mef.carrier.short() if node.mef.carrier is not None else "",
+        org_id=node.org_id or "",          # None (pre-0010) → "" (unknown); never inferred
     )
 
 
@@ -69,6 +71,7 @@ def render_consultations(views: list[ConsultationView]) -> str:
     for v in views:
         lines.append(f"▸ {v.mode.upper()} on {v.subject_id}  [{v.consultation_id}]")
         lines.append(f"    agent: {v.agent_id or '(unknown)'}   carrier: {v.carrier or '(unknown)'}")
+        lines.append(f"    org: {v.org_id or '(unknown)'}")
         lines.append(f"    producer: {v.producer}   confidence: {v.confidence:.2f}")
         lines.append(f"    claim: {v.claim_id}")
         lines.append(f"    DSM receipt: {v.receipt}")
@@ -90,12 +93,16 @@ class ConsultationQuery:
             _navigator = RRNavigator(builder, storage)
         self._nav = _navigator
 
-    def list(self, subject_id: str | None = None) -> list[ConsultationView]:
-        """All consultation acts (optionally filtered by subject), newest-first by
-        nothing in particular (RR order); display is the caller's concern."""
+    def list(
+        self, subject_id: str | None = None, org_id: str | None = None,
+    ) -> list[ConsultationView]:
+        """All consultation acts (optionally filtered by subject and/or **owning org** —
+        the owner-scoped query `project_id` alone cannot express, ADR-0010). RR order."""
         records = self._nav.navigate_action("prl.consultation")
         entries = self._nav.resolve_entries(records)
         views = [view_from_entry(e) for e in entries]
         if subject_id is not None:
             views = [v for v in views if v.subject_id == subject_id]
+        if org_id is not None:
+            views = [v for v in views if v.org_id == org_id]
         return views
