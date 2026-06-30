@@ -8,17 +8,17 @@
   CAPABILITY REGISTER
 
   Proven assets          5
-  Robustness frontiers   7   (4 proven · 3 idea)
+  Robustness frontiers   7   (5 proven · 2 idea)
   Product surfaces      10
   Canonical law         11
 
   Current focus 🔥
-  → (next frontier — to choose)
+  → free
 
   PROOF VELOCITY
-  Last proof       2026-06-28  Derived standing at scale v1 — O(N)/query → indexed
-  Previous proof   2026-06-28  Org identity v1 — org_id ≠ carrier (3rd referent)
-  Recent cadence   2026-06-27 → 2026-06-28 : 5 assets + 4 frontiers proven
+  Last proof       2026-06-30  Concurrent resolutions v1 — conflict no longer invisible (visibility)
+  Previous proof   2026-06-28  Derived standing at scale v1 — O(N)/query → indexed
+  Recent cadence   2026-06-27 → 2026-06-30 : 5 assets + 5 frontiers proven
   (the date is the datum; days elapsed is a view — let Git compute it)
 
 ──────────────────────────────────────────────
@@ -70,7 +70,7 @@ Not features — **tests of whether the proven invariants survive at scale** (se
 | Status | Frontier | Notes |
 |---|---|---|
 | 🟢 Proven | Identity across projections | PR #82 · real gate KO-7: `explain` RR ≡ `--projection sqlite` · read projection (reserve: certification substrate stays DSM, receipt projection-relative) |
-| ⚪ Idea | Concurrent resolutions | governance when incompatible human resolutions collide |
+| 🟢 Proven | Concurrent resolutions — conflict **visibility** (#2 v1) | PR #92 · functional in-suite (no credential): `detect_conflict` (D3 — two distinct `agent_id` opposite `accepted`/`rejected`; legacy fallback surfaces unknown-author opposites) read **alongside** latest-wins · standing **unchanged**, conflict a **derived** flag (`⚠ CONFLICT`), never stored (`StandingIndex` inherits; drop/rebuild identical) · **Daryl does not yet govern conflict** — it now guarantees an incompatible human resolution **cannot stay invisible**. **Open (step c):** contested-as-standing / authority / required supersession — `MEF.contested` still unread, no ADR |
 | 🟢 Proven | Derived standing at scale (#1) | PR #90 · measured kernel: `StandingIndex` 1 scan (build) vs `StandingQuery` N scans (per-query), identical standing, droppable · `O(N)/query` → `O(N)`-once + `O(k)`/query, *standing never stored* survives the optimization |
 | ⚪ Idea | Knowledge compiler (multi-agent merge) | many Acts → one coherent Object; parked/incubating |
 | 🟢 Proven | Organization identity — the referent (#5a) | PR #88 (ADR-0010) · real gate: same `org.acme` across `openai:gpt-4o`/`gpt-5`, `consultations --org` returns exactly them · `org_id` ≠ carrier (3rd identity referent) |
