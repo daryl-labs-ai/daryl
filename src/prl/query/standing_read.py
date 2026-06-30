@@ -16,6 +16,7 @@ the decision of the **latest** resolution (authoritative record order). ``supers
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -68,6 +69,22 @@ class ResolutionFact:
     org_id: str = ""    # the owning organization (ADR-0010); "" = unknown (no inference)
 
 
+def derive_standing(claim_id: str, resolutions: Sequence[ResolutionFact]) -> StandingView:
+    """The **single source of latest-wins** (Resolution v1). A claim with no resolution is
+    ``proposed``; otherwise its standing is the **latest** resolution's decision (resolutions
+    must already be in authoritative order). Pure: computes from facts, never reads a stored
+    standing. Both ``StandingQuery`` (full scan) and ``StandingIndex`` (one-pass grouping)
+    feed this same function — so an optimization cannot change the standing."""
+    if not resolutions:
+        return StandingView(claim_id=claim_id, standing="proposed", decisions=(), last_receipt="")
+    return StandingView(
+        claim_id=claim_id,
+        standing=resolutions[-1].decision,
+        decisions=tuple(r.decision for r in resolutions),
+        last_receipt=resolutions[-1].receipt,
+    )
+
+
 def render_standing(view: StandingView) -> str:
     """Pure display."""
     if not view.decisions:
@@ -108,30 +125,68 @@ class StandingQuery:
 
     def standing_of(self, claim_id: str) -> StandingView:
         """Derive the current standing of ``claim_id`` by replaying its resolutions.
-        Never reads a stored standing — it is computed here, every time."""
-        res = self._resolutions_for(claim_id)
-        if not res:
-            return StandingView(claim_id=claim_id, standing="proposed", decisions=(), last_receipt="")
-        last_entry, last_node = res[-1]  # latest by authoritative record order
-        return StandingView(
-            claim_id=claim_id,
-            standing=last_node.decision,
-            decisions=tuple(n.decision for _e, n in res),
-            last_receipt=str(getattr(last_entry, "hash", "") or ""),
-        )
+        Delegates to the pure :func:`derive_standing` (single source of latest-wins), fed
+        by this query's facts. Never reads a stored standing — recomputed every call."""
+        return derive_standing(claim_id, self.resolutions_of(claim_id))
 
     def resolutions_of(self, claim_id: str) -> list[ResolutionFact]:
         """The resolution acts targeting ``claim_id`` as facts (decision, resolver,
         receipt), in authoritative record order. Read-only; the *standing* is still
         derived by ``standing_of`` — this only exposes the acts behind it (R-explain)."""
-        return [
-            ResolutionFact(
-                decision=node.decision,
-                resolver=node.mef.producer,
-                receipt=str(getattr(entry, "hash", "") or ""),
-                agent_id=node.mef.agent_id or "",
-                carrier=node.mef.carrier.short() if node.mef.carrier is not None else "",
-                org_id=node.org_id or "",
-            )
-            for entry, node in self._resolutions_for(claim_id)
-        ]
+        return [_fact(entry, node) for entry, node in self._resolutions_for(claim_id)]
+
+
+def _fact(entry: Any, node: ResolutionNode) -> ResolutionFact:
+    """Reduce a resolution (entry + node) to a :class:`ResolutionFact`."""
+    return ResolutionFact(
+        decision=node.decision,
+        resolver=node.mef.producer,
+        receipt=str(getattr(entry, "hash", "") or ""),
+        agent_id=node.mef.agent_id or "",
+        carrier=node.mef.carrier.short() if node.mef.carrier is not None else "",
+        org_id=node.org_id or "",
+    )
+
+
+class StandingIndex:
+    """A **non-authoritative, droppable** projection of resolution acts grouped by
+    ``claim_id``, built in **one pass** over the ``prl.resolution`` bucket (#1, derived
+    standing at scale).
+
+    It memoizes the act **grouping**, **never the standing**: ``standing_of`` still derives
+    via :func:`derive_standing` on every call. Drop the index and standing is recomputed from
+    the acts — it is a *projection* (same discipline as the RR adjacency index / the SQLite
+    read projection), never a source of truth. It has **no** authoritative write path.
+
+    Cost: **O(N) once** to build; then **O(1)** lookup + **O(k)** derive per claim — vs
+    ``StandingQuery``'s **O(N) per claim** full-bucket scan.
+    """
+
+    def __init__(self, storage: Any, index_dir: Any, *, _navigator: RegistryProjection | None = None):
+        if _navigator is None:
+            builder = RRIndexBuilder(storage=storage, index_dir=str(index_dir))
+            builder.build()
+            _navigator = RRNavigator(builder, storage)
+        # ONE scan: resolve the whole bucket once, group resolutions by target_claim_id in
+        # authoritative record order. This is the only place acts are read.
+        records = _navigator.navigate_action("prl.resolution")
+        entries = _navigator.resolve_entries(records)
+        by_id = {getattr(e, "id", None): e for e in entries}
+        self._by_claim: dict[str, list[ResolutionFact]] = {}
+        for rec in records:
+            eid = rec.get("entry_id") if isinstance(rec, dict) else getattr(rec, "entry_id", None)
+            entry = by_id.get(eid)
+            if entry is None:
+                continue
+            node = from_entry(entry)
+            if isinstance(node, ResolutionNode):
+                self._by_claim.setdefault(node.target_claim_id, []).append(_fact(entry, node))
+
+    def resolutions_of(self, claim_id: str) -> list[ResolutionFact]:
+        """O(1) lookup of a claim's resolution facts (authoritative order)."""
+        return list(self._by_claim.get(claim_id, ()))
+
+    def standing_of(self, claim_id: str) -> StandingView:
+        """Standing is **derived** every call (never stored); only the act grouping is
+        memoized. Same single-source :func:`derive_standing` as ``StandingQuery``."""
+        return derive_standing(claim_id, self.resolutions_of(claim_id))
