@@ -25,3 +25,11 @@ Append-only record of framing decisions: the decision, the framings it drew on, 
 - **Decision:** separate `agent_id` (frame-level, the logical contributor) from the carrier-of-record (provider/model/adapter); `agent_id` ≠ `model_id` as the contributor's mirror of `claim_id` ∉ storage.
 - **Framings:** "Identity is never defined by its carrier" (incubating, `FABRIC_FRAMINGS_INCUBATING.md` #8).
 - **Outcome:** incubating — 2nd proven referent (`claim_id` ∉ storage, `agent_id` ≠ `model_id`); needs a 3rd to graduate to the manifesto.
+
+---
+
+## Organization referent (ADR-PRL-0010, org_id v1) — 2026-06-28
+
+- **Decision:** `org_id` as the **third referent** — the owning organization, carrier-independent, declared at the project, beside the MEF (ownership ≠ epistemic).
+- **Framings:** "Identity is never defined by its carrier" (the transversal principle it completes).
+- **Outcome:** **GRADUATED** — 3rd referent proven (`org_id` ≠ carrier); the framing is promoted from the incubator to the manifesto (`VISION_KNOWLEDGE_FABRIC.md`, observed property).

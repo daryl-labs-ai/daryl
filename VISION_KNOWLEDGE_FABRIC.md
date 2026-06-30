@@ -352,6 +352,27 @@ The asset is never a single Act: it is the **governed corpus** that emerges from
 human resolutions, supersessions, and reuse. The value lives in their governance over time — which is
 why this property is the consequence of the four laws below, not a fifth one.
 
+## Identity is never defined by its carrier (observed)
+
+A transversal property, held in incubation until **three independent referents** proved it, is now
+observed:
+
+> **Identity is never defined by its carrier.** The substrate is interchangeable; the referent is not.
+
+It rests on three proven legs:
+
+- **the knowledge object** — `claim_id` is not storage (the same claim threads the chain identically
+  across a second read projection);
+- **the contributor** — `agent_id` is not `model_id` (the same logical agent across two models);
+- **the organization** — `org_id` is not its carrier (the same owner across projects/carriers, with an
+  owner-scoped query a project id alone cannot express).
+
+This is the generalization of Daryl's earliest principle — *knowledge is not its representation* —
+applied beyond knowledge: every fundamental referent (`claim_id`, `agent_id`, `org_id`, and any future
+`team_id` / `policy_id`) keeps its identity independent of the substrate that carries it. It does not
+replace the four laws; it generalizes the separation they already enact. *(Dated proof — receipts,
+commits — lives in the Proof Log; this statement is meant to stay true regardless.)*
+
 ## What it is — and is not
 
 It **is** decision-grade knowledge: recallable because transparent, not because someone declared it
