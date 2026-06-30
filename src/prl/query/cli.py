@@ -37,6 +37,7 @@ from .explain_read import ExplainQuery, render_explanation
 from .recall import RecallEngine
 from .semantic import LocalEmbedder, SemanticIndex
 from .standing_read import StandingQuery, render_standing
+from .subject_read import SubjectStandingsQuery, render_subject_standings
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -124,6 +125,18 @@ def build_parser() -> argparse.ArgumentParser:
     p_ex.add_argument("--projection", choices=["rr", "sqlite"], default="rr",
                       help="read projection (default rr; sqlite needs --db)")
     p_ex.add_argument("--db", help="SQLite projection path (with --projection sqlite)")
+
+    p_subst = sub.add_parser("subject-standings",
+                             help="gather a subject's claims and their standings, side by side "
+                                  "(read-only; gathers, does NOT compile a Knowledge Object — #4a)")
+    p_subst.add_argument("--subject", required=True, help="the subject id to gather (e.g. KO)")
+    p_subst.add_argument("--config", help="path to the PRL config JSON")
+    p_subst.add_argument("--storage-dir", dest="storage_dir", help="override the DSM storage dir")
+    p_subst.add_argument("--rr-index-dir", dest="rr_index_dir",
+                         help="directory for RR's derived index (default: <storage-dir>/_rr_index)")
+    p_subst.add_argument("--projection", choices=["rr", "sqlite"], default="rr",
+                         help="read projection (default rr; sqlite needs --db)")
+    p_subst.add_argument("--db", help="SQLite projection path (with --projection sqlite)")
 
     p_proj = sub.add_parser("project-sqlite",
                             help="materialize a read-only SQLite projection of certified acts (Identity v1)")
@@ -331,6 +344,31 @@ def cmd_explain(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_subject_standings(args: argparse.Namespace) -> int:
+    """Gather a subject's claims and their derived standings, side by side (#4a, read-only).
+    It walks the latent bridge ``subject → consultation.claim_id → standing_of(claim)`` — it
+    **gathers**, it does NOT compile a Knowledge Object. ``--projection sqlite`` reads the
+    second projection; the gather must be identical to RR."""
+    try:
+        if getattr(args, "projection", "rr") == "sqlite":
+            if not args.db:
+                print("error: --projection sqlite requires --db", file=sys.stderr)
+                return 2
+            from ..projections import SqliteProjection
+            view = SubjectStandingsQuery(
+                None, None, _navigator=SqliteProjection(args.db)).standings_of_subject(args.subject)
+        else:
+            config = _read_config(args)
+            rr_dir = args.rr_index_dir or (Path(config.storage_dir) / "_rr_index")
+            view = SubjectStandingsQuery(open_storage(config), rr_dir).standings_of_subject(args.subject)
+    except PRLError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+    print(render_subject_standings(view))
+    return 0
+
+
 def cmd_project_sqlite(args: argparse.Namespace) -> int:
     """Materialize a read-only SQLite projection of the certified acts (Identity v1).
     Reads via RR; writes only SQLite (DSM stays the certifier; nothing re-minted)."""
@@ -434,6 +472,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_standing(args)
     if args.command == "explain":
         return cmd_explain(args)
+    if args.command == "subject-standings":
+        return cmd_subject_standings(args)
     if args.command == "project-sqlite":
         return cmd_project_sqlite(args)
     return 1  # pragma: no cover (argparse 'required' guards this)
