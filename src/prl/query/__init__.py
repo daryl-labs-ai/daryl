@@ -19,6 +19,7 @@ from .cli import (
     cmd_resolve,
     cmd_standing,
     cmd_status,
+    cmd_subject_standings,
     main,
 )
 from .consultation_read import ConsultationQuery, ConsultationView, render_consultations
@@ -37,6 +38,12 @@ from .standing_read import (
     render_standing,
 )
 from .structural import PRLAdjacencyIndex, StructuralQuery
+from .subject_read import (
+    ClaimStanding,
+    SubjectStandingsQuery,
+    SubjectStandingsView,
+    render_subject_standings,
+)
 
 __all__ = [
     "main",
@@ -49,6 +56,7 @@ __all__ = [
     "cmd_resolve",
     "cmd_standing",
     "cmd_explain",
+    "cmd_subject_standings",
     "cmd_project_sqlite",
     "StandingQuery",
     "StandingIndex",
@@ -62,6 +70,10 @@ __all__ = [
     "Explanation",
     "ProposalFact",
     "render_explanation",
+    "SubjectStandingsQuery",
+    "SubjectStandingsView",
+    "ClaimStanding",
+    "render_subject_standings",
     "ConsultationQuery",
     "ConsultationView",
     "render_consultations",
