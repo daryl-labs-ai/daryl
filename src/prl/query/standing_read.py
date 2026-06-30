@@ -54,6 +54,10 @@ class StandingView:
     standing: str               # "proposed" | "accepted" | "rejected" | "superseded" | "withdrawn"
     decisions: tuple[str, ...]  # the resolution decisions in order (empty = proposed)
     last_receipt: str           # DSM receipt of the latest resolution ("" if none)
+    conflict: bool = False      # derived signal (#2 conflict visibility): two distinct authorities
+                                # disagree (accepted vs rejected). Orthogonal to standing — it never
+                                # changes latest-wins; it only makes the disagreement impossible to miss.
+    conflict_parties: tuple[str, ...] = ()  # the agent_ids in disagreement (empty unless conflict)
 
 
 @dataclass(frozen=True)
@@ -69,28 +73,76 @@ class ResolutionFact:
     org_id: str = ""    # the owning organization (ADR-0010); "" = unknown (no inference)
 
 
+def detect_conflict(resolutions: Sequence[ResolutionFact]) -> tuple[bool, tuple[str, ...]]:
+    """Derive whether a claim is **in conflict** — two distinct authorities disagree (#2
+    conflict visibility, angle b). Pure; computed from the acts every call, **never stored**
+    (same discipline as standing). It does **not** govern the conflict and **never** changes the
+    standing — it only makes an incompatible decision impossible to be invisible.
+
+    Definition **D3** (conflict is *between* authorities, not *within* one):
+    a conflict exists when two **distinct** ``agent_id`` issue **substantively opposite**
+    decisions — one ``accepted`` and another ``rejected``. A single author changing their mind
+    (same ``agent_id``, accepted then rejected) is a **supersession, not a conflict**.
+    ``superseded`` / ``withdrawn`` are explicit transitions, never by themselves a conflict.
+
+    **Legacy fallback (D2):** when an ``agent_id`` is unknown (pre-0009 acts, ``""``), we cannot
+    attribute authorship, so opposite decisions are **surfaced** rather than silently ignored —
+    never inferred as *no* conflict.
+
+    Returns ``(conflict, parties)`` where ``parties`` are the disagreeing ``agent_id`` (empty
+    unless a conflict; the unknown author is reported as ``""``)."""
+    accepted = [r for r in resolutions if r.decision == "accepted"]
+    rejected = [r for r in resolutions if r.decision == "rejected"]
+    if not accepted or not rejected:
+        return (False, ())  # need both substantive opposites at all
+
+    a_authors = {r.agent_id for r in accepted if r.agent_id}
+    r_authors = {r.agent_id for r in rejected if r.agent_id}
+    # D3: a known author accepted and a *distinct* known author rejected.
+    if any(a != b for a in a_authors for b in r_authors):
+        return (True, tuple(sorted(a_authors | r_authors)))
+    # Legacy fallback (D2): any unknown author on either side ⇒ cannot rule out a cross-author
+    # conflict ⇒ surface (never silently False).
+    if any(not r.agent_id for r in accepted) or any(not r.agent_id for r in rejected):
+        parties = tuple(sorted(a_authors | r_authors | {""}))
+        return (True, parties)
+    # Otherwise: the only opposition is a single known author with itself (a supersession).
+    return (False, ())
+
+
 def derive_standing(claim_id: str, resolutions: Sequence[ResolutionFact]) -> StandingView:
     """The **single source of latest-wins** (Resolution v1). A claim with no resolution is
     ``proposed``; otherwise its standing is the **latest** resolution's decision (resolutions
     must already be in authoritative order). Pure: computes from facts, never reads a stored
     standing. Both ``StandingQuery`` (full scan) and ``StandingIndex`` (one-pass grouping)
-    feed this same function — so an optimization cannot change the standing."""
+    feed this same function — so an optimization cannot change the standing.
+
+    The standing is computed by latest-wins **unchanged**; conflict is an **orthogonal derived
+    signal** (#2) — :func:`detect_conflict` is read alongside, never to pick a winner."""
     if not resolutions:
         return StandingView(claim_id=claim_id, standing="proposed", decisions=(), last_receipt="")
+    conflict, parties = detect_conflict(resolutions)
     return StandingView(
         claim_id=claim_id,
         standing=resolutions[-1].decision,
         decisions=tuple(r.decision for r in resolutions),
         last_receipt=resolutions[-1].receipt,
+        conflict=conflict,
+        conflict_parties=parties,
     )
 
 
 def render_standing(view: StandingView) -> str:
-    """Pure display."""
+    """Pure display. Standing is shown unchanged (latest-wins); a conflict, if any, is
+    surfaced alongside it as ``⚠ CONFLICT`` — visible, not governing."""
     if not view.decisions:
         return f"standing of {view.claim_id}: PROPOSED  (no resolution)"
+    flag = ""
+    if view.conflict:
+        parties = ", ".join(p or "?" for p in view.conflict_parties)
+        flag = f"  ⚠ CONFLICT (incompatible decisions by {parties})"
     return (f"standing of {view.claim_id}: {view.standing.upper()}  "
-            f"(decisions: {', '.join(view.decisions)} ; receipt {view.last_receipt})")
+            f"(decisions: {', '.join(view.decisions)} ; receipt {view.last_receipt}){flag}")
 
 
 class StandingQuery:
