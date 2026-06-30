@@ -376,3 +376,62 @@ def test_cli_project_sqlite_then_explain_e2e(tmp_path, capsys):
     assert "agent=mohamed.azizi" in out
     assert "carrier=human" in out
     assert "standing   ACCEPTED (derived)" in out
+
+
+# --- Derived standing at scale v1: StandingIndex bounded cost (kernel measurement) ---
+
+def test_standing_index_bounded_cost_kernel(tmp_path):
+    """#1 runtime proof on the real kernel (no credentials): R resolutions across M claims.
+    StandingIndex builds in ONE bucket pass and answers every query with 0 further scans;
+    StandingQuery rescans the bucket once per query (M scans). Both yield the IDENTICAL
+    standing for every claim — the optimization memoizes the act *grouping*, never the
+    standing (derive_standing stays the single source). Falsifiable, in-suite, measured."""
+    from prl.query.standing_read import StandingIndex, StandingQuery, derive_standing
+
+    store = _store(tmp_path)
+    M, R = 6, 3  # M claims × R resolutions each → R*M certified resolution acts
+    claims = [f"claim-scale-{i}" for i in range(M)]
+    decisions = ["accepted", "rejected", "superseded"][:R]  # latest in append order = superseded
+    for c in claims:
+        for d in decisions:
+            store.commit_act(make_resolution(
+                target_claim_id=c, decision=d, agent_id="mohamed.azizi"))
+
+    # one real RR navigator, wrapped to COUNT navigate_action("prl.resolution") scans
+    builder = RRIndexBuilder(storage=store._storage, index_dir=str(tmp_path / "rr"))
+    builder.build()
+    real = RRNavigator(builder, store._storage)
+
+    class _Counting:
+        def __init__(self, nav):
+            self._nav = nav
+            self.scans = 0
+
+        def navigate_action(self, action, limit=None):
+            if action == "prl.resolution":
+                self.scans += 1
+            return self._nav.navigate_action(action, limit)
+
+        def resolve_entries(self, records, limit=None):
+            return self._nav.resolve_entries(records, limit)
+
+    nav_idx = _Counting(real)
+    index = StandingIndex(None, None, _navigator=nav_idx)   # ONE scan to build the grouping
+    nav_q = _Counting(real)
+    query = StandingQuery(None, None, _navigator=nav_q)     # no scan until queried
+
+    # identical standing for every claim (latest-wins), and StandingIndex never stores it
+    for c in claims:
+        assert index.standing_of(c) == query.standing_of(c)
+        assert index.standing_of(c).standing == "superseded"
+        assert index.standing_of(c) == derive_standing(c, index.resolutions_of(c))
+
+    # measured cost: index = 1 bucket pass total; query = one rescan per claim (M scans)
+    assert nav_idx.scans == 1            # built once, 0 scans per query
+    assert nav_q.scans == M              # StandingQuery rescans the bucket every query
+    assert nav_q.scans > nav_idx.scans   # the bound holds — O(N)-once vs O(N)-per-query
+
+    # drop the index ⇒ standing still correct from the acts (projection, never a source)
+    rebuilt = StandingIndex(None, None, _navigator=_Counting(real))
+    for c in claims:
+        assert rebuilt.standing_of(c) == query.standing_of(c)

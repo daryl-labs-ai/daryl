@@ -29,8 +29,10 @@ from .semantic import Embedder, LocalEmbedder, SemanticError, SemanticIndex
 from .standing_read import (
     RegistryProjection,
     ResolutionFact,
+    StandingIndex,
     StandingQuery,
     StandingView,
+    derive_standing,
     render_standing,
 )
 from .structural import PRLAdjacencyIndex, StructuralQuery
@@ -48,9 +50,11 @@ __all__ = [
     "cmd_explain",
     "cmd_project_sqlite",
     "StandingQuery",
+    "StandingIndex",
     "StandingView",
     "ResolutionFact",
     "RegistryProjection",
+    "derive_standing",
     "render_standing",
     "ExplainQuery",
     "Explanation",
