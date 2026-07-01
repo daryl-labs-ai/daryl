@@ -19,12 +19,22 @@ from .cli import (
     cmd_resolve,
     cmd_standing,
     cmd_status,
+    cmd_governance,
     cmd_subject_standings,
     main,
 )
 from .consultation_read import ConsultationQuery, ConsultationView, render_consultations
 from .explain_read import ExplainQuery, Explanation, ProposalFact, render_explanation
 from .fusion_index import DEFAULT_PREVIEW_GATE, DEFAULT_RRF_K, FusionIndex
+from .governance_read import (
+    ClaimGovernance,
+    GovernanceQuery,
+    SubjectGovernance,
+    derive_governance_state,
+    derive_subject_governance_state,
+    render_claim_governance,
+    render_subject_governance,
+)
 from .recall import RecallEngine, RecallHit
 from .semantic import Embedder, LocalEmbedder, SemanticError, SemanticIndex
 from .standing_read import (
@@ -58,6 +68,7 @@ __all__ = [
     "cmd_standing",
     "cmd_explain",
     "cmd_subject_standings",
+    "cmd_governance",
     "cmd_project_sqlite",
     "StandingQuery",
     "StandingIndex",
@@ -76,6 +87,13 @@ __all__ = [
     "ClaimStanding",
     "detect_coherence",
     "render_subject_standings",
+    "GovernanceQuery",
+    "ClaimGovernance",
+    "SubjectGovernance",
+    "derive_governance_state",
+    "derive_subject_governance_state",
+    "render_claim_governance",
+    "render_subject_governance",
     "ConsultationQuery",
     "ConsultationView",
     "render_consultations",

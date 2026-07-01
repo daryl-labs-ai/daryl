@@ -36,6 +36,11 @@ from .fusion_index import FusionIndex
 from .explain_read import ExplainQuery, render_explanation
 from .recall import RecallEngine
 from .semantic import LocalEmbedder, SemanticIndex
+from .governance_read import (
+    GovernanceQuery,
+    render_claim_governance,
+    render_subject_governance,
+)
 from .standing_read import StandingQuery, render_standing
 from .subject_read import SubjectStandingsQuery, render_subject_standings
 
@@ -137,6 +142,20 @@ def build_parser() -> argparse.ArgumentParser:
     p_subst.add_argument("--projection", choices=["rr", "sqlite"], default="rr",
                          help="read projection (default rr; sqlite needs --db)")
     p_subst.add_argument("--db", help="SQLite projection path (with --projection sqlite)")
+
+    p_gov = sub.add_parser("governance",
+                           help="derive the read-only governance posture (clear/contested/divergent) "
+                                "ABOVE latest-wins — governs nothing (step (c) v0 probe)")
+    g_target = p_gov.add_mutually_exclusive_group(required=True)
+    g_target.add_argument("--claim", dest="claim", help="derive the governance state of one claim")
+    g_target.add_argument("--subject", dest="subject", help="derive the governance state of one subject")
+    p_gov.add_argument("--config", help="path to the PRL config JSON")
+    p_gov.add_argument("--storage-dir", dest="storage_dir", help="override the DSM storage dir")
+    p_gov.add_argument("--rr-index-dir", dest="rr_index_dir",
+                       help="directory for RR's derived index (default: <storage-dir>/_rr_index)")
+    p_gov.add_argument("--projection", choices=["rr", "sqlite"], default="rr",
+                       help="read projection (default rr; sqlite needs --db)")
+    p_gov.add_argument("--db", help="SQLite projection path (with --projection sqlite)")
 
     p_proj = sub.add_parser("project-sqlite",
                             help="materialize a read-only SQLite projection of certified acts (Identity v1)")
@@ -369,6 +388,32 @@ def cmd_subject_standings(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_governance(args: argparse.Namespace) -> int:
+    """Derive the read-only governance posture ABOVE latest-wins (step (c) v0 probe). It
+    consolidates the #2 conflict / #4b coherence signals into `clear`/`contested`/`divergent`
+    — it **governs nothing**: the standing is unchanged, no write is blocked. ``--projection
+    sqlite`` reads the second projection; the state must be identical to RR."""
+    try:
+        if getattr(args, "projection", "rr") == "sqlite":
+            if not args.db:
+                print("error: --projection sqlite requires --db", file=sys.stderr)
+                return 2
+            from ..projections import SqliteProjection
+            gq = GovernanceQuery(None, None, _navigator=SqliteProjection(args.db))
+        else:
+            config = _read_config(args)
+            rr_dir = args.rr_index_dir or (Path(config.storage_dir) / "_rr_index")
+            gq = GovernanceQuery(open_storage(config), rr_dir)
+        if getattr(args, "claim", None):
+            print(render_claim_governance(gq.governance_of_claim(args.claim)))
+        else:
+            print(render_subject_governance(gq.governance_of_subject(args.subject)))
+    except PRLError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    return 0
+
+
 def cmd_project_sqlite(args: argparse.Namespace) -> int:
     """Materialize a read-only SQLite projection of the certified acts (Identity v1).
     Reads via RR; writes only SQLite (DSM stays the certifier; nothing re-minted)."""
@@ -474,6 +519,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_explain(args)
     if args.command == "subject-standings":
         return cmd_subject_standings(args)
+    if args.command == "governance":
+        return cmd_governance(args)
     if args.command == "project-sqlite":
         return cmd_project_sqlite(args)
     return 1  # pragma: no cover (argparse 'required' guards this)
