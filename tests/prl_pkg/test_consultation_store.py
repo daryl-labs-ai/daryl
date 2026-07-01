@@ -289,7 +289,7 @@ def test_cli_explain_e2e(tmp_path, capsys):
     assert f"why {claim} is ACCEPTED" in out
     assert "agent=mohamed.azizi" in out
     assert "carrier=human" in out
-    assert "standing   ACCEPTED (derived)" in out
+    assert "standing   governed=ACCEPTED  raw=ACCEPTED (latest-wins) (derived, ADR-0011)" in out
     assert out.count("receipt v1:") == 2
 
 
@@ -375,7 +375,7 @@ def test_cli_project_sqlite_then_explain_e2e(tmp_path, capsys):
     assert f"why {claim} is ACCEPTED" in out
     assert "agent=mohamed.azizi" in out
     assert "carrier=human" in out
-    assert "standing   ACCEPTED (derived)" in out
+    assert "standing   governed=ACCEPTED  raw=ACCEPTED (latest-wins) (derived, ADR-0011)" in out
 
 
 # --- Derived standing at scale v1: StandingIndex bounded cost (kernel measurement) ---
