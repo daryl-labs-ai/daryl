@@ -8,7 +8,7 @@
   CAPABILITY REGISTER
 
   Proven assets          5
-  Robustness frontiers   8   (7 proven · 1 idea)
+  Robustness frontiers   9   (8 proven · 1 idea)
   Product surfaces      10
   Canonical law         11
 
@@ -16,9 +16,9 @@
   → free
 
   PROOF VELOCITY
-  Last proof       2026-06-30  Object coherence visibility v1 — incoherence across a subject's claims surfaced
-  Previous proof   2026-06-30  Object referent v1 — subject_id reaches the governed layer (read-gather)
-  Recent cadence   2026-06-27 → 2026-06-30 : 5 assets + 7 frontiers proven
+  Last proof       2026-07-01  Governance layer v0 — a governance posture derives read-only above latest-wins
+  Previous proof   2026-06-30  Object coherence visibility v1 — incoherence across a subject's claims surfaced
+  Recent cadence   2026-06-27 → 2026-07-01 : 5 assets + 8 frontiers proven
   (the date is the datum; days elapsed is a view — let Git compute it)
 
 ──────────────────────────────────────────────
@@ -74,6 +74,7 @@ Not features — **tests of whether the proven invariants survive at scale** (se
 | 🟢 Proven | Derived standing at scale (#1) | PR #90 · measured kernel: `StandingIndex` 1 scan (build) vs `StandingQuery` N scans (per-query), identical standing, droppable · `O(N)/query` → `O(N)`-once + `O(k)`/query, *standing never stored* survives the optimization |
 | 🟢 Proven | Object referent — `subject_id` read-gather (#4a) | PR #94 · functional in-suite + live smoke: `standings_of_subject` walks `subject → consultation.claim_id → standing_of(claim)` — **gather, not compile** (N claims side by side, no "object standing" field) · `subject_id` reaches the **governed layer read-only**, **no `object_id` / no new field** (not added to resolutions), `#1`/`#2` reused · the *referent* is settled, the compiler is **#4b** |
 | 🟢 Proven | Object coherence — visibility (#4b v1) | PR #96 · functional in-suite + live smoke: `detect_coherence` (rule C-d — over **live governed** claims, `superseded`/`withdrawn` excluded) derives `aligned` / `divergent` / `unsettled` read **alongside** the #4a gather · `divergent` surfaces both claim_ids, **claims stay side by side, the subject gets NO standing** (the view has no `standing` field) · per-claim #2 conflict orthogonal · **make visible before governing**, like #2 · **Reserve:** *visibility, not governance* — reconciling claims into one coherent Object (object-standing / authority) is the deferred **object-scale step (c)**; the real *compiler* (one coherent evolution) and `subject_id` F4/F5 stay open |
+| 🟢 Proven | Governance of divergence — read-only seam (step (c) v0) | PR #98 · the convergent step (c) of #2 + #4b · functional in-suite + live smoke: `governance_read` derives a posture `clear` / `contested` / `divergent` (rule G-1, precedence `divergent > contested > clear`) **above latest-wins**, consolidating the #2/#4b signals · **governs nothing** — standing byte-identical, no write blocked, `MEF.contested` still unread (0 consumers), distinct vocabulary (never a standing) · **Reserve:** the seam only — what `contested`/`divergent` should **do** ((i) contested standing / (ii) authority / (iii) required supersession) is the **first governing rule = the project's first governance ADR**, deferred |
 | 🟢 Proven | Organization identity — the referent (#5a) | PR #88 (ADR-0010) · real gate: same `org.acme` across `openai:gpt-4o`/`gpt-5`, `consultations --org` returns exactly them · `org_id` ≠ carrier (3rd identity referent) |
 | ⚪ Idea | Distributed certification — the substrate (#5b) | deferred · can DSM certification survive no single registry? kernel-shaped, heavy — separate from #5a |
 | 🟢 Proven | Agent identity across providers and runs | PR #84 (ADR-0009) · real gate: same `agent_id` `agent.architect` across `openai:gpt-4o` / `gpt-5`, both certified · `agent_id` ≠ `model_id` |
