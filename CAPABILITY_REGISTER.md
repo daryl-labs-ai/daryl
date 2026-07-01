@@ -8,17 +8,17 @@
   CAPABILITY REGISTER
 
   Proven assets          5
-  Robustness frontiers   9   (8 proven · 1 idea)
+  Robustness frontiers   9   (9 proven · 0 idea — all proven)
   Product surfaces      10
-  Canonical law         13
+  Canonical law         14
 
   Current focus 🔥
   → free
 
   PROOF VELOCITY
-  Last proof       2026-07-01  Object standing v1 — the compiler's standing half (ADR-PRL-0012, #4b-S)
-  Previous proof   2026-07-01  Governed standing v1 — the first governed reading (ADR-PRL-0011)
-  Recent cadence   2026-06-27 → 2026-07-01 : 5 assets + 8 frontiers proven (governance on both scales)
+  Last proof       2026-07-01  Distributed certification v1 — survives no single registry (#5b, option A)
+  Previous proof   2026-07-01  Object standing v1 — the compiler's standing half (ADR-PRL-0012, #4b-S)
+  Recent cadence   2026-06-27 → 2026-07-01 : 5 assets + 9 frontiers proven (all robustness frontiers closed)
   (the date is the datum; days elapsed is a view — let Git compute it)
 
 ──────────────────────────────────────────────
@@ -76,7 +76,7 @@ Not features — **tests of whether the proven invariants survive at scale** (se
 | 🟢 Proven | Object coherence + standing (#4b-S) | coherence PR #96 · **standing PR #104 (ADR-PRL-0012)** · **coherence (v1):** `detect_coherence` (C-d) derives `aligned`/`divergent`/`unsettled` alongside the #4a gather · **object standing (#4b-S):** `object_standing` = the subject's **governed reading** (precedence `claim contested > divergent > aligned decision > unsettled`), derived **above** the gather + coherence — **no `object_id`, no content merge, no write**, derived never stored; composes with `governed_standing` (a contested claim → a contested object) · governance now proven on **both scales** (claim ADR-0011 + subject ADR-0012, same shape) · **Reserve:** **#4b-C** — the object's *content* merge + *provenance/lineage* — stays open (needs claim↔claim relations); `subject_id` F4/F5 open |
 | 🟢 Proven | Governance of divergence — first governed reading (step (c) v1) | seam PR #98 · **rule PR #101** (ADR-PRL-0011) · the convergent step (c) of #2 + #4b · v0 seam: `governance_read` derives a read-only posture `clear`/`contested`/`divergent` above latest-wins · **v1 (governed):** `governed_standing` = `contested` iff #2-contested, else the raw standing — the **authoritative reading**, derived **above** latest-wins (raw byte-identical, `MEF.contested` unread, #4b/governance keep reading raw) · the **first rule that changes what a standing *means*** · **Reserve:** **claim scale only** (a subject has no governed standing — deferred to the #4b compiler); mechanisms **(ii) authority** and **(iii) required supersession** remain **beyond** this first (i-like) rule |
 | 🟢 Proven | Organization identity — the referent (#5a) | PR #88 (ADR-0010) · real gate: same `org.acme` across `openai:gpt-4o`/`gpt-5`, `consultations --org` returns exactly them · `org_id` ≠ carrier (3rd identity referent) |
-| ⚪ Idea | Distributed certification — the substrate (#5b) | deferred · can DSM certification survive no single registry? kernel-shaped, heavy — separate from #5a |
+| 🟢 Proven | Distributed certification — the substrate (#5b, option A) | PR #106 (ADR-PRL-0013) · repo-side falsifiable run, CI-reproducible, no credential: **two independent DSM registries, no shared tip** — each chain `verify_shard`-valid at **distinct tips**; the same acts reconcile to **identical** `standing`/`governed_standing`/`object_standing` by **value-identity** (#3); a **portable receipt** (`exchange`) verifies cross-registry (tamper → `HASH_MISMATCH`); tips **witness-attested**, no merged chain · certification **survives no single registry, by per-registry chains** — **no core change** (`Storage.append`/`prev_hash`/`verify_shard` intact), no global tip, no new rule · option (b) (distributed substrate) deferred fallback |
 | 🟢 Proven | Agent identity across providers and runs | PR #84 (ADR-0009) · real gate: same `agent_id` `agent.architect` across `openai:gpt-4o` / `gpt-5`, both certified · `agent_id` ≠ `model_id` |
 
 ## 3 · Product surfaces — what Daryl must build
@@ -114,6 +114,7 @@ Governed properties the assets rest on; changed only by superseding ADR or manif
 | 🏛 | Organization Referent (`org_id` ≠ carrier) | ADR-PRL-0010 |
 | 🏛 | Governed Standing Layer (`governed_standing` above `raw_standing`; `contested` derived) | ADR-PRL-0011 |
 | 🏛 | Object Standing (subject-scale governed reading; claim `contested` > divergent > aligned > unsettled) | ADR-PRL-0012 |
+| 🏛 | Distributed Certification (per-registry chains; attestation + portable receipts + value-identity; no global tip) | ADR-PRL-0013 |
 | 🏛 | "A contribution becomes a governed project asset" | manifesto (graduated 2026-06-28) |
 | 🏛 | "Identity is never defined by its carrier" (3 referents) | manifesto (graduated 2026-06-28) |
 
