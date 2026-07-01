@@ -120,4 +120,4 @@ def test_render_has_receipt_on_every_meaningful_line():
     out = render_explanation(ExplainQuery(None, None, _navigator=nav).explain(claim))
     assert out.startswith(f"why {claim} is ACCEPTED")
     assert out.count("receipt v1:") == 2  # proposal + resolution lines
-    assert "standing   ACCEPTED (derived)" in out
+    assert "standing   governed=ACCEPTED  raw=ACCEPTED (latest-wins) (derived, ADR-0011)" in out

@@ -46,15 +46,16 @@ class Explanation:
     claim_id: str
     proposal: ProposalFact | None          # None when no Proposal act is on the chain
     resolutions: tuple[ResolutionFact, ...]  # all resolutions, in record order ( () = proposed )
-    standing: str                          # derived (StandingQuery), never recomputed here
+    standing: str                          # RAW standing (latest-wins), derived (StandingQuery)
     conflict: bool = False                 # derived (#2): two distinct authorities disagree
     conflict_parties: tuple[str, ...] = ()  # the agent_ids in disagreement (empty unless conflict)
+    governed_standing: str = "proposed"    # AUTHORITATIVE reading (ADR-0011); explain shows BOTH
 
 
 def render_explanation(explanation: Explanation) -> str:
     """Pure display. A receipt on every meaningful line; never narrates above the acts."""
     e = explanation
-    lines = [f"why {e.claim_id} is {e.standing.upper()}"]
+    lines = [f"why {e.claim_id} is {e.governed_standing.upper()}"]
     if e.proposal is not None:
         p = e.proposal
         lines.append(f"  proposal   agent={p.agent_id or '(unknown)'}   "
@@ -67,7 +68,8 @@ def render_explanation(explanation: Explanation) -> str:
     if not e.resolutions:
         lines.append("  standing   PROPOSED (no resolution)")
     else:
-        lines.append(f"  standing   {e.standing.upper()} (derived)")
+        lines.append(f"  standing   governed={e.governed_standing.upper()}  "
+                     f"raw={e.standing.upper()} (latest-wins) (derived, ADR-0011)")
     if e.conflict:
         parties = ", ".join(p or "?" for p in e.conflict_parties)
         lines.append(f"  ⚠ CONFLICT incompatible decisions by {parties} "
@@ -105,4 +107,5 @@ class ExplainQuery:
         return Explanation(
             claim_id=claim_id, proposal=proposal, resolutions=resolutions,
             standing=view.standing, conflict=view.conflict,
-            conflict_parties=view.conflict_parties)
+            conflict_parties=view.conflict_parties,
+            governed_standing=view.governed_standing)

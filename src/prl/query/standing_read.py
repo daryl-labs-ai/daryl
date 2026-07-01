@@ -48,16 +48,24 @@ class RegistryProjection(Protocol):
 
 @dataclass(frozen=True)
 class StandingView:
-    """The derived standing of a claim + the decisions behind it."""
+    """The derived standing of a claim + the decisions behind it.
+
+    ``standing`` is the **raw** standing (latest-wins, ADR-PRL-0008) — the projection primitive,
+    unchanged. ``governed_standing`` (ADR-PRL-0011) is the **authoritative reading**: ``contested``
+    when the claim is #2-contested, else it **equals** ``standing``. The governed reading is added
+    **above** the projection, never into it — ``standing`` is untouched, ``governed_standing`` is
+    derived every call and never stored."""
 
     claim_id: str
-    standing: str               # "proposed" | "accepted" | "rejected" | "superseded" | "withdrawn"
+    standing: str               # RAW standing "proposed" | "accepted" | "rejected" | "superseded" | "withdrawn"
     decisions: tuple[str, ...]  # the resolution decisions in order (empty = proposed)
     last_receipt: str           # DSM receipt of the latest resolution ("" if none)
     conflict: bool = False      # derived signal (#2 conflict visibility): two distinct authorities
                                 # disagree (accepted vs rejected). Orthogonal to standing — it never
                                 # changes latest-wins; it only makes the disagreement impossible to miss.
     conflict_parties: tuple[str, ...] = ()  # the agent_ids in disagreement (empty unless conflict)
+    governed_standing: str = "proposed"     # AUTHORITATIVE reading (ADR-0011): "contested" iff #2
+                                            # conflict, else == raw standing. Derived, never stored.
 
 
 @dataclass(frozen=True)
@@ -110,6 +118,15 @@ def detect_conflict(resolutions: Sequence[ResolutionFact]) -> tuple[bool, tuple[
     return (False, ())
 
 
+def derive_governed_standing(raw_standing: str, conflict: bool) -> str:
+    """The **authoritative reading** above latest-wins (ADR-PRL-0011, the governed standing layer).
+    Pure; derived from the **raw** standing + the #2 conflict signal, **never** from ``MEF.contested``
+    (which stays inert). ``contested`` iff the claim is #2-contested (two distinct authorities
+    opposed), else the raw standing itself. ``contested`` is a governed value the raw standing never
+    takes; the raw standing is **unchanged** (no ripple — #4b coherence still reads raw)."""
+    return "contested" if conflict else raw_standing
+
+
 def derive_standing(claim_id: str, resolutions: Sequence[ResolutionFact]) -> StandingView:
     """The **single source of latest-wins** (Resolution v1). A claim with no resolution is
     ``proposed``; otherwise its standing is the **latest** resolution's decision (resolutions
@@ -117,32 +134,39 @@ def derive_standing(claim_id: str, resolutions: Sequence[ResolutionFact]) -> Sta
     standing. Both ``StandingQuery`` (full scan) and ``StandingIndex`` (one-pass grouping)
     feed this same function — so an optimization cannot change the standing.
 
-    The standing is computed by latest-wins **unchanged**; conflict is an **orthogonal derived
-    signal** (#2) — :func:`detect_conflict` is read alongside, never to pick a winner."""
+    The raw ``standing`` is computed by latest-wins **unchanged**; ``conflict`` (#2) and
+    ``governed_standing`` (ADR-0011) are **derived alongside** — read above the projection, never
+    changing it."""
     if not resolutions:
-        return StandingView(claim_id=claim_id, standing="proposed", decisions=(), last_receipt="")
+        return StandingView(
+            claim_id=claim_id, standing="proposed", decisions=(), last_receipt="",
+            governed_standing=derive_governed_standing("proposed", False))
     conflict, parties = detect_conflict(resolutions)
+    raw = resolutions[-1].decision
     return StandingView(
         claim_id=claim_id,
-        standing=resolutions[-1].decision,
+        standing=raw,
         decisions=tuple(r.decision for r in resolutions),
         last_receipt=resolutions[-1].receipt,
         conflict=conflict,
         conflict_parties=parties,
+        governed_standing=derive_governed_standing(raw, conflict),
     )
 
 
 def render_standing(view: StandingView) -> str:
-    """Pure display. Standing is shown unchanged (latest-wins); a conflict, if any, is
-    surfaced alongside it as ``⚠ CONFLICT`` — visible, not governing."""
+    """Pure display. The headline is the **governed** (authoritative) reading (ADR-0011); the **raw**
+    latest-wins standing is shown in context when it differs (i.e. when contested). A conflict, if
+    any, is surfaced as ``⚠ CONFLICT``."""
     if not view.decisions:
         return f"standing of {view.claim_id}: PROPOSED  (no resolution)"
     flag = ""
     if view.conflict:
         parties = ", ".join(p or "?" for p in view.conflict_parties)
         flag = f"  ⚠ CONFLICT (incompatible decisions by {parties})"
-    return (f"standing of {view.claim_id}: {view.standing.upper()}  "
-            f"(decisions: {', '.join(view.decisions)} ; receipt {view.last_receipt}){flag}")
+    raw_note = f"raw {view.standing.upper()}; " if view.governed_standing != view.standing else ""
+    return (f"standing of {view.claim_id}: {view.governed_standing.upper()}  "
+            f"({raw_note}decisions: {', '.join(view.decisions)} ; receipt {view.last_receipt}){flag}")
 
 
 class StandingQuery:
