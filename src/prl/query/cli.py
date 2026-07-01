@@ -41,6 +41,11 @@ from .governance_read import (
     render_claim_governance,
     render_subject_governance,
 )
+from .knowledge_object import (
+    KnowledgeObjectQuery,
+    render_knowledge_object,
+    render_objects,
+)
 from .standing_read import StandingQuery, render_standing
 from .subject_read import SubjectStandingsQuery, render_subject_standings
 
@@ -156,6 +161,31 @@ def build_parser() -> argparse.ArgumentParser:
     p_gov.add_argument("--projection", choices=["rr", "sqlite"], default="rr",
                        help="read projection (default rr; sqlite needs --db)")
     p_gov.add_argument("--db", help="SQLite projection path (with --projection sqlite)")
+
+    p_objs = sub.add_parser("objects",
+                            help="discover Knowledge Objects (derived projections) — 'what objects do I own?'")
+    p_objs.add_argument("--org", dest="org", help="filter to one owning organization")
+    p_objs.add_argument("--contested", action="store_true", help="only objects with a CONTESTED standing")
+    p_objs.add_argument("--conflicts", action="store_true", help="only objects with a conflicted claim")
+    p_objs.add_argument("--search", dest="search", help="substring match on the subject id")
+    p_objs.add_argument("--config", help="path to the PRL config JSON")
+    p_objs.add_argument("--storage-dir", dest="storage_dir", help="override the DSM storage dir")
+    p_objs.add_argument("--rr-index-dir", dest="rr_index_dir",
+                        help="directory for RR's derived index (default: <storage-dir>/_rr_index)")
+    p_objs.add_argument("--projection", choices=["rr", "sqlite"], default="rr",
+                        help="read projection (default rr; sqlite needs --db)")
+    p_objs.add_argument("--db", help="SQLite projection path (with --projection sqlite)")
+
+    p_obj = sub.add_parser("object",
+                           help="the consolidated Object View for one subject (derived projection; read-only)")
+    p_obj.add_argument("--subject", required=True, help="the subject id (the object's referent)")
+    p_obj.add_argument("--config", help="path to the PRL config JSON")
+    p_obj.add_argument("--storage-dir", dest="storage_dir", help="override the DSM storage dir")
+    p_obj.add_argument("--rr-index-dir", dest="rr_index_dir",
+                       help="directory for RR's derived index (default: <storage-dir>/_rr_index)")
+    p_obj.add_argument("--projection", choices=["rr", "sqlite"], default="rr",
+                       help="read projection (default rr; sqlite needs --db)")
+    p_obj.add_argument("--db", help="SQLite projection path (with --projection sqlite)")
 
     p_proj = sub.add_parser("project-sqlite",
                             help="materialize a read-only SQLite projection of certified acts (Identity v1)")
@@ -414,6 +444,45 @@ def cmd_governance(args: argparse.Namespace) -> int:
     return 0
 
 
+def _knowledge_object_query(args: argparse.Namespace) -> KnowledgeObjectQuery:
+    """Build a KnowledgeObjectQuery over RR or the SQLite projection (read-only)."""
+    if getattr(args, "projection", "rr") == "sqlite":
+        if not args.db:
+            raise PRLError("--projection sqlite requires --db")
+        from ..projections import SqliteProjection
+        return KnowledgeObjectQuery(None, None, _navigator=SqliteProjection(args.db))
+    config = _read_config(args)
+    rr_dir = args.rr_index_dir or (Path(config.storage_dir) / "_rr_index")
+    return KnowledgeObjectQuery(open_storage(config), rr_dir)
+
+
+def cmd_objects(args: argparse.Namespace) -> int:
+    """Discover Knowledge Objects (derived projections), recency-first — 'what objects do I own?'.
+    Read-only; nothing stored; no `object_id`."""
+    try:
+        summaries = _knowledge_object_query(args).discover_objects(
+            org_id=getattr(args, "org", None), contested=bool(getattr(args, "contested", False)),
+            conflicts=bool(getattr(args, "conflicts", False)), search=getattr(args, "search", None))
+    except PRLError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    print(render_objects(summaries))
+    return 0
+
+
+def cmd_object(args: argparse.Namespace) -> int:
+    """The consolidated Object View for one subject — a derived `KnowledgeObjectProjection` composing
+    object standing + coherence + governance + per-claim governed state + the certified timeline. It
+    recomputes nothing and stores nothing."""
+    try:
+        proj = _knowledge_object_query(args).project(args.subject)
+    except PRLError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    print(render_knowledge_object(proj))
+    return 0
+
+
 def cmd_project_sqlite(args: argparse.Namespace) -> int:
     """Materialize a read-only SQLite projection of the certified acts (Identity v1).
     Reads via RR; writes only SQLite (DSM stays the certifier; nothing re-minted)."""
@@ -521,6 +590,10 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_subject_standings(args)
     if args.command == "governance":
         return cmd_governance(args)
+    if args.command == "objects":
+        return cmd_objects(args)
+    if args.command == "object":
+        return cmd_object(args)
     if args.command == "project-sqlite":
         return cmd_project_sqlite(args)
     return 1  # pragma: no cover (argparse 'required' guards this)

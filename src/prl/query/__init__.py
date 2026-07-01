@@ -20,6 +20,8 @@ from .cli import (
     cmd_standing,
     cmd_status,
     cmd_governance,
+    cmd_object,
+    cmd_objects,
     cmd_subject_standings,
     main,
 )
@@ -34,6 +36,15 @@ from .governance_read import (
     derive_subject_governance_state,
     render_claim_governance,
     render_subject_governance,
+)
+from .knowledge_object import (
+    ClaimLine,
+    KnowledgeObjectProjection,
+    KnowledgeObjectQuery,
+    KnowledgeObjectSummary,
+    TimelineItem,
+    render_knowledge_object,
+    render_objects,
 )
 from .recall import RecallEngine, RecallHit
 from .semantic import Embedder, LocalEmbedder, SemanticError, SemanticIndex
@@ -71,6 +82,8 @@ __all__ = [
     "cmd_explain",
     "cmd_subject_standings",
     "cmd_governance",
+    "cmd_objects",
+    "cmd_object",
     "cmd_project_sqlite",
     "StandingQuery",
     "StandingIndex",
@@ -98,6 +111,13 @@ __all__ = [
     "derive_subject_governance_state",
     "render_claim_governance",
     "render_subject_governance",
+    "KnowledgeObjectQuery",
+    "KnowledgeObjectProjection",
+    "KnowledgeObjectSummary",
+    "ClaimLine",
+    "TimelineItem",
+    "render_objects",
+    "render_knowledge_object",
     "ConsultationQuery",
     "ConsultationView",
     "render_consultations",
