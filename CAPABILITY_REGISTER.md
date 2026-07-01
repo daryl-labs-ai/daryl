@@ -10,7 +10,7 @@
   Proven assets          5
   Robustness frontiers   9   (8 proven · 1 idea)
   Product surfaces      10
-  Canonical law         11
+  Canonical law         12
 
   Current focus 🔥
   → free
@@ -112,6 +112,7 @@ Governed properties the assets rest on; changed only by superseding ADR or manif
 | 🏛 | Agent Consultation Protocol | ADR-PRL-0008 |
 | 🏛 | Structured Contributor Attribution (`agent_id` ≠ `model_id`) | ADR-PRL-0009 |
 | 🏛 | Organization Referent (`org_id` ≠ carrier) | ADR-PRL-0010 |
+| 🏛 | Governed Standing Layer (`governed_standing` above `raw_standing`; `contested` derived) | ADR-PRL-0011 |
 | 🏛 | "A contribution becomes a governed project asset" | manifesto (graduated 2026-06-28) |
 | 🏛 | "Identity is never defined by its carrier" (3 referents) | manifesto (graduated 2026-06-28) |
 
