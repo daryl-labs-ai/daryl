@@ -25,6 +25,7 @@ from typing import Any
 from dsm.rr.index import RRIndexBuilder
 from dsm.rr.navigator import RRNavigator
 
+from ..types import ConsultationNode, from_entry
 from .consultation_read import ConsultationQuery
 from .explain_read import ExplainQuery
 from .governance_read import GovernanceQuery
@@ -48,13 +49,16 @@ class KnowledgeObjectSummary:
 
 @dataclass(frozen=True)
 class ClaimLine:
-    """One claim on the Object View — its raw + governed standing (composed, not recomputed)."""
+    """One claim on the Object View — its raw + governed standing and its **raw content** (the
+    proposal's `answer`). Composed, not recomputed; the raw content is shown so the object is read
+    from its claims' actual text — the cheaper alternative to a compiled content (#4b-C)."""
 
     claim_id: str
     mode: str
     raw_standing: str
     governed_standing: str
     conflict: bool
+    answer: str = ""     # the claim's RAW content (the proposal's answer) — not compiled
     agent_id: str = ""
     carrier: str = ""
 
@@ -99,12 +103,32 @@ def render_objects(summaries: list[KnowledgeObjectSummary]) -> str:
     return "\n".join(lines)
 
 
+def object_reason(object_standing: str, coherence: str, has_conflict: bool) -> str:
+    """A one-line **human reason** for the object's status — a *narrative* over the proven signals,
+    not a new derivation. It turns the two vocabularies (`object_standing` vs `coherence`/governance)
+    into a single story: the model keeps two concepts, the user reads one."""
+    if object_standing == "contested":
+        if coherence == "divergent":
+            return "claims diverge"
+        if has_conflict:
+            return "a constituent claim is contested"
+        return "contested"
+    if object_standing in ("accepted", "rejected"):
+        return "claims agree"
+    if object_standing == "proposed":
+        return "no governed claim yet"
+    return object_standing
+
+
 def render_knowledge_object(proj: KnowledgeObjectProjection) -> str:
-    """Pure display — the one-page Object View (composes proven derivations; recomputes nothing)."""
+    """Pure display — the one-page Object View (composes proven derivations; recomputes nothing).
+    Leads with a **single story** — `status` + a human `reason` — and shows each claim's **raw
+    content** (its `answer`), so the object is read from the claims' actual text, not a compiled one."""
+    has_conflict = any(c.conflict for c in proj.claims)
     lines = [f"Knowledge Object — {proj.subject_id}",
-             f"  object standing: {proj.object_standing.upper()}",
-             f"  coherence:       {proj.coherence.upper()}",
-             f"  governance:      {proj.governance.upper()}",
+             f"  status:  {proj.object_standing.upper()}",
+             f"  reason:  {object_reason(proj.object_standing, proj.coherence, has_conflict)}",
+             f"  signals: coherence={proj.coherence} · governance={proj.governance}",
              "  claims:"]
     if not proj.claims:
         lines.append("    (none)")
@@ -113,6 +137,8 @@ def render_knowledge_object(proj: KnowledgeObjectProjection) -> str:
         raw = f"  raw={c.raw_standing.upper()}" if c.governed_standing != c.raw_standing else ""
         lines.append(f"    {c.claim_id}  [{c.mode}]  governed={c.governed_standing.upper()}{raw}  "
                      f"agent={c.agent_id or '(unknown)'}{cf}")
+        if c.answer:
+            lines.append(f"        “{c.answer}”")               # the claim's RAW content (not compiled)
     lines.append("  timeline (certified acts):")
     if not proj.timeline:
         lines.append("    (none)")
@@ -133,6 +159,7 @@ class KnowledgeObjectQuery:
             builder = RRIndexBuilder(storage=storage, index_dir=str(index_dir))
             builder.build()
             _navigator = RRNavigator(builder, storage)
+        self._nav: RegistryProjection = _navigator
         self._consult = ConsultationQuery(storage, index_dir, _navigator=_navigator)
         self._subject = SubjectStandingsQuery(storage, index_dir, _navigator=_navigator)
         self._gov = GovernanceQuery(storage, index_dir, _navigator=_navigator)
@@ -145,13 +172,28 @@ class KnowledgeObjectQuery:
         """Enumerate the Knowledge Objects (distinct `subject_id`) with their headline state, recency
         first. Derived + droppable: a scan of `prl.consultation` → distinct subjects, each summarized by
         the proven queries. Filters: owning `org`, `contested` object standing, `conflicts` present,
-        `search` (substring on the subject id)."""
+        `search` (substring on the subject id).
+
+        Recency is the **authoritative record order** — from ``navigate_action`` (ascending, stable),
+        **never** from ``resolve_entries`` (which does not preserve order; v1.0 read recency from the
+        resolved order and mis-sorted). Replay records in order and join record→entry by id — the same
+        rule as ``standing_read._resolutions_for``."""
+        records = self._nav.navigate_action("prl.consultation")
+        entries = self._nav.resolve_entries(records)
+        by_id = {getattr(e, "id", None): e for e in entries}
         last_ord: dict[str, int] = {}
         org_of: dict[str, str] = {}
-        for i, v in enumerate(self._consult.list()):
-            last_ord[v.subject_id] = i
-            if v.subject_id not in org_of:
-                org_of[v.subject_id] = v.org_id
+        for i, rec in enumerate(records):
+            eid = rec.get("entry_id") if isinstance(rec, dict) else getattr(rec, "entry_id", None)
+            entry = by_id.get(eid)
+            if entry is None:
+                continue
+            node = from_entry(entry)
+            if not isinstance(node, ConsultationNode):
+                continue
+            last_ord[node.subject_id] = i          # authoritative record order = recency
+            if node.subject_id not in org_of:
+                org_of[node.subject_id] = node.org_id or ""
         out: list[KnowledgeObjectSummary] = []
         for subj, ord_ in last_ord.items():
             sv = self._subject.standings_of_subject(subj)
@@ -185,11 +227,12 @@ class KnowledgeObjectQuery:
         claims: list[ClaimLine] = []
         timeline: list[TimelineItem] = []
         for c in sv.claims:
+            ex = self._explain.explain(c.claim_id)
+            answer = ex.proposal.answer if ex.proposal is not None else ""
             claims.append(ClaimLine(
                 claim_id=c.claim_id, mode=c.mode, raw_standing=c.standing,
                 governed_standing=derive_governed_standing(c.standing, c.conflict),
-                conflict=c.conflict, agent_id=c.agent_id, carrier=c.carrier))
-            ex = self._explain.explain(c.claim_id)
+                conflict=c.conflict, answer=answer, agent_id=c.agent_id, carrier=c.carrier))
             if ex.proposal is not None:
                 p = ex.proposal
                 timeline.append(TimelineItem(
