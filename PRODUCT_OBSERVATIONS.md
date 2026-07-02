@@ -120,6 +120,55 @@ bridge), or a governance rule ((ii) authority / (iii) required supersession). #4
 
 ---
 
+## O-004 — Agent/Org views: navigation by projection is sufficient; the next need is seamless traversal between projections, not a graph model
+
+**Surface:** Agent / Org Navigation Views v1 (`prl agent` / `prl org`, PR #117) · **Method:** observation
+run on the **seven-object corpus** extended with a legacy (unknown-agent) act and a cross-org resolution,
+six views (four agents incl. `unknown`, two orgs), repo-side, throwaway store, no credential ·
+**Date:** 2026-07-02 · **main = 5be4d63**
+
+**Observation.** Starting from an agent or an organization, their **participation is understandable with
+zero new persistent structure**: contributed vs resolved (by certified decision, `⚠ contested` as a derived
+flag), owned vs touched (disjoint, the resolution `org_id` finally in use), the unknown/legacy bucket
+explicit. **No need for a graph appears.** What appears is a need for a **change of viewpoint**.
+
+**The trajectory it completes.** Four observations now draw one coherent line:
+O-001 — *I don't want a compiler, I want to understand why a decision governs.*
+O-002 — *Raw answers suffice; I compare alternatives, I don't ask for a synthesis.*
+O-003 — *I want to find objects by what they say, not only by their identifier.*
+O-004 — *I can now start from an agent or an org and understand their participation — with no new
+persistent structure.*
+The "Knowledge Map" we imagined is **no longer a graph to build**. It is progressively appearing as a
+**collection of projections**. That is the important discovery.
+
+**The roadmap it rewrites.** The implicit route at the start of the construction phase was
+`Knowledge Objects → Knowledge Map → Knowledge Compiler`. After four observations it reads
+`Knowledge Objects → Navigation projections → Different entry points → (perhaps, one day) Knowledge
+Compiler`. The compiler keeps receding.
+
+**The doctrinal signal (now an architectural invariant, not merely a product decision).** The `agent` and
+`org` views never read as *entities*. One never reads *"Here is Alice."* One reads *"Here is the world as
+seen from Alice."* This confirms a doctrine that keeps stabilizing: **everything is a projection** — the
+object is a projection, the agent is a projection, the organization is a projection. None of them needs to
+exist as an authoritative node.
+
+**The one new need (the steer).** Reading these pages, the missing thing is **not a data structure — it is
+the hyperlink**: from `database.choice`, jump to `agent.architect`, then `org.acme`, then `search.engine`,
+then `alice`, **without ever leaving the same navigation space**. Today every hop is a new CLI command (the
+run's honest superseded-datum illustrates it: understanding why `auth.method` flipped to `REJECTED` after
+dave's cross-org `superseded` act required manually chaining `prl agent dave` → `prl object auth.method`).
+The next projection is therefore probably not "Knowledge Map v1" but something like **Linked Projections**
+(Projection Navigation): each projection simply exposes the **already-existing identifiers**
+(`subject_id`, `agent_id`, `org_id`, `claim_id`) **as navigation points**. Still zero entity, zero
+persistent index, zero new model.
+
+**Why this one matters.** This is an inversion even deeper than O-003's. At the start, we thought we were
+building a *map*. After four observations, we may be building a **web of projections**. It is the first
+genuinely new result of the product phase — no longer an interface refinement but an **architecture
+hypothesis born from use**, exactly as the nine robustness frontiers were born from proofs.
+
+---
+
 ## How to add an entry
 One entry per real-use signal that changes a product decision. State: the surface, the method, the
 observation, what it **advances** or **defers**, and the **steer**. Not a proof (🟢) and not a build (🔵) —
