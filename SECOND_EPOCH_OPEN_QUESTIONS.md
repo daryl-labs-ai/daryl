@@ -3,6 +3,8 @@
 **Status:** Open questions (no answers, not a roadmap) · **Date:** 2026-06-28
 **Regime:** `declared` · **Supersedable:** yes
 
+> **All robustness frontiers are now closed (9/9 proven).** See `SECOND_EPOCH_CLOSING_NOTE.md` for the epoch seal; the next work is construction.
+
 These questions did not exist before the MVP. They become meaningful only *because* the base
 properties are now demonstrated (see `PROOF_LOG.md`, `MVP_DEMO_SCENARIO.md`). They do **not**
 question the foundations — they probe their **limits**.
