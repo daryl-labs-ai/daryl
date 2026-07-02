@@ -76,6 +76,50 @@ and does **not** first reach for a compiled "what the object concludes".
 
 ---
 
+## O-003 — Content search makes Knowledge Objects findable without introducing persistent map entities
+
+**Surface:** Object search v1 (`prl objects --search`, PR #115) · **Method:** observation run on **seven
+realistic objects** across two orgs, five queries (content · resolver · decision · org · a negative case),
+repo-side, throwaway store, no credential · **Date:** 2026-07-02 · **main = 076c82e**
+
+An object is now findable along **several dimensions already present in its acts**: content
+(`--search postgres` → `database.choice`, via a raw `answer`), resolver (`--search alice` → the three objects
+alice *resolved*, never proposed), organization (`--search org.acme`), and decision (`--search rejected`). Each
+result carries its **provenance** (`match [answer]`, `match [agent]`, `match [decision]`, `match [org]`), so the
+search stays **explainable**. A negative term (`--search oracle`) returns nothing — no false positives. Measured
+cost is ~3.6 ms for the **whole** `discover_objects` pipeline (per-subject standings + governance recompute *and*
+the match), which justifies **no persistent index** at this scale.
+
+*(Honest note: `--search rejected` returns four objects, not the three the run prompt predicted — the prediction
+was inconsistent with its own seed. `cache.strategy` carries a certified `rejected` resolution (bob, the #2
+conflict), so it legitimately matches `[decision] rejected`. The behaviour is correct — decision search surfaces
+conflict resolutions too, which is the right and useful reading: an object where a claim was rejected **is**
+relevant to "rejected". The actual (4) is reported, not adjusted to the prediction.)*
+
+**The reframe (the real finding).** O-003 is not merely "search works". It is that **Knowledge Objects are now
+discoverable by their derived semantics — without becoming persisted entities.** We build a **derived map** (a
+reverse read over the acts), but introduce **no authoritative node** (`Agent`, `Org`, …). Discovery gained a new
+axis with no new model.
+
+**Continuity — navigation keeps winning over modeling.** Three successive product observations point the same
+way: O-001 — the user *navigates* decisions rather than a compiled document; O-002 — even with the complete
+enriched view, the compiler (#4b-C) does not become necessary; O-003 — objects are now *found* by what they
+represent, without a persistent graph. The value keeps coming from **navigation over derived projections**, not
+from new entities or a content compiler.
+
+**The trajectory it inverts (the most interesting result of this phase).** At the start of the construction phase
+the natural path looked like `Knowledge Object → Compiler (#4b-C) → Maps`. After O-001 / O-002 / O-003 it reads
+instead `Knowledge Object → Navigation → Navigation → Navigation → (perhaps, one day, #4b-C)`. Three product
+observations in a row pushed the compiler's necessity back — **without ever modifying the model.** This does not
+prove #4b-C is useless; it shows it is **no longer the next problem to solve**. That is exactly the kind of
+decision the discipline (observe before building) was meant to make possible.
+
+**Steer.** Continue navigation over derived projections. Candidate next moves stay on that axis (agent/org as
+*navigable views* — still not authoritative nodes; object↔object relations; the decision-layer ↔ code-graph
+bridge), or a governance rule ((ii) authority / (iii) required supersession). #4b-C remains deferred durably.
+
+---
+
 ## How to add an entry
 One entry per real-use signal that changes a product decision. State: the surface, the method, the
 observation, what it **advances** or **defers**, and the **steer**. Not a proof (🟢) and not a build (🔵) —
