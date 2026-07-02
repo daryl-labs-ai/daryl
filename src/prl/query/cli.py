@@ -41,6 +41,7 @@ from .governance_read import (
     render_claim_governance,
     render_subject_governance,
 )
+from .agent_org_read import AgentOrgQuery, render_agent_view, render_org_view
 from .knowledge_object import (
     KnowledgeObjectQuery,
     render_knowledge_object,
@@ -188,6 +189,31 @@ def build_parser() -> argparse.ArgumentParser:
     p_obj.add_argument("--projection", choices=["rr", "sqlite"], default="rr",
                        help="read projection (default rr; sqlite needs --db)")
     p_obj.add_argument("--db", help="SQLite projection path (with --projection sqlite)")
+
+    p_agent = sub.add_parser("agent",
+                             help="navigate one agent's objects — Contributed (proposed/observed) + "
+                                  "Resolved (by decision); a derived view, not an entity (read-only)")
+    p_agent.add_argument("agent_id",
+                         help="the logical contributor id (ADR-0009); 'unknown' reaches pre-0009/legacy acts")
+    p_agent.add_argument("--config", help="path to the PRL config JSON")
+    p_agent.add_argument("--storage-dir", dest="storage_dir", help="override the DSM storage dir")
+    p_agent.add_argument("--rr-index-dir", dest="rr_index_dir",
+                         help="directory for RR's derived index (default: <storage-dir>/_rr_index)")
+    p_agent.add_argument("--projection", choices=["rr", "sqlite"], default="rr",
+                         help="read projection (default rr; sqlite needs --db)")
+    p_agent.add_argument("--db", help="SQLite projection path (with --projection sqlite)")
+
+    p_org = sub.add_parser("org",
+                           help="navigate one org's objects — Owned vs Touched; a derived view, "
+                                "not an entity (read-only)")
+    p_org.add_argument("org_id", help="the owning organization id (ADR-0010)")
+    p_org.add_argument("--config", help="path to the PRL config JSON")
+    p_org.add_argument("--storage-dir", dest="storage_dir", help="override the DSM storage dir")
+    p_org.add_argument("--rr-index-dir", dest="rr_index_dir",
+                       help="directory for RR's derived index (default: <storage-dir>/_rr_index)")
+    p_org.add_argument("--projection", choices=["rr", "sqlite"], default="rr",
+                       help="read projection (default rr; sqlite needs --db)")
+    p_org.add_argument("--db", help="SQLite projection path (with --projection sqlite)")
 
     p_proj = sub.add_parser("project-sqlite",
                             help="materialize a read-only SQLite projection of certified acts (Identity v1)")
@@ -485,6 +511,42 @@ def cmd_object(args: argparse.Namespace) -> int:
     return 0
 
 
+def _agent_org_query(args: argparse.Namespace) -> AgentOrgQuery:
+    """Build an AgentOrgQuery over RR or the SQLite projection (read-only, derived)."""
+    if getattr(args, "projection", "rr") == "sqlite":
+        if not args.db:
+            raise PRLError("--projection sqlite requires --db")
+        from ..projections import SqliteProjection
+        return AgentOrgQuery(None, None, _navigator=SqliteProjection(args.db))
+    config = _read_config(args)
+    rr_dir = args.rr_index_dir or (Path(config.storage_dir) / "_rr_index")
+    return AgentOrgQuery(open_storage(config), rr_dir)
+
+
+def cmd_agent(args: argparse.Namespace) -> int:
+    """Navigate one agent's objects — a derived projection keyed by the opaque ``agent_id`` string
+    (no Agent entity). Contributed (proposed/observed) + Resolved (by the agent's own decision)."""
+    try:
+        view = _agent_org_query(args).agent(args.agent_id)
+    except PRLError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    print(render_agent_view(view))
+    return 0
+
+
+def cmd_org(args: argparse.Namespace) -> int:
+    """Navigate one org's objects — a derived projection keyed by the opaque ``org_id`` string
+    (no Org entity). Owned (owning org) vs Touched (some act carries this org, not the owner)."""
+    try:
+        view = _agent_org_query(args).org(args.org_id)
+    except PRLError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    print(render_org_view(view))
+    return 0
+
+
 def cmd_project_sqlite(args: argparse.Namespace) -> int:
     """Materialize a read-only SQLite projection of the certified acts (Identity v1).
     Reads via RR; writes only SQLite (DSM stays the certifier; nothing re-minted)."""
@@ -596,6 +658,10 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_objects(args)
     if args.command == "object":
         return cmd_object(args)
+    if args.command == "agent":
+        return cmd_agent(args)
+    if args.command == "org":
+        return cmd_org(args)
     if args.command == "project-sqlite":
         return cmd_project_sqlite(args)
     return 1  # pragma: no cover (argparse 'required' guards this)
