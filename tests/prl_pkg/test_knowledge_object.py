@@ -96,6 +96,52 @@ def test_discovery_filters():
     assert {o.subject_id for o in _q(conflict_world).discover_objects(conflicts=True)} == {"X"}
 
 
+# ── Object search v1 — content + certified metadata (Knowledge Map, first cut) ──────────────────
+def _search_world():
+    # database.choice: PostgreSQL accepted (mohamed) / SQLite rejected (alice) + an observation.
+    # auth.method (org.acme): OAuth2 accepted (bob).
+    return [
+        _item(_consult("database.choice", "db-a", answer="Use PostgreSQL"), "c0"),
+        _item(_consult("database.choice", "db-b", answer="Use SQLite (simpler ops)"), "c1"),
+        _item(_obs("database.choice", "db-o", answer="Team has prior Postgres experience"), "c2"),
+        _item(_consult("auth.method", "au-a", answer="OAuth2 with PKCE", org="org.acme"), "c3"),
+        _item(_res("db-a", "accepted", "mohamed.azizi"), "r0"),
+        _item(_res("db-b", "rejected", "alice"), "r1"),
+        _item(_res("au-a", "accepted", "bob"), "r2"),
+    ]
+
+
+def test_search_matches_raw_answer_not_only_id():
+    res = _q(_search_world()).discover_objects(search="postgres")
+    by = {o.subject_id: o for o in res}
+    assert set(by) == {"database.choice"}                    # matched via answer, not subject_id
+    assert "answer" in by["database.choice"].match_fields    # provenance names the field
+    assert "postgres" in by["database.choice"].match_snippet.lower()
+
+
+def test_search_matches_certified_metadata():
+    q = _q(_search_world())
+    # resolver agent (alice appears ONLY as a resolver — requires resolver indexing)
+    assert {o.subject_id for o in q.discover_objects(search="alice")} == {"database.choice"}
+    # org, claim_id, decision word
+    assert {o.subject_id for o in q.discover_objects(search="org.acme")} == {"auth.method"}
+    assert {o.subject_id for o in q.discover_objects(search="db-a")} == {"database.choice"}
+    assert {o.subject_id for o in q.discover_objects(search="rejected")} == {"database.choice"}
+    assert {o.subject_id for o in q.discover_objects(search="oauth")} == {"auth.method"}
+    # a term in no field matches nothing
+    assert q.discover_objects(search="zzz-nothing") == []
+
+
+def test_search_composes_with_filters_and_names_provenance():
+    q = _q(_search_world())
+    # database.choice is divergent (accepted+rejected) → object contested; auth.method is not.
+    assert {o.subject_id for o in q.discover_objects(search="use", contested=True)} == {"database.choice"}
+    a = next(o for o in q.discover_objects(search="alice"))
+    assert "agent" in a.match_fields                          # resolver surfaced under 'agent'
+    # rows carry derived context: reason + last activity.
+    assert a.reason and a.last_kind in {"observation", "proposal"} and a.last_agent
+
+
 # ── Object View (composition only) ────────────────────────────────────────────────────────────
 def test_object_view_composes_proven_derivations():
     proj = _q(_world()).project("KO")

@@ -167,7 +167,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_objs.add_argument("--org", dest="org", help="filter to one owning organization")
     p_objs.add_argument("--contested", action="store_true", help="only objects with a CONTESTED standing")
     p_objs.add_argument("--conflicts", action="store_true", help="only objects with a conflicted claim")
-    p_objs.add_argument("--search", dest="search", help="substring match on the subject id")
+    p_objs.add_argument("--search", dest="search",
+                        help="substring match over the object's certified content + metadata "
+                             "(subject id, raw answers, agents, org, claim ids, decision/standing, receipts)")
     p_objs.add_argument("--config", help="path to the PRL config JSON")
     p_objs.add_argument("--storage-dir", dest="storage_dir", help="override the DSM storage dir")
     p_objs.add_argument("--rr-index-dir", dest="rr_index_dir",
