@@ -19,11 +19,15 @@ from prl.query.knowledge_object import (
 from prl.types import Carrier, to_entry
 
 
-def _consult(subject, claim_id, *, org=None):
+def _consult(subject, claim_id, *, org=None, propose=True, answer="x"):
     return ConsultationAdapter().to_act(
-        subject_id=subject, answer="x", producer="openai:gpt-4o", agent_id="agent.architect",
-        confidence=1.0, carrier=Carrier(provider="openai", model="gpt-4o"), propose=True,
+        subject_id=subject, answer=answer, producer="openai:gpt-4o", agent_id="agent.architect",
+        confidence=1.0, carrier=Carrier(provider="openai", model="gpt-4o"), propose=propose,
         claim_id=claim_id, org_id=org)
+
+
+def _obs(subject, claim_id, *, answer="noted"):
+    return _consult(subject, claim_id, propose=False, answer=answer)
 
 
 def _item(node, eid):
@@ -100,18 +104,71 @@ def test_object_view_composes_proven_derivations():
     by_claim = {c.claim_id: c for c in proj.claims}
     assert by_claim["claim-a"].governed_standing == "accepted"   # governed == raw (not contested)
     assert by_claim["claim-b"].governed_standing == "rejected"
-    # timeline: each claim's proposal + resolution(s), receipt-backed, nothing invented.
+    # history (decision-thread): each proposal act + its resolution(s), receipt-backed, nothing invented.
     kinds = {(t.claim_id, t.kind) for t in proj.timeline}
     assert ("claim-a", "proposal") in kinds and ("claim-a", "resolution") in kinds
     assert all(t.receipt.startswith("v1:") for t in proj.timeline if t.kind == "resolution")
+    # decision-thread order: a proposal's resolution comes IMMEDIATELY after that proposal.
+    seq = [(t.claim_id, t.kind) for t in proj.timeline]
+    assert seq.index(("claim-a", "resolution")) == seq.index(("claim-a", "proposal")) + 1
     # render is a single page; no object_id anywhere.
     out = render_knowledge_object(proj)
     assert out.startswith("Knowledge Object — KO")
-    # v1.1: single story (status + human reason), signals subordinate; raw claim content shown.
+    # single story (status + human reason), signals subordinate.
     assert "status:  CONTESTED" in out
     assert "reason:  claims diverge" in out                     # the two vocabularies → one story
     assert "signals: coherence=divergent · governance=divergent" in out
-    assert "“x”" in out                                          # each claim's RAW answer is shown
+
+
+# ── Object View v2 — five sections (decision navigation, O-001) ─────────────────────────────────
+def test_object_view_v2_contested_shows_no_single_decision():
+    out = render_knowledge_object(_q(_world()).project("KO"))
+    # Current decision — a contested object NEVER fabricates a winner.
+    assert "current decision:" in out
+    assert "contested — no single governing decision" in out
+    # Alternatives — both competing proposals appear, with governed state + raw answer.
+    assert "alternatives:" in out
+    assert "(accepted · claim-a" in out and "(rejected · claim-b" in out
+    # the five section headers are present, in order.
+    for header in ("current decision:", "alternatives:", "discussion:", "history:", "receipts:"):
+        assert header in out
+    assert out.index("current decision:") < out.index("alternatives:") < out.index("discussion:") \
+        < out.index("history:") < out.index("receipts:")
+    # History carries the honest ordering note; Receipts lists the certified acts.
+    assert "ordered by consultation record" in out
+    assert "v1:c0" in out and "v1:r0" in out
+
+
+def test_object_view_v2_accepted_shows_current_decision():
+    # single accepted proposal → the governing decision; no alternatives.
+    out = render_knowledge_object(_q(_world()).project("CLEAN"))
+    assert "✓ x   (claim-c" in out                              # accepted proposal = current decision
+    # the accepted claim is NOT repeated as an alternative.
+    assert out.split("alternatives:")[1].split("discussion:")[0].strip().startswith("(none)")
+
+
+def test_object_view_v2_partitions_observations_into_discussion():
+    # object M: one accepted PROPOSAL (p1) + one OBSERVATION (o1) — the observation is the discussion.
+    world = [
+        _item(_consult("M", "p1"), "c0"),
+        _item(_obs("M", "o1", answer="prefer async here"), "c1"),
+        _item(_res("p1", "accepted", "mohamed.azizi"), "r0"),
+    ]
+    proj = _q(world).project("M")
+    # partition by mode: proposals → claims (decision space); observations → discussion.
+    assert {c.claim_id for c in proj.claims} == {"p1"}
+    assert {d.claim_id for d in proj.discussion} == {"o1"}
+    assert proj.discussion[0].answer == "prefer async here"
+    out = render_knowledge_object(proj)
+    assert "“prefer async here”" in out                          # observation shown under Discussion
+    # the observation is an act in History too, tagged observation.
+    assert ("o1", "observation") in {(t.claim_id, t.kind) for t in proj.timeline}
+
+
+def test_object_view_v2_no_observations_shows_empty_discussion():
+    out = render_knowledge_object(_q(_world()).project("KO"))   # all proposals, no observations
+    disc = out.split("discussion:")[1].split("history:")[0].strip()
+    assert disc == "(none)"
 
 
 # ── it is a projection, not an entity: derived, no object_id, drop/rebuild identical ───────────

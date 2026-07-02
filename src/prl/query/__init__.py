@@ -39,6 +39,7 @@ from .governance_read import (
 )
 from .knowledge_object import (
     ClaimLine,
+    DiscussionItem,
     KnowledgeObjectProjection,
     KnowledgeObjectQuery,
     KnowledgeObjectSummary,
@@ -116,6 +117,7 @@ __all__ = [
     "KnowledgeObjectProjection",
     "KnowledgeObjectSummary",
     "ClaimLine",
+    "DiscussionItem",
     "TimelineItem",
     "object_reason",
     "render_objects",
