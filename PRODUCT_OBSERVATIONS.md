@@ -54,6 +54,28 @@ next natural step.)*
 
 ---
 
+## O-002 — Object View v2: decision navigation is sufficient before content compilation
+
+**Surface:** Object View v2 (`prl object --subject`, five sections — Current decision · Alternatives ·
+Discussion · History · Receipts, PR #112) · **Method:** observation run on **seven realistic objects**
+(clean / accepted / contested-conflict / divergent-rich / 3-alternative / unsettled / recent), repo-side,
+throwaway store, no credential · **Date:** 2026-07-02 · **main = 8bbe60c**
+
+After exercising Object View v2 on seven realistic objects, the dominant product signal is that users can
+understand the object as a governed decision space: current decision, alternatives, discussion, history, and
+receipts. Even on rich divergent objects such as database.choice, the raw claim answers plus governed status
+and decision-thread history make the object understandable without requiring a compiled content statement.
+
+This does not prove #4b-C is unnecessary. It shows that #4b-C is not the next observed need. The next product
+need remains navigation and presentation over certified decisions, not content merging.
+
+**Decision.** #4b-C stays **deferred durably** (not disproven). Continue with product / navigation surfaces.
+The reading held on the *complete* surface (v2), including the strongest test case (`database.choice`): the
+user reads "PostgreSQL won · SQLite was the rejected alternative · why/when/by whom · receipts · navigable" —
+and does **not** first reach for a compiled "what the object concludes".
+
+---
+
 ## How to add an entry
 One entry per real-use signal that changes a product decision. State: the surface, the method, the
 observation, what it **advances** or **defers**, and the **steer**. Not a proof (🟢) and not a build (🔵) —
