@@ -29,7 +29,7 @@ from ..types import ConsultationNode, from_entry
 from .consultation_read import ConsultationQuery
 from .explain_read import ExplainQuery
 from .governance_read import GovernanceQuery
-from .standing_read import RegistryProjection, derive_governed_standing
+from .standing_read import RegistryProjection, StandingIndex, derive_governed_standing
 from .subject_read import SubjectStandingsQuery
 
 
@@ -45,6 +45,11 @@ class KnowledgeObjectSummary:
     has_conflict: bool
     org_id: str = ""
     last_ord: int = -1     # record-order recency (max act index seen) — v1 proxy for "recent"
+    reason: str = ""       # the v2 one-line human story (object_reason) — context, derived
+    last_kind: str = ""    # the object's latest act mode (observation | proposal) — "last activity"
+    last_agent: str = ""   # the agent behind that latest act — "last activity"
+    match_fields: tuple[str, ...] = ()  # which fields matched --search (provenance); () = no search
+    match_snippet: str = ""             # a short snippet of the first match (why it matched)
 
 
 @dataclass(frozen=True)
@@ -104,8 +109,38 @@ class KnowledgeObjectProjection:
     timeline: tuple[TimelineItem, ...]   # all acts, decision-thread record order (History)
 
 
+def _snippet(value: str, q_lower: str, width: int = 48) -> str:
+    """A short context window around the first match of ``q_lower`` in ``value`` (why it matched)."""
+    if len(value) <= width:
+        return value
+    i = value.lower().find(q_lower)
+    if i < 0:
+        return value[:width] + "…"
+    start = max(0, i - 12)
+    end = min(len(value), i + len(q_lower) + 24)
+    return ("…" if start > 0 else "") + value[start:end] + ("…" if end < len(value) else "")
+
+
+def _match_search(query: str, doc: dict[str, list[str]]) -> tuple[tuple[str, ...], str]:
+    """Match ``query`` (case-insensitive substring) against a per-object search document. Returns the
+    **fields that matched** (provenance) and a short **snippet** of the first match. Pure; no ranking."""
+    ql = query.lower()
+    matched: list[str] = []
+    snippet = ""
+    for field, values in doc.items():
+        for v in values:
+            if v and ql in v.lower():
+                if field not in matched:
+                    matched.append(field)
+                if not snippet:
+                    snippet = f'{field}: "{_snippet(v, ql)}"'
+                break
+    return tuple(matched), snippet
+
+
 def render_objects(summaries: list[KnowledgeObjectSummary]) -> str:
-    """Pure display — the Discovery listing (recency-first)."""
+    """Pure display — the Discovery listing (recency-first). When a `--search` matched, each row shows
+    its **provenance** (which fields matched + a snippet); rows also carry a `reason` + `last activity`."""
     if not summaries:
         return "no knowledge objects"
     lines = [f"{len(summaries)} knowledge object(s):"]
@@ -115,6 +150,13 @@ def render_objects(summaries: list[KnowledgeObjectSummary]) -> str:
         lines.append(f"  {s.subject_id}   object={s.object_standing.upper()}   "
                      f"coherence={s.coherence}   gov={s.governance.upper()}   "
                      f"claims={s.n_claims}{org}{flag}")
+        ctx = s.reason or ""
+        if s.last_kind:
+            ctx += f"{' · ' if ctx else ''}last: {s.last_kind} by {s.last_agent or 'unknown'}"
+        if ctx:
+            lines.append(f"      {ctx}")
+        if s.match_fields:
+            lines.append(f"      match [{', '.join(s.match_fields)}]  {s.match_snippet}")
     return "\n".join(lines)
 
 
@@ -224,6 +266,8 @@ class KnowledgeObjectQuery:
         self._subject = SubjectStandingsQuery(storage, index_dir, _navigator=_navigator)
         self._gov = GovernanceQuery(storage, index_dir, _navigator=_navigator)
         self._explain = ExplainQuery(storage, index_dir, _navigator=_navigator)
+        # one-pass grouping of resolutions by claim — gives resolver agents + decisions for --search
+        self._standing = StandingIndex(storage, index_dir, _navigator=_navigator)
 
     def discover_objects(
         self, *, org_id: str | None = None, contested: bool = False,
@@ -232,17 +276,29 @@ class KnowledgeObjectQuery:
         """Enumerate the Knowledge Objects (distinct `subject_id`) with their headline state, recency
         first. Derived + droppable: a scan of `prl.consultation` → distinct subjects, each summarized by
         the proven queries. Filters: owning `org`, `contested` object standing, `conflicts` present,
-        `search` (substring on the subject id).
+        `search` (substring over the object's certified content + metadata — see below).
 
         Recency is the **authoritative record order** — from ``navigate_action`` (ascending, stable),
         **never** from ``resolve_entries`` (which does not preserve order; v1.0 read recency from the
         resolved order and mis-sorted). Replay records in order and join record→entry by id — the same
-        rule as ``standing_read._resolutions_for``."""
+        rule as ``standing_read._resolutions_for``.
+
+        ``search`` (v1, Knowledge Map) matches **any** already-certified field — `subject_id`, raw
+        `answer`s, `agent_id` (contributors *and* resolvers), `org_id`, `claim_id`, decision/standing,
+        abbreviated receipts — as a case-insensitive substring. It is a **derived in-memory scan** over the
+        acts already gathered (no persistent index, no new entity); each match records its **provenance**
+        (which fields matched + a snippet)."""
         records = self._nav.navigate_action("prl.consultation")
         entries = self._nav.resolve_entries(records)
         by_id = {getattr(e, "id", None): e for e in entries}
         last_ord: dict[str, int] = {}
         org_of: dict[str, str] = {}
+        last_kind: dict[str, str] = {}
+        last_agent: dict[str, str] = {}
+        answers_of: dict[str, list[str]] = {}
+        agents_of: dict[str, set[str]] = {}
+        claims_of: dict[str, list[str]] = {}
+        receipts_of: dict[str, list[str]] = {}
         for i, rec in enumerate(records):
             eid = rec.get("entry_id") if isinstance(rec, dict) else getattr(rec, "entry_id", None)
             entry = by_id.get(eid)
@@ -251,12 +307,27 @@ class KnowledgeObjectQuery:
             node = from_entry(entry)
             if not isinstance(node, ConsultationNode):
                 continue
-            last_ord[node.subject_id] = i          # authoritative record order = recency
-            if node.subject_id not in org_of:
-                org_of[node.subject_id] = node.org_id or ""
+            subj = node.subject_id
+            last_ord[subj] = i                     # authoritative record order = recency
+            last_kind[subj] = node.mode            # latest act wins (ascending walk) = "last activity"
+            last_agent[subj] = node.mef.agent_id or ""
+            org_of.setdefault(subj, node.org_id or "")
+            answers_of.setdefault(subj, []).append(node.answer or "")
+            agents_of.setdefault(subj, set()).add(node.mef.agent_id or "")
+            claims_of.setdefault(subj, []).append(node.mef.claim_id)
+            receipts_of.setdefault(subj, []).append(str(getattr(entry, "hash", "") or ""))
         out: list[KnowledgeObjectSummary] = []
         for subj, ord_ in last_ord.items():
             sv = self._subject.standings_of_subject(subj)
+            mfields: tuple[str, ...] = ()
+            msnip = ""
+            if search:
+                doc = self._search_doc(
+                    subj, sv, answers_of.get(subj, []), agents_of.get(subj, set()),
+                    claims_of.get(subj, []), receipts_of.get(subj, []), org_of.get(subj, ""))
+                mfields, msnip = _match_search(search, doc)
+                if not mfields:
+                    continue                        # no field matched → not a result
             out.append(KnowledgeObjectSummary(
                 subject_id=subj,
                 object_standing=sv.object_standing,
@@ -266,6 +337,11 @@ class KnowledgeObjectQuery:
                 has_conflict=any(c.conflict for c in sv.claims),
                 org_id=org_of.get(subj, ""),
                 last_ord=ord_,
+                reason=object_reason(sv.object_standing, sv.coherence, any(c.conflict for c in sv.claims)),
+                last_kind=last_kind.get(subj, ""),
+                last_agent=last_agent.get(subj, ""),
+                match_fields=mfields,
+                match_snippet=msnip,
             ))
         if org_id is not None:
             out = [s for s in out if s.org_id == org_id]
@@ -273,10 +349,34 @@ class KnowledgeObjectQuery:
             out = [s for s in out if s.object_standing == "contested"]
         if conflicts:
             out = [s for s in out if s.has_conflict]
-        if search:
-            out = [s for s in out if search.lower() in s.subject_id.lower()]
         out.sort(key=lambda s: s.last_ord, reverse=True)   # recency-first
         return out
+
+    def _search_doc(
+        self, subj: str, sv: Any, answers: list[str], agents: set[str],
+        claims: list[str], receipts: list[str], org: str,
+    ) -> dict[str, list[str]]:
+        """The per-object **search document** — the already-certified fields a query can match, grouped
+        by field for provenance. Composed from acts already gathered (consultations) + the one-pass
+        resolution grouping (`StandingIndex`): resolver agents + decisions. No new read of the store."""
+        decisions: list[str] = []
+        resolver_agents: list[str] = []
+        for c in sv.claims:
+            decisions.append(c.standing)
+            decisions.append(derive_governed_standing(c.standing, c.conflict))
+            for rf in self._standing.resolutions_of(c.claim_id):
+                decisions.append(rf.decision)
+                if rf.agent_id:
+                    resolver_agents.append(rf.agent_id)
+        return {
+            "subject": [subj],
+            "answer": [a for a in answers if a],
+            "agent": sorted({a for a in agents if a} | set(resolver_agents)),
+            "org": [org] if org else [],
+            "claim": list(claims),
+            "decision": decisions,
+            "receipt": [r[:12] for r in receipts if r],
+        }
 
     def project(self, subject_id: str) -> KnowledgeObjectProjection:
         """The Object View v2 — a **decision space to navigate**, composed from proven queries. It
