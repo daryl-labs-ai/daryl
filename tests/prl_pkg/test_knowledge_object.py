@@ -11,7 +11,11 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from prl.collectors import ConsultationAdapter, make_resolution
-from prl.query.knowledge_object import KnowledgeObjectQuery, render_knowledge_object
+from prl.query.knowledge_object import (
+    KnowledgeObjectQuery,
+    object_reason,
+    render_knowledge_object,
+)
 from prl.types import Carrier, to_entry
 
 
@@ -103,7 +107,11 @@ def test_object_view_composes_proven_derivations():
     # render is a single page; no object_id anywhere.
     out = render_knowledge_object(proj)
     assert out.startswith("Knowledge Object — KO")
-    assert "object standing: CONTESTED" in out and "governance:      DIVERGENT" in out
+    # v1.1: single story (status + human reason), signals subordinate; raw claim content shown.
+    assert "status:  CONTESTED" in out
+    assert "reason:  claims diverge" in out                     # the two vocabularies → one story
+    assert "signals: coherence=divergent · governance=divergent" in out
+    assert "“x”" in out                                          # each claim's RAW answer is shown
 
 
 # ── it is a projection, not an entity: derived, no object_id, drop/rebuild identical ───────────
@@ -118,3 +126,33 @@ def test_projection_is_derived_no_entity():
     from prl.query.subject_read import SubjectStandingsQuery
     sv = SubjectStandingsQuery(None, None, _navigator=_MixedNav(items)).standings_of_subject("KO")
     assert first.object_standing == sv.object_standing and first.coherence == sv.coherence
+
+
+# ── v1.1: reason narrative + recency uses AUTHORITATIVE record order ──────────────────────────
+def test_object_reason_narrative():
+    assert object_reason("contested", "divergent", False) == "claims diverge"
+    assert object_reason("contested", "aligned", True) == "a constituent claim is contested"
+    assert object_reason("accepted", "aligned", False) == "claims agree"
+    assert object_reason("proposed", "unsettled", False) == "no governed claim yet"
+
+
+class _ReorderNav(_MixedNav):
+    """`navigate_action` keeps authoritative (ascending) record order; `resolve_entries` REVERSES it
+    (as the real RR contract allows). A correct `discover_objects` must read recency from the records'
+    order, never from the resolved order — the PR #77 trap."""
+
+    def resolve_entries(self, records, limit=None):
+        return list(reversed(super().resolve_entries(records)))
+
+
+def test_discovery_recency_uses_record_order_not_resolve_order():
+    # seed OLD first, RECENT last (record order); resolve_entries is reversed by the nav.
+    items = [
+        _item(_consult("old.demo", "o1"), "c0"),
+        _item(_consult("recent.demo", "r1"), "c1"),
+        _item(_res("o1", "accepted", "mohamed.azizi"), "r0"),
+        _item(_res("r1", "accepted", "mohamed.azizi"), "r1r"),
+    ]
+    objs = KnowledgeObjectQuery(None, None, _navigator=_ReorderNav(items)).discover_objects()
+    # recency-first must hold despite resolve_entries reversing — record order is authoritative.
+    assert [o.subject_id for o in objs] == ["recent.demo", "old.demo"]

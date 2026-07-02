@@ -43,6 +43,7 @@ from .knowledge_object import (
     KnowledgeObjectQuery,
     KnowledgeObjectSummary,
     TimelineItem,
+    object_reason,
     render_knowledge_object,
     render_objects,
 )
@@ -116,6 +117,7 @@ __all__ = [
     "KnowledgeObjectSummary",
     "ClaimLine",
     "TimelineItem",
+    "object_reason",
     "render_objects",
     "render_knowledge_object",
     "ConsultationQuery",
