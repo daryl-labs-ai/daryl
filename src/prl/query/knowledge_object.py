@@ -64,11 +64,23 @@ class ClaimLine:
 
 
 @dataclass(frozen=True)
-class TimelineItem:
-    """One certified act on the Object View — proposal or resolution, receipt-backed."""
+class DiscussionItem:
+    """One **observation**-mode act — a non-governing note *around* the subject (Discussion, v2).
+    It is a consultation, never a proposal; it carries raw content and a receipt, governs nothing."""
 
     claim_id: str
-    kind: str      # "proposal" | "resolution"
+    answer: str
+    agent_id: str
+    carrier: str
+    receipt: str
+
+
+@dataclass(frozen=True)
+class TimelineItem:
+    """One certified act on the object's History — observation | proposal | resolution, receipt-backed."""
+
+    claim_id: str
+    kind: str      # "observation" | "proposal" | "resolution"
     label: str     # the mode or the decision
     agent_id: str
     carrier: str
@@ -77,16 +89,19 @@ class TimelineItem:
 
 @dataclass(frozen=True)
 class KnowledgeObjectProjection:
-    """The consolidated Object View — a **derived projection** keyed by `subject_id`, never stored,
-    no `object_id`. Composes object standing + coherence + governance + per-claim governed state +
-    the certified timeline. It **invents nothing** — every field comes from a proven query."""
+    """The consolidated Object View (v2) — a **derived projection** keyed by `subject_id`, never
+    stored, no `object_id`. A **decision space to navigate**, not a compiled document: it partitions
+    the object's acts into **proposal claims** (the decision + its alternatives), **observations**
+    (the discussion), and a record-ordered **history** — composing only proven queries + the `mode` /
+    `governed_standing` fields already on each act. It **invents nothing**."""
 
     subject_id: str
     object_standing: str
     coherence: str
     governance: str
-    claims: tuple[ClaimLine, ...]
-    timeline: tuple[TimelineItem, ...]
+    claims: tuple[ClaimLine, ...]        # PROPOSAL-mode claims (Current decision + Alternatives)
+    discussion: tuple[DiscussionItem, ...]  # OBSERVATION-mode acts (the discussion)
+    timeline: tuple[TimelineItem, ...]   # all acts, decision-thread record order (History)
 
 
 def render_objects(summaries: list[KnowledgeObjectSummary]) -> str:
@@ -120,31 +135,76 @@ def object_reason(object_standing: str, coherence: str, has_conflict: bool) -> s
     return object_standing
 
 
+_MARK = {"accepted": "✓", "rejected": "✗", "proposed": "·", "contested": "⚠"}
+
+
+def _claim_line(c: ClaimLine) -> str:
+    """One proposal-claim line — raw content first (O-001: read the actual text), governed state + author."""
+    mark = _MARK.get(c.governed_standing, "·")
+    body = c.answer or f"({c.claim_id})"
+    return f"    {mark} {body}   ({c.governed_standing} · {c.claim_id} · {c.agent_id or 'unknown'})"
+
+
 def render_knowledge_object(proj: KnowledgeObjectProjection) -> str:
-    """Pure display — the one-page Object View (composes proven derivations; recomputes nothing).
-    Leads with a **single story** — `status` + a human `reason` — and shows each claim's **raw
-    content** (its `answer`), so the object is read from the claims' actual text, not a compiled one."""
-    has_conflict = any(c.conflict for c in proj.claims)
+    """Pure display — the Object View **v2**, a *decision space to navigate* (O-001), in five sections:
+    **Current decision · Alternatives · Discussion · History · Receipts**. It partitions the object's
+    acts (proposal-claims vs observations) and shows raw content; it **compiles nothing** (no #4b-C).
+    A contested object shows *"no single governing decision"* — v2 never fabricates a winner."""
+    claims = proj.claims
+    accepted = [c for c in claims if c.governed_standing == "accepted"]
     lines = [f"Knowledge Object — {proj.subject_id}",
              f"  status:  {proj.object_standing.upper()}",
-             f"  reason:  {object_reason(proj.object_standing, proj.coherence, has_conflict)}",
+             f"  reason:  {object_reason(proj.object_standing, proj.coherence, any(c.conflict for c in claims))}",
              f"  signals: coherence={proj.coherence} · governance={proj.governance}",
-             "  claims:"]
-    if not proj.claims:
+             "",
+             "  current decision:"]
+    # --- Current decision (never a fabricated winner) ---
+    if proj.object_standing == "contested":
+        lines.append("    contested — no single governing decision (see alternatives)")
+    elif accepted:
+        for c in accepted:
+            lines.append(f"    ✓ {c.answer or f'({c.claim_id})'}   ({c.claim_id} · {c.agent_id or 'unknown'})")
+    elif proj.object_standing == "rejected":
+        for c in (c for c in claims if c.governed_standing == "rejected"):
+            lines.append(f"    ✗ rejected — {c.answer or f'({c.claim_id})'}   ({c.claim_id})")
+    else:  # proposed / unsettled
+        lines.append("    no decision yet")
+    # --- Alternatives (the other options) ---
+    if proj.object_standing == "contested":
+        alternatives = list(claims)                                    # all competing options
+    elif accepted:
+        alternatives = [c for c in claims if c.governed_standing != "accepted"]
+    elif proj.object_standing == "rejected":
+        alternatives = [c for c in claims if c.governed_standing != "rejected"]
+    else:
+        alternatives = list(claims)
+    lines += ["", "  alternatives:"]
+    if not alternatives:
         lines.append("    (none)")
-    for c in proj.claims:
-        cf = "  ⚠ conflict" if c.conflict else ""
-        raw = f"  raw={c.raw_standing.upper()}" if c.governed_standing != c.raw_standing else ""
-        lines.append(f"    {c.claim_id}  [{c.mode}]  governed={c.governed_standing.upper()}{raw}  "
-                     f"agent={c.agent_id or '(unknown)'}{cf}")
-        if c.answer:
-            lines.append(f"        “{c.answer}”")               # the claim's RAW content (not compiled)
-    lines.append("  timeline (certified acts):")
+    for c in alternatives:
+        lines.append(_claim_line(c))
+    # --- Discussion (observation-mode acts only) ---
+    lines += ["", "  discussion:"]
+    if not proj.discussion:
+        lines.append("    (none)")
+    for d in proj.discussion:
+        body = d.answer or f"({d.claim_id})"
+        lines.append(f"    “{body}”   ({d.agent_id or 'unknown'} · receipt {d.receipt})")
+    # --- History (decision-thread record order) ---
+    lines += ["", "  history:  (ordered by consultation record; resolutions grouped under their proposal)"]
     if not proj.timeline:
         lines.append("    (none)")
     for t in proj.timeline:
-        lines.append(f"    {t.kind:<11}{t.label:<11}claim={t.claim_id}  "
-                     f"agent={t.agent_id or '(unknown)'}  receipt {t.receipt}")
+        lines.append(f"    {t.kind:<12}{t.label:<11}claim={t.claim_id}  "
+                     f"agent={t.agent_id or 'unknown'}  receipt {t.receipt}")
+    # --- Receipts (distinct certified receipts of the object's acts) ---
+    seen: set[str] = set()
+    receipts = [t.receipt for t in proj.timeline if t.receipt and not (t.receipt in seen or seen.add(t.receipt))]
+    lines += ["", "  receipts:"]
+    if not receipts:
+        lines.append("    (none)")
+    for r in receipts:
+        lines.append(f"    {r}")
     return "\n".join(lines)
 
 
@@ -219,29 +279,58 @@ class KnowledgeObjectQuery:
         return out
 
     def project(self, subject_id: str) -> KnowledgeObjectProjection:
-        """The one-page Object View. Composes object standing + coherence (SubjectStandingsQuery),
-        governance posture (GovernanceQuery), and the per-claim chain (ExplainQuery). Per-claim
-        `governed_standing` is the pure ADR-0011 derivation; **nothing is recomputed differently**."""
+        """The Object View v2 — a **decision space to navigate**, composed from proven queries. It
+        **partitions** the object's acts by `mode`: proposal-claims (the Current decision + Alternatives)
+        vs observations (Discussion), plus a **decision-thread** History. Nothing is recomputed."""
         sv = self._subject.standings_of_subject(subject_id)
         governance = self._gov.governance_of_subject(subject_id).governance
+        # answers + receipts per claim (observations AND proposals) from the subject's consultations.
+        consults = self._consult.list(subject_id=subject_id)
+        answer_of = {v.claim_id: v.answer for v in consults}
+        receipt_of = {v.claim_id: v.receipt for v in consults}
+
+        # Partition the gathered claims by mode: proposals → the decision space; observations → discussion.
         claims: list[ClaimLine] = []
-        timeline: list[TimelineItem] = []
+        discussion: list[DiscussionItem] = []
         for c in sv.claims:
-            ex = self._explain.explain(c.claim_id)
-            answer = ex.proposal.answer if ex.proposal is not None else ""
-            claims.append(ClaimLine(
-                claim_id=c.claim_id, mode=c.mode, raw_standing=c.standing,
-                governed_standing=derive_governed_standing(c.standing, c.conflict),
-                conflict=c.conflict, answer=answer, agent_id=c.agent_id, carrier=c.carrier))
-            if ex.proposal is not None:
-                p = ex.proposal
-                timeline.append(TimelineItem(
-                    claim_id=c.claim_id, kind="proposal", label="proposal",
-                    agent_id=p.agent_id, carrier=p.carrier, receipt=p.receipt))
-            for r in ex.resolutions:
-                timeline.append(TimelineItem(
-                    claim_id=c.claim_id, kind="resolution", label=r.decision,
-                    agent_id=r.agent_id, carrier=r.carrier, receipt=r.receipt))
+            if c.mode == "observation":
+                discussion.append(DiscussionItem(
+                    claim_id=c.claim_id, answer=answer_of.get(c.claim_id, ""),
+                    agent_id=c.agent_id, carrier=c.carrier, receipt=receipt_of.get(c.claim_id, "")))
+            else:
+                claims.append(ClaimLine(
+                    claim_id=c.claim_id, mode=c.mode, raw_standing=c.standing,
+                    governed_standing=derive_governed_standing(c.standing, c.conflict),
+                    conflict=c.conflict, answer=answer_of.get(c.claim_id, ""),
+                    agent_id=c.agent_id, carrier=c.carrier))
+
+        # History — decision-thread record order: walk consultation acts in AUTHORITATIVE record order
+        # (navigate_action, never resolve_entries); each proposal is followed by its resolutions; each
+        # observation appears at its record position. (No global cross-stream ordinal exists to interleave
+        # resolutions by absolute time — this is the derived, readable approximation.)
+        timeline: list[TimelineItem] = []
+        records = self._nav.navigate_action("prl.consultation")
+        by_id = {getattr(e, "id", None): e for e in self._nav.resolve_entries(records)}
+        for rec in records:
+            eid = rec.get("entry_id") if isinstance(rec, dict) else getattr(rec, "entry_id", None)
+            entry = by_id.get(eid)
+            if entry is None:
+                continue
+            node = from_entry(entry)
+            if not isinstance(node, ConsultationNode) or node.subject_id != subject_id:
+                continue
+            cid = node.mef.claim_id
+            timeline.append(TimelineItem(
+                claim_id=cid, kind=node.mode, label=node.mode,
+                agent_id=node.mef.agent_id or "",
+                carrier=node.mef.carrier.short() if node.mef.carrier is not None else "",
+                receipt=str(getattr(entry, "hash", "") or "")))
+            if node.mode == "proposal":
+                for r in self._explain.explain(cid).resolutions:
+                    timeline.append(TimelineItem(
+                        claim_id=cid, kind="resolution", label=r.decision,
+                        agent_id=r.agent_id, carrier=r.carrier, receipt=r.receipt))
         return KnowledgeObjectProjection(
             subject_id=subject_id, object_standing=sv.object_standing, coherence=sv.coherence,
-            governance=governance, claims=tuple(claims), timeline=tuple(timeline))
+            governance=governance, claims=tuple(claims), discussion=tuple(discussion),
+            timeline=tuple(timeline))
