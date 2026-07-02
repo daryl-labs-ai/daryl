@@ -24,6 +24,7 @@ from dsm.rr.navigator import RRNavigator
 
 from ..types import ConsultationNode, ResolutionNode, from_entry
 from .knowledge_object import object_reason
+from .links import LinkAnnotator
 from .standing_read import RegistryProjection, ResolutionFact, detect_conflict
 from .subject_read import SubjectStandingsQuery
 
@@ -231,49 +232,56 @@ class AgentOrgQuery:
 
 
 # ── pure renderers ───────────────────────────────────────────────────────────────────────────────
-def _agent_bucket(label: str, rows: tuple[ObjectRow, ...], *, resolved: bool = False) -> list[str]:
+def _agent_bucket(label: str, rows: tuple[ObjectRow, ...], ann: LinkAnnotator,
+                  *, resolved: bool = False) -> list[str]:
     out = [f"    {label}"]
     if not rows:
         out.append("      (none)")
         return out
     for r in rows:
         flag = "   ⚠ contested" if (resolved and r.contested) else ""
-        out.append(f"      {r.subject_id}   object={r.object_standing.upper()}   {r.reason}{flag}")
+        out.append(f"      {r.subject_id}   object={r.object_standing.upper()}   {r.reason}{flag}"
+                   f"{ann.tag('object', r.subject_id)}")
         for a in r.acts:
-            out.append(f"        claim={a.claim_id}  receipt {a.receipt}")
+            out.append(f"        claim={a.claim_id}  receipt {a.receipt}{ann.tag('claim', a.claim_id)}")
     return out
 
 
 def render_agent_view(view: AgentView) -> str:
     """Pure display — ``Agent`` page: ``Contributed`` (Proposed / Observed) then ``Resolved`` (by the
-    agent's own certified decision, ``⚠ contested`` where the target claim is #2-contested)."""
+    agent's own certified decision, ``⚠ contested`` where the target claim is #2-contested). Each object
+    row carries an ``[go object <subject>]`` jump (Linked Projections v1); ids annotated once per page."""
+    ann = LinkAnnotator()
     title = "unknown / legacy agent" if view.is_unknown else view.agent_id
     lines = [f"Agent — {title}", "  Contributed"]
-    lines += _agent_bucket("Proposed", view.proposed)
-    lines += _agent_bucket("Observed", view.observed)
+    lines += _agent_bucket("Proposed", view.proposed, ann)
+    lines += _agent_bucket("Observed", view.observed, ann)
     lines.append("  Resolved")
     if not view.resolved:
         lines.append("    (none)")
     for decision, rows in view.resolved:
-        lines += _agent_bucket(decision.capitalize(), rows, resolved=True)
+        lines += _agent_bucket(decision.capitalize(), rows, ann, resolved=True)
     return "\n".join(lines)
 
 
-def _org_bucket(rows: tuple[ObjectRow, ...], *, touched: bool = False) -> list[str]:
+def _org_bucket(rows: tuple[ObjectRow, ...], ann: LinkAnnotator, *, touched: bool = False) -> list[str]:
     if not rows:
         return ["    (none)"]
     out: list[str] = []
     for r in rows:
-        owner = f"   owner={r.owning_org}" if (touched and r.owning_org) else ""
-        out.append(f"    {r.subject_id}   object={r.object_standing.upper()}   {r.reason}{owner}")
+        owner = f"   owner={r.owning_org}{ann.tag('org', r.owning_org)}" if (touched and r.owning_org) else ""
+        out.append(f"    {r.subject_id}   object={r.object_standing.upper()}   {r.reason}"
+                   f"{ann.tag('object', r.subject_id)}{owner}")
     return out
 
 
 def render_org_view(view: OrgView) -> str:
     """Pure display — ``Org`` page: ``Owned objects`` (owning org = this org) then ``Touched objects``
-    (an act carries this org but it is not the owner). The two lists are disjoint by construction."""
+    (an act carries this org but it is not the owner). Disjoint by construction. Each object row carries
+    an ``[go object <subject>]`` jump; a touched row also links its owner ``[go org <owner>]``."""
+    ann = LinkAnnotator()
     lines = [f"Org — {view.org_id}", "  Owned objects"]
-    lines += _org_bucket(view.owned)
+    lines += _org_bucket(view.owned, ann)
     lines.append("  Touched objects")
-    lines += _org_bucket(view.touched, touched=True)
+    lines += _org_bucket(view.touched, ann, touched=True)
     return "\n".join(lines)

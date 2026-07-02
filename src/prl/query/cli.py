@@ -42,6 +42,7 @@ from .governance_read import (
     render_subject_governance,
 )
 from .agent_org_read import AgentOrgQuery, render_agent_view, render_org_view
+from .links import LINK_TYPES
 from .knowledge_object import (
     KnowledgeObjectQuery,
     render_knowledge_object,
@@ -214,6 +215,20 @@ def build_parser() -> argparse.ArgumentParser:
     p_org.add_argument("--projection", choices=["rr", "sqlite"], default="rr",
                        help="read projection (default rr; sqlite needs --db)")
     p_org.add_argument("--db", help="SQLite projection path (with --projection sqlite)")
+
+    p_go = sub.add_parser("go",
+                          help="jump to a projection by typed link — `go <object|agent|org|claim> <id>`; "
+                               "a stateless dispatcher over the existing views (Linked Projections v1)")
+    p_go.add_argument("link_type", metavar="type",
+                      help="the declared type — one of: object | agent | org | claim (never inferred)")
+    p_go.add_argument("ident", metavar="id", help="the id to land on, as declared by <type>")
+    p_go.add_argument("--config", help="path to the PRL config JSON")
+    p_go.add_argument("--storage-dir", dest="storage_dir", help="override the DSM storage dir")
+    p_go.add_argument("--rr-index-dir", dest="rr_index_dir",
+                      help="directory for RR's derived index (default: <storage-dir>/_rr_index)")
+    p_go.add_argument("--projection", choices=["rr", "sqlite"], default="rr",
+                      help="read projection (default rr; sqlite needs --db)")
+    p_go.add_argument("--db", help="SQLite projection path (with --projection sqlite)")
 
     p_proj = sub.add_parser("project-sqlite",
                             help="materialize a read-only SQLite projection of certified acts (Identity v1)")
@@ -547,6 +562,42 @@ def cmd_org(args: argparse.Namespace) -> int:
     return 0
 
 
+def _explain_query(args: argparse.Namespace) -> ExplainQuery:
+    """Build an ExplainQuery over RR or the SQLite projection (read-only)."""
+    if getattr(args, "projection", "rr") == "sqlite":
+        if not args.db:
+            raise PRLError("--projection sqlite requires --db")
+        from ..projections import SqliteProjection
+        return ExplainQuery(None, None, _navigator=SqliteProjection(args.db))
+    config = _read_config(args)
+    rr_dir = args.rr_index_dir or (Path(config.storage_dir) / "_rr_index")
+    return ExplainQuery(open_storage(config), rr_dir)
+
+
+def cmd_go(args: argparse.Namespace) -> int:
+    """Linked Projections v1 — a **stateless** dispatcher: `go <type> <id>` lands on exactly the same
+    view (same query, same renderer) the type names. Typing is by **declaration**: an unknown type errors
+    listing the four valid types; an id existing as both an agent and a subject lands strictly per the
+    declared type. ``go`` adds nothing to the output — it composes the existing views, nothing more."""
+    link_type = args.link_type
+    if link_type not in LINK_TYPES:
+        print(f"error: unknown go type {link_type!r} (valid: {', '.join(LINK_TYPES)})", file=sys.stderr)
+        return 2
+    try:
+        if link_type == "object":
+            print(render_knowledge_object(_knowledge_object_query(args).project(args.ident)))
+        elif link_type == "agent":
+            print(render_agent_view(_agent_org_query(args).agent(args.ident)))
+        elif link_type == "org":
+            print(render_org_view(_agent_org_query(args).org(args.ident)))
+        else:  # claim → the explain page (richest: proposal + resolutions + derived standing, receipts)
+            print(render_explanation(_explain_query(args).explain(args.ident)))
+    except PRLError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    return 0
+
+
 def cmd_project_sqlite(args: argparse.Namespace) -> int:
     """Materialize a read-only SQLite projection of the certified acts (Identity v1).
     Reads via RR; writes only SQLite (DSM stays the certifier; nothing re-minted)."""
@@ -662,6 +713,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_agent(args)
     if args.command == "org":
         return cmd_org(args)
+    if args.command == "go":
+        return cmd_go(args)
     if args.command == "project-sqlite":
         return cmd_project_sqlite(args)
     return 1  # pragma: no cover (argparse 'required' guards this)

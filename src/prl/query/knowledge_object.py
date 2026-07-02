@@ -29,6 +29,7 @@ from ..types import ConsultationNode, from_entry
 from .consultation_read import ConsultationQuery
 from .explain_read import ExplainQuery
 from .governance_read import GovernanceQuery
+from .links import LinkAnnotator
 from .standing_read import RegistryProjection, StandingIndex, derive_governed_standing
 from .subject_read import SubjectStandingsQuery
 
@@ -107,6 +108,8 @@ class KnowledgeObjectProjection:
     claims: tuple[ClaimLine, ...]        # PROPOSAL-mode claims (Current decision + Alternatives)
     discussion: tuple[DiscussionItem, ...]  # OBSERVATION-mode acts (the discussion)
     timeline: tuple[TimelineItem, ...]   # all acts, decision-thread record order (History)
+    org_id: str = ""                     # owning org (first consultation's org) — object→org hop
+                                         # (Linked Projections v1); a view field, back-compat default
 
 
 def _snippet(value: str, q_lower: str, width: int = 48) -> str:
@@ -194,18 +197,21 @@ def render_knowledge_object(proj: KnowledgeObjectProjection) -> str:
     A contested object shows *"no single governing decision"* — v2 never fabricates a winner."""
     claims = proj.claims
     accepted = [c for c in claims if c.governed_standing == "accepted"]
+    ann = LinkAnnotator()   # per-page typed-link annotator (first occurrence of each id, the noise rule)
     lines = [f"Knowledge Object — {proj.subject_id}",
              f"  status:  {proj.object_standing.upper()}",
              f"  reason:  {object_reason(proj.object_standing, proj.coherence, any(c.conflict for c in claims))}",
-             f"  signals: coherence={proj.coherence} · governance={proj.governance}",
-             "",
-             "  current decision:"]
+             f"  signals: coherence={proj.coherence} · governance={proj.governance}"]
+    if proj.org_id:   # object → org hop (Linked Projections v1)
+        lines.append(f"  org:     {proj.org_id}{ann.tag('org', proj.org_id)}")
+    lines += ["", "  current decision:"]
     # --- Current decision (never a fabricated winner) ---
     if proj.object_standing == "contested":
         lines.append("    contested — no single governing decision (see alternatives)")
     elif accepted:
         for c in accepted:
-            lines.append(f"    ✓ {c.answer or f'({c.claim_id})'}   ({c.claim_id} · {c.agent_id or 'unknown'})")
+            lines.append(f"    ✓ {c.answer or f'({c.claim_id})'}   ({c.claim_id} · {c.agent_id or 'unknown'})"
+                         f"{ann.tag('claim', c.claim_id)}{ann.tag('agent', c.agent_id)}")
     elif proj.object_standing == "rejected":
         for c in (c for c in claims if c.governed_standing == "rejected"):
             lines.append(f"    ✗ rejected — {c.answer or f'({c.claim_id})'}   ({c.claim_id})")
@@ -224,21 +230,23 @@ def render_knowledge_object(proj: KnowledgeObjectProjection) -> str:
     if not alternatives:
         lines.append("    (none)")
     for c in alternatives:
-        lines.append(_claim_line(c))
+        lines.append(_claim_line(c) + ann.tag("claim", c.claim_id) + ann.tag("agent", c.agent_id))
     # --- Discussion (observation-mode acts only) ---
     lines += ["", "  discussion:"]
     if not proj.discussion:
         lines.append("    (none)")
     for d in proj.discussion:
         body = d.answer or f"({d.claim_id})"
-        lines.append(f"    “{body}”   ({d.agent_id or 'unknown'} · receipt {d.receipt})")
+        lines.append(f"    “{body}”   ({d.agent_id or 'unknown'} · receipt {d.receipt})"
+                     f"{ann.tag('agent', d.agent_id)}")
     # --- History (decision-thread record order) ---
     lines += ["", "  history:  (ordered by consultation record; resolutions grouped under their proposal)"]
     if not proj.timeline:
         lines.append("    (none)")
     for t in proj.timeline:
         lines.append(f"    {t.kind:<12}{t.label:<11}claim={t.claim_id}  "
-                     f"agent={t.agent_id or 'unknown'}  receipt {t.receipt}")
+                     f"agent={t.agent_id or 'unknown'}  receipt {t.receipt}"
+                     f"{ann.tag('claim', t.claim_id)}{ann.tag('agent', t.agent_id)}")
     # --- Receipts (distinct certified receipts of the object's acts) ---
     seen: set[str] = set()
     receipts = [t.receipt for t in proj.timeline if t.receipt and not (t.receipt in seen or seen.add(t.receipt))]
@@ -409,6 +417,8 @@ class KnowledgeObjectQuery:
         # observation appears at its record position. (No global cross-stream ordinal exists to interleave
         # resolutions by absolute time — this is the derived, readable approximation.)
         timeline: list[TimelineItem] = []
+        owning_org = ""
+        owner_set = False   # owning org = the FIRST consultation's org (same rule as discovery's setdefault)
         records = self._nav.navigate_action("prl.consultation")
         by_id = {getattr(e, "id", None): e for e in self._nav.resolve_entries(records)}
         for rec in records:
@@ -419,6 +429,9 @@ class KnowledgeObjectQuery:
             node = from_entry(entry)
             if not isinstance(node, ConsultationNode) or node.subject_id != subject_id:
                 continue
+            if not owner_set:
+                owning_org = node.org_id or ""
+                owner_set = True
             cid = node.mef.claim_id
             timeline.append(TimelineItem(
                 claim_id=cid, kind=node.mode, label=node.mode,
@@ -433,4 +446,4 @@ class KnowledgeObjectQuery:
         return KnowledgeObjectProjection(
             subject_id=subject_id, object_standing=sv.object_standing, coherence=sv.coherence,
             governance=governance, claims=tuple(claims), discussion=tuple(discussion),
-            timeline=tuple(timeline))
+            timeline=tuple(timeline), org_id=owning_org)
