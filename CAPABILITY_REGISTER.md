@@ -82,11 +82,11 @@ Not features — **tests of whether the proven invariants survive at scale** (se
 ## 3 · Product surfaces — what Daryl must build
 
 Engineering / industrialization. Not assets and not invariants — the surfaces a daily-use product
-needs. Not yet started.
+needs. **The construction phase has begun** (after the Second Epoch close).
 
 | Status | Surface | Notes |
 |---|---|---|
-| ⚪ Idea | Knowledge Objects (first-class entities) | the unit a user manipulates; today a projection of acts |
+| 🔵 Implemented | Knowledge Object surface — projection (discovery + view, v1) | PR #108 · `KnowledgeObjectProjection` — a **derived view, not an entity** (keyed by `subject_id`, **no `object_id`**, never stored) · `prl objects` (discovery, recency-first + filters) + `prl object --subject` (one-page view) · **composes only proven derivations** (object standing / coherence / governance / per-claim governed / receipt-backed timeline), recomputes nothing, adds no rule · **content compilation (#4b-C) deferred on purpose** — build the surface first, then observe whether compiled content is felt; **actions deferred** (permissions/workflows) |
 | ⚪ Idea | Knowledge Maps | views / navigations into the Fabric |
 | ⚪ Idea | Organization model (permissions, security, multi-org) | enterprise prerequisite |
 | ⚪ Idea | Public API | — |
