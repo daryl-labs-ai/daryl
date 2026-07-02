@@ -22,6 +22,7 @@ from dsm.rr.index import RRIndexBuilder
 from dsm.rr.navigator import RRNavigator
 
 from .consultation_read import ConsultationQuery
+from .links import LinkAnnotator
 from .standing_read import RegistryProjection, ResolutionFact, StandingQuery
 
 
@@ -55,16 +56,21 @@ class Explanation:
 def render_explanation(explanation: Explanation) -> str:
     """Pure display. A receipt on every meaningful line; never narrates above the acts."""
     e = explanation
-    lines = [f"why {e.claim_id} is {e.governed_standing.upper()}"]
+    ann = LinkAnnotator()   # typed-link annotations (Linked Projections v1); ids annotated once per page
+    lines = [f"why {e.claim_id} is {e.governed_standing.upper()}{ann.tag('claim', e.claim_id)}"]
     if e.proposal is not None:
         p = e.proposal
+        if p.subject_id:   # claim → object hop (the subject the proposal is about; never inferred)
+            lines.append(f"  subject    {p.subject_id}{ann.tag('object', p.subject_id)}")
         lines.append(f"  proposal   agent={p.agent_id or '(unknown)'}   "
-                     f"carrier={p.carrier or '(unknown)'}   receipt {p.receipt}")
+                     f"carrier={p.carrier or '(unknown)'}   receipt {p.receipt}"
+                     f"{ann.tag('agent', p.agent_id)}")
     else:
         lines.append("  proposal   (none on chain)")
     for r in e.resolutions:
         lines.append(f"  resolution decision={r.decision}   agent={r.agent_id or '(unknown)'}   "
-                     f"carrier={r.carrier or '(unknown)'}   receipt {r.receipt}")
+                     f"carrier={r.carrier or '(unknown)'}   receipt {r.receipt}"
+                     f"{ann.tag('agent', r.agent_id)}")
     if not e.resolutions:
         lines.append("  standing   PROPOSED (no resolution)")
     else:
