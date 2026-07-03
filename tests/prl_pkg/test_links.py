@@ -119,7 +119,7 @@ def test_o004_chain_executes():
 
 # 4. Typing by declaration — unknown type errors; a shared id lands per declared type only.
 def test_typing_by_declaration():
-    assert set(LINK_TYPES) == {"object", "agent", "org", "claim"}
+    assert set(LINK_TYPES) == {"object", "agent", "org", "claim", "receipt"}
     assert main(["go", "bogus", "zzz"]) == 2          # unknown type → error (no storage touched)
     # "shared" exists as BOTH a subject and an agent_id; each type lands on its own renderer.
     shared = [

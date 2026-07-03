@@ -290,7 +290,8 @@ def test_cli_explain_e2e(tmp_path, capsys):
     assert "agent=mohamed.azizi" in out
     assert "carrier=human" in out
     assert "standing   governed=ACCEPTED  raw=ACCEPTED (latest-wins) (derived, ADR-0011)" in out
-    assert out.count("receipt v1:") == 2
+    # proposal + resolution lines, each receipt-backed and now linked (Receipt Hop v1)
+    assert out.count("[go receipt v1:") == 2
 
 
 # --- Identity across projections v1: RR == SQLite (kernel) --------------------------

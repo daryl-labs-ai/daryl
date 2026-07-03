@@ -254,7 +254,7 @@ def render_knowledge_object(proj: KnowledgeObjectProjection) -> str:
     if not receipts:
         lines.append("    (none)")
     for r in receipts:
-        lines.append(f"    {r}")
+        lines.append(f"    {r}{ann.tag('receipt', r)}")   # receipt → certified act (Receipt Hop v1)
     return "\n".join(lines)
 
 

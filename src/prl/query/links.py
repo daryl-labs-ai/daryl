@@ -10,8 +10,9 @@ free — the type comes from the annotation site (or the ``go`` command), not fr
 
 from __future__ import annotations
 
-# The four link / `go` landing types (doctrine: an id is typed by declaration, never inferred).
-LINK_TYPES = ("object", "agent", "org", "claim")
+# The link / `go` landing types (doctrine: an id is typed by declaration, never inferred). `receipt`
+# (Receipt Hop v1) lands on the certified act behind a receipt — the last edge of the web.
+LINK_TYPES = ("object", "agent", "org", "claim", "receipt")
 
 
 class LinkAnnotator:

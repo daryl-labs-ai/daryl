@@ -64,9 +64,12 @@ def view_from_entry(entry: Any) -> ConsultationView:
 
 
 def render_consultations(views: list[ConsultationView]) -> str:
-    """Pure display. Distinguishes Observation vs Proposal; shows the governed frame."""
+    """Pure display. Distinguishes Observation vs Proposal; shows the governed frame. The DSM receipt
+    field links to the certified act (`[go receipt …]`, Receipt Hop v1; first occurrence per page)."""
     if not views:
         return "no consultations found"
+    from .links import LinkAnnotator
+    ann = LinkAnnotator()
     lines: list[str] = []
     for v in views:
         lines.append(f"▸ {v.mode.upper()} on {v.subject_id}  [{v.consultation_id}]")
@@ -74,7 +77,7 @@ def render_consultations(views: list[ConsultationView]) -> str:
         lines.append(f"    org: {v.org_id or '(unknown)'}")
         lines.append(f"    producer: {v.producer}   confidence: {v.confidence:.2f}")
         lines.append(f"    claim: {v.claim_id}")
-        lines.append(f"    DSM receipt: {v.receipt}")
+        lines.append(f"    DSM receipt: {v.receipt}{ann.tag('receipt', v.receipt)}")
     return "\n".join(lines)
 
 

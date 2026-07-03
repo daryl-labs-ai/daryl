@@ -119,5 +119,6 @@ def test_render_has_receipt_on_every_meaningful_line():
     nav = _Nav(consultations=[_consult_item(prop)], resolutions=[_res_item(res)])
     out = render_explanation(ExplainQuery(None, None, _navigator=nav).explain(claim))
     assert out.startswith(f"why {claim} is ACCEPTED")
-    assert out.count("receipt v1:") == 2  # proposal + resolution lines
+    # proposal + resolution lines, each receipt-backed and now linked (Receipt Hop v1)
+    assert out.count("[go receipt v1:") == 2
     assert "standing   governed=ACCEPTED  raw=ACCEPTED (latest-wins) (derived, ADR-0011)" in out
