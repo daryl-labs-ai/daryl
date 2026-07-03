@@ -19,6 +19,7 @@ Object View is built first, to *observe* whether compiled content is actually ne
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -94,6 +95,23 @@ class TimelineItem:
 
 
 @dataclass(frozen=True)
+class RelatedDecision:
+    """One **derived mention** edge (Decision Lineage v1, Level 1) — **textual evidence, NEVER causality**.
+    A mention is deterministic token presence, nothing inferred: `direction` distinguishes *mentions*
+    (this object's act names B) from *mentioned by* (B's act names this object); `evidence_class` is
+    `subject-token` (B's `subject_id` verbatim or its derived name-form) or `shared-marker` (a rare
+    `PR #NNN` shared by both). Every edge carries the matched `token`, a verbatim `snippet`, the act's
+    `receipt`, and lands via `[go object B]`. It is not a declared relation (that is Level 2, unbuilt)."""
+
+    subject_id: str        # B — the related decision
+    direction: str         # "mentions" (this → B) | "mentioned by" (B → this) | "shares marker"
+    evidence_class: str    # "subject-token" | "shared-marker"
+    token: str             # the matched token: B's id / name-form, or "PR #NNN"
+    snippet: str           # verbatim snippet of the act's answer carrying the mention
+    receipt: str           # receipt of the act carrying the mention
+
+
+@dataclass(frozen=True)
 class KnowledgeObjectProjection:
     """The consolidated Object View (v2) — a **derived projection** keyed by `subject_id`, never
     stored, no `object_id`. A **decision space to navigate**, not a compiled document: it partitions
@@ -110,6 +128,28 @@ class KnowledgeObjectProjection:
     timeline: tuple[TimelineItem, ...]   # all acts, decision-thread record order (History)
     org_id: str = ""                     # owning org (first consultation's org) — object→org hop
                                          # (Linked Projections v1); a view field, back-compat default
+    related: tuple[RelatedDecision, ...] = ()   # derived MENTION edges (Decision Lineage v1, Level 1) —
+                                         # textual evidence, not causality; back-compat default
+
+
+_VERSION_TOKEN = re.compile(r"^v\d+$")
+_PR_MARKER = re.compile(r"PR #\d+")
+
+
+def _name_form(subject_id: str) -> str:
+    """The **derived name-form** of a subject id (documented, deterministic — Decision Lineage v1): strip
+    the ``daryl.`` prefix, split on dots/hyphens, drop version tokens (``v1``, ``v2``, …), join with
+    spaces, lowercased. Purely from the id itself — no fuzzy matching, no synonyms, no inference.
+    e.g. ``daryl.receipt-hop.v1`` → ``"receipt hop"``."""
+    body = subject_id[len("daryl."):] if subject_id.startswith("daryl.") else subject_id
+    parts = [p for p in re.split(r"[.\-]", body) if p and not _VERSION_TOKEN.match(p)]
+    return " ".join(parts).lower()
+
+
+def _markers(text: str) -> set[str]:
+    """The rare shared markers in an act — ``PR #NNN`` only (the S02 shared-marker case). Narrow and
+    pattern-bound; anything looser would be inference (forbidden)."""
+    return set(_PR_MARKER.findall(text))
 
 
 def _snippet(value: str, q_lower: str, width: int = 48) -> str:
@@ -256,6 +296,13 @@ def render_knowledge_object(proj: KnowledgeObjectProjection) -> str:
         lines.append("    (none)")
     for r in receipts:
         lines.append(f"    {r}{ann.tag('receipt', r)}")   # receipt → certified act (Receipt Hop v1)
+    # --- Related decisions (Decision Lineage v1, Level 1 — MENTIONS: textual evidence, NOT causality) ---
+    lines += ["", "  related decisions:  (mentions — textual evidence, NOT causality)"]
+    if not proj.related:
+        lines.append("    (none)")
+    for rel in proj.related:
+        lines.append(f"    {rel.subject_id}   {rel.direction} [{rel.evidence_class} \"{rel.token}\"]: "
+                     f"“{rel.snippet}”   receipt {rel.receipt}{ann.tag('object', rel.subject_id)}")
     return "\n".join(lines)
 
 
@@ -447,4 +494,73 @@ class KnowledgeObjectQuery:
         return KnowledgeObjectProjection(
             subject_id=subject_id, object_standing=sv.object_standing, coherence=sv.coherence,
             governance=governance, claims=tuple(claims), discussion=tuple(discussion),
-            timeline=tuple(timeline), org_id=owning_org)
+            timeline=tuple(timeline), org_id=owning_org, related=self._related(subject_id))
+
+    def _related(self, subject_id: str) -> tuple[RelatedDecision, ...]:
+        """Decision Lineage v1, **Level 1** — a derived, per-call, in-memory **mention adjacency** over the
+        consultation acts already gathered. Subject A *mentions* B when an act on A contains B's
+        **subject-token** (B's ``subject_id`` verbatim or its derived name-form) or **shares a rare
+        ``PR #NNN`` marker** with an act on B. **Textual evidence, never causality**; nothing stored,
+        nothing inferred beyond token presence (no fuzzy match, no synonyms — the level's invariant).
+        This is NOT a declared relation (Level 2, unbuilt): a mention is never rendered as an authored edge."""
+        records = self._nav.navigate_action("prl.consultation")
+        by_id = {getattr(e, "id", None): e for e in self._nav.resolve_entries(records)}
+        acts: dict[str, list[tuple[str, str]]] = {}   # subject → [(answer, receipt)]
+        for rec in records:
+            eid = rec.get("entry_id") if isinstance(rec, dict) else getattr(rec, "entry_id", None)
+            entry = by_id.get(eid)
+            if entry is None:
+                continue
+            node = from_entry(entry)
+            if not isinstance(node, ConsultationNode):
+                continue
+            acts.setdefault(node.subject_id, []).append(
+                (node.answer or "", str(getattr(entry, "hash", "") or "")))
+
+        subjects = list(acts)
+        nf = {s: _name_form(s) for s in subjects}
+        mine = acts.get(subject_id, [])
+        my_nf = nf.get(subject_id, "")
+        seen: set[tuple[str, str, str]] = set()
+        out: list[RelatedDecision] = []
+
+        def add(b: str, direction: str, klass: str, token: str, answer: str, receipt: str) -> None:
+            key = (b, direction, token)
+            if b == subject_id or not token or key in seen:
+                return
+            seen.add(key)
+            out.append(RelatedDecision(subject_id=b, direction=direction, evidence_class=klass,
+                                       token=token, snippet=_snippet(answer, token.lower()), receipt=receipt))
+
+        # (a) subject-token — this object's acts NAME B (outgoing: "mentions")
+        for answer, receipt in mine:
+            low = answer.lower()
+            for b in subjects:
+                if b == subject_id:
+                    continue
+                if b in answer:
+                    add(b, "mentions", "subject-token", b, answer, receipt)
+                elif nf[b] and nf[b] in low:
+                    add(b, "mentions", "subject-token", nf[b], answer, receipt)
+        # (b) subject-token — B's acts NAME this object (incoming: "mentioned by")
+        for b in subjects:
+            if b == subject_id:
+                continue
+            for answer, receipt in acts[b]:
+                if subject_id in answer:
+                    add(b, "mentioned by", "subject-token", subject_id, answer, receipt)
+                elif my_nf and my_nf in answer.lower():
+                    add(b, "mentioned by", "subject-token", my_nf, answer, receipt)
+        # (c) shared-marker — both carry the same rare `PR #NNN` (symmetric)
+        my_markers: set[str] = set()
+        for answer, _ in mine:
+            my_markers |= _markers(answer)
+        if my_markers:
+            for b in subjects:
+                if b == subject_id:
+                    continue
+                for answer, receipt in acts[b]:
+                    for m in sorted(my_markers & _markers(answer)):
+                        add(b, "shares marker", "shared-marker", m, answer, receipt)
+        out.sort(key=lambda r: (r.subject_id, r.direction, r.token))
+        return tuple(out)
