@@ -72,6 +72,7 @@ class AgentView:
     proposed: tuple[ObjectRow, ...]
     observed: tuple[ObjectRow, ...]
     resolved: tuple[tuple[str, tuple[ObjectRow, ...]], ...]   # (decision, rows), decisions present only
+    orgs: tuple[str, ...] = ()   # distinct orgs the agent's acts carry (both streams) — agent→org edge (v1.1)
 
 
 @dataclass(frozen=True)
@@ -108,9 +109,19 @@ class AgentOrgQuery:
         self._contrib: dict[str, dict[str, dict[str, list[ActRef]]]] = {}
         self._resolved: dict[str, dict[str, dict[str, list[ActRef]]]] = {}
         self._res_facts: dict[str, list[ResolutionFact]] = {}    # claim → facts (for contested detection)
+        self._agent_orgs: dict[str, list[str]] = {}              # agent → distinct orgs its acts carry (v1.1)
 
         self._walk_consultations()
         self._walk_resolutions()
+
+    def _add_org(self, agent: str, org: str) -> None:
+        """Record a distinct org the agent's act carries (both streams), first-seen order — the
+        agent→org edge (O-005 friction A). Dedup in-place; empty org (no org on the act) is not an edge."""
+        if not org:
+            return
+        orgs = self._agent_orgs.setdefault(agent, [])
+        if org not in orgs:
+            orgs.append(org)
 
     # ── the two act-stream walks ──────────────────────────────────────────────────────────────────
     def _walk_consultations(self) -> None:
@@ -131,6 +142,7 @@ class AgentOrgQuery:
             receipt = str(getattr(entry, "hash", "") or "")
             self._subjects.add(subj)
             self._claim_subject[cid] = subj
+            self._add_org(agent, org)                            # agent → org edge (contributed side)
             self._owning_org.setdefault(subj, org)               # first consultation's org = owning org
             self._subject_ord[subj] = i                          # ascending → latest wins
             if org:
@@ -159,6 +171,7 @@ class AgentOrgQuery:
             self._res_facts.setdefault(cid, []).append(ResolutionFact(
                 decision=node.decision, resolver=node.mef.producer, receipt=receipt,
                 agent_id=agent, org_id=org))
+            self._add_org(agent, org)                            # agent → org edge (resolved side)
             subj = self._claim_subject.get(cid, "")              # 2-hop join
             if not subj:
                 continue                                          # a resolution to an unknown claim
@@ -217,8 +230,13 @@ class AgentOrgQuery:
         order = [d for d in _DECISION_ORDER if d in present] + sorted(present - set(_DECISION_ORDER))
         resolved = tuple((d, self._rows(self._merge(self._resolved, keys, d), resolved=True))
                          for d in order)
+        orgs: list[str] = []   # distinct orgs the agent's acts carry, first-seen (consultations then resolutions)
+        for k in keys:
+            for o in self._agent_orgs.get(k, []):
+                if o not in orgs:
+                    orgs.append(o)
         return AgentView(agent_id=agent_id, is_unknown=is_unknown,
-                         proposed=proposed, observed=observed, resolved=resolved)
+                         proposed=proposed, observed=observed, resolved=resolved, orgs=tuple(orgs))
 
     def org(self, org_id: str) -> OrgView:
         """One org's objects. **Owned** = owning org is this org; **Touched** = some act carries this
@@ -248,12 +266,18 @@ def _agent_bucket(label: str, rows: tuple[ObjectRow, ...], ann: LinkAnnotator,
 
 
 def render_agent_view(view: AgentView) -> str:
-    """Pure display — ``Agent`` page: ``Contributed`` (Proposed / Observed) then ``Resolved`` (by the
-    agent's own certified decision, ``⚠ contested`` where the target claim is #2-contested). Each object
-    row carries an ``[go object <subject>]`` jump (Linked Projections v1); ids annotated once per page."""
+    """Pure display — ``Agent`` page: an ``orgs touched:`` header (the agent→org edge, v1.1), then
+    ``Contributed`` (Proposed / Observed) and ``Resolved`` (by the agent's own certified decision,
+    ``⚠ contested`` where the target claim is #2-contested). Each object row carries an
+    ``[go object <subject>]`` jump; each org an ``[go org <id>]`` jump; ids annotated once per page."""
     ann = LinkAnnotator()
     title = "unknown / legacy agent" if view.is_unknown else view.agent_id
-    lines = [f"Agent — {title}", "  Contributed"]
+    lines = [f"Agent — {title}", "  orgs touched:"]
+    if not view.orgs:
+        lines.append("    (none)")
+    for o in view.orgs:
+        lines.append(f"    {o}{ann.tag('org', o)}")
+    lines.append("  Contributed")
     lines += _agent_bucket("Proposed", view.proposed, ann)
     lines += _agent_bucket("Observed", view.observed, ann)
     lines.append("  Resolved")

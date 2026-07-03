@@ -138,3 +138,28 @@ def test_derived_drop_rebuild_identical():
     a2 = render_agent_view(_q(world).agent("alice"))
     assert a1 == a2                                       # recomputed per call, identical
     assert render_org_view(_q(world).org("org.acme")) == render_org_view(_q(world).org("org.acme"))
+
+
+# ── Agent→Org links (v1.1) — one derived edge from O-005 friction A ──────────────────────────────
+def test_agent_org_edge_both_streams():
+    q = _q(_world())
+    # carol's ONLY org'd act is a resolution (resolution-only) → the edge still shows org.acme.
+    assert q.agent("carol").orgs == ("org.acme",)
+    # bob contributes in org.acme (consultation) AND resolves in org.core → both streams feed the edge.
+    assert set(q.agent("bob").orgs) == {"org.acme", "org.core"}
+    out = render_agent_view(q.agent("bob"))
+    assert "orgs touched:" in out and "[go org org.acme]" in out and "[go org org.core]" in out
+
+
+def test_agent_org_edge_empty_and_unknown():
+    q = _q(_world())
+    # an agent with no org'd acts → honest (none), never inferred.
+    nobody = q.agent("nobody")
+    assert nobody.orgs == () and "orgs touched:\n    (none)" in render_agent_view(nobody)
+    # the unknown / legacy page gets the same section, same rules.
+    assert "orgs touched:" in render_agent_view(q.agent("unknown"))
+
+
+def test_agent_org_edge_noise_rule():
+    out = render_agent_view(_q(_world()).agent("bob"))
+    assert out.count("[go org org.acme]") == 1 and out.count("[go org org.core]") == 1
