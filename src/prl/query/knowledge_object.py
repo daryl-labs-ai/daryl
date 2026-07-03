@@ -146,13 +146,14 @@ def render_objects(summaries: list[KnowledgeObjectSummary]) -> str:
     its **provenance** (which fields matched + a snippet); rows also carry a `reason` + `last activity`."""
     if not summaries:
         return "no knowledge objects"
+    ann = LinkAnnotator()   # v1.2 (F1): each row's subject gets its [go object …] jump — the entry edge
     lines = [f"{len(summaries)} knowledge object(s):"]
     for s in summaries:
         flag = "  ⚠ conflict" if s.has_conflict else ""
         org = f"  org={s.org_id}" if s.org_id else ""
         lines.append(f"  {s.subject_id}   object={s.object_standing.upper()}   "
                      f"coherence={s.coherence}   gov={s.governance.upper()}   "
-                     f"claims={s.n_claims}{org}{flag}")
+                     f"claims={s.n_claims}{org}{flag}{ann.tag('object', s.subject_id)}")
         ctx = s.reason or ""
         if s.last_kind:
             ctx += f"{' · ' if ctx else ''}last: {s.last_kind} by {s.last_agent or 'unknown'}"
