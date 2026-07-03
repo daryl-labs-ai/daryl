@@ -15,6 +15,7 @@ from prl.query.knowledge_object import (
     KnowledgeObjectQuery,
     object_reason,
     render_knowledge_object,
+    render_objects,
 )
 from prl.types import Carrier, to_entry
 
@@ -94,6 +95,21 @@ def test_discovery_filters():
         _item(_res("claim-x", "rejected", "bob"), "r1"),
     ]
     assert {o.subject_id for o in _q(conflict_world).discover_objects(conflicts=True)} == {"X"}
+
+
+# ── Discovery→Object link (v1.2, F1) — the entry edge ────────────────────────────────────────────
+def test_discovery_rows_annotate_go_object():
+    out = render_objects(_q(_world()).discover_objects())
+    assert "[go object KO]" in out and "[go object CLEAN]" in out      # every row offers its jump
+    assert out.count("[go object KO]") == 1 and out.count("[go object CLEAN]") == 1   # noise rule
+    assert render_objects([]) == "no knowledge objects"                # pure display, empty unchanged
+
+
+def test_discovery_search_row_not_double_annotated():
+    # a --search whose match snippet repeats the subject id must still annotate it exactly once.
+    out = render_objects(_q(_world()).discover_objects(search="clean"))
+    assert "match [" in out and "CLEAN" in out                         # the match snippet is present
+    assert out.count("[go object CLEAN]") == 1                          # annotated once, not on the snippet
 
 
 # ── Object search v1 — content + certified metadata (Knowledge Map, first cut) ──────────────────
