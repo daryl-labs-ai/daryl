@@ -64,13 +64,13 @@ def render_explanation(explanation: Explanation) -> str:
             lines.append(f"  subject    {p.subject_id}{ann.tag('object', p.subject_id)}")
         lines.append(f"  proposal   agent={p.agent_id or '(unknown)'}   "
                      f"carrier={p.carrier or '(unknown)'}   receipt {p.receipt}"
-                     f"{ann.tag('agent', p.agent_id)}")
+                     f"{ann.tag('agent', p.agent_id)}{ann.tag('receipt', p.receipt)}")
     else:
         lines.append("  proposal   (none on chain)")
     for r in e.resolutions:
         lines.append(f"  resolution decision={r.decision}   agent={r.agent_id or '(unknown)'}   "
                      f"carrier={r.carrier or '(unknown)'}   receipt {r.receipt}"
-                     f"{ann.tag('agent', r.agent_id)}")
+                     f"{ann.tag('agent', r.agent_id)}{ann.tag('receipt', r.receipt)}")
     if not e.resolutions:
         lines.append("  standing   PROPOSED (no resolution)")
     else:

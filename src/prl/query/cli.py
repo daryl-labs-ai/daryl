@@ -48,6 +48,7 @@ from .knowledge_object import (
     render_knowledge_object,
     render_objects,
 )
+from .receipt_read import ReceiptQuery, render_not_found, render_receipt_card
 from .standing_read import StandingQuery, render_standing
 from .subject_read import SubjectStandingsQuery, render_subject_standings
 
@@ -216,11 +217,23 @@ def build_parser() -> argparse.ArgumentParser:
                        help="read projection (default rr; sqlite needs --db)")
     p_org.add_argument("--db", help="SQLite projection path (with --projection sqlite)")
 
+    p_receipt = sub.add_parser("receipt",
+                               help="resolve a receipt to its certified act — the uniform Certified Act "
+                                    "card (Receipt Hop v1; read-only, reconstruction not re-certification)")
+    p_receipt.add_argument("hash", help="the full DSM receipt (e.g. v1:<sha256>); no prefix resolution in v1")
+    p_receipt.add_argument("--config", help="path to the PRL config JSON")
+    p_receipt.add_argument("--storage-dir", dest="storage_dir", help="override the DSM storage dir")
+    p_receipt.add_argument("--rr-index-dir", dest="rr_index_dir",
+                           help="directory for RR's derived index (default: <storage-dir>/_rr_index)")
+    p_receipt.add_argument("--projection", choices=["rr", "sqlite"], default="rr",
+                           help="read projection (default rr; sqlite needs --db)")
+    p_receipt.add_argument("--db", help="SQLite projection path (with --projection sqlite)")
+
     p_go = sub.add_parser("go",
-                          help="jump to a projection by typed link — `go <object|agent|org|claim> <id>`; "
-                               "a stateless dispatcher over the existing views (Linked Projections v1)")
+                          help="jump to a projection by typed link — `go <object|agent|org|claim|receipt> "
+                               "<id>`; a stateless dispatcher over the existing views (Linked Projections)")
     p_go.add_argument("link_type", metavar="type",
-                      help="the declared type — one of: object | agent | org | claim (never inferred)")
+                      help="the declared type — object | agent | org | claim | receipt (never inferred)")
     p_go.add_argument("ident", metavar="id", help="the id to land on, as declared by <type>")
     p_go.add_argument("--config", help="path to the PRL config JSON")
     p_go.add_argument("--storage-dir", dest="storage_dir", help="override the DSM storage dir")
@@ -574,10 +587,41 @@ def _explain_query(args: argparse.Namespace) -> ExplainQuery:
     return ExplainQuery(open_storage(config), rr_dir)
 
 
+def _receipt_query(args: argparse.Namespace) -> ReceiptQuery:
+    """Build a ReceiptQuery over RR or the SQLite projection (read-only; lookup is projection-relative)."""
+    if getattr(args, "projection", "rr") == "sqlite":
+        if not args.db:
+            raise PRLError("--projection sqlite requires --db")
+        from ..projections import SqliteProjection
+        return ReceiptQuery(None, None, _navigator=SqliteProjection(args.db))
+    config = _read_config(args)
+    rr_dir = args.rr_index_dir or (Path(config.storage_dir) / "_rr_index")
+    return ReceiptQuery(open_storage(config), rr_dir)
+
+
+def _print_receipt(args: argparse.Namespace, receipt: str) -> int:
+    """Resolve a receipt → the Certified Act card, or the honest not-found state (both projection-
+    relative; a reconstruction, never a re-certification). Shared by ``receipt`` and ``go receipt``."""
+    card = _receipt_query(args).find(receipt)
+    print(render_receipt_card(card) if card is not None else render_not_found(receipt))
+    return 0
+
+
+def cmd_receipt(args: argparse.Namespace) -> int:
+    """Receipt Hop v1 — resolve a receipt to its certified act (the last edge of the web). Read-only;
+    the card is a reconstruction from the certified act, not a re-certification; lookup is
+    projection-relative (not found here ≠ does not exist elsewhere)."""
+    try:
+        return _print_receipt(args, args.hash)
+    except PRLError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+
 def cmd_go(args: argparse.Namespace) -> int:
-    """Linked Projections v1 — a **stateless** dispatcher: `go <type> <id>` lands on exactly the same
+    """Linked Projections — a **stateless** dispatcher: `go <type> <id>` lands on exactly the same
     view (same query, same renderer) the type names. Typing is by **declaration**: an unknown type errors
-    listing the four valid types; an id existing as both an agent and a subject lands strictly per the
+    listing the valid types; an id existing as both an agent and a subject lands strictly per the
     declared type. ``go`` adds nothing to the output — it composes the existing views, nothing more."""
     link_type = args.link_type
     if link_type not in LINK_TYPES:
@@ -590,8 +634,10 @@ def cmd_go(args: argparse.Namespace) -> int:
             print(render_agent_view(_agent_org_query(args).agent(args.ident)))
         elif link_type == "org":
             print(render_org_view(_agent_org_query(args).org(args.ident)))
-        else:  # claim → the explain page (richest: proposal + resolutions + derived standing, receipts)
+        elif link_type == "claim":  # the explain page (proposal + resolutions + derived standing, receipts)
             print(render_explanation(_explain_query(args).explain(args.ident)))
+        else:  # receipt → the certified act behind the hash (Receipt Hop v1)
+            return _print_receipt(args, args.ident)
     except PRLError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
@@ -713,6 +759,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_agent(args)
     if args.command == "org":
         return cmd_org(args)
+    if args.command == "receipt":
+        return cmd_receipt(args)
     if args.command == "go":
         return cmd_go(args)
     if args.command == "project-sqlite":
