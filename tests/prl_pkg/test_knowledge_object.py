@@ -13,6 +13,7 @@ from types import SimpleNamespace
 from prl.collectors import ConsultationAdapter, make_resolution
 from prl.query.knowledge_object import (
     KnowledgeObjectQuery,
+    _name_form,
     object_reason,
     render_knowledge_object,
     render_objects,
@@ -110,6 +111,53 @@ def test_discovery_search_row_not_double_annotated():
     out = render_objects(_q(_world()).discover_objects(search="clean"))
     assert "match [" in out and "CLEAN" in out                         # the match snippet is present
     assert out.count("[go object CLEAN]") == 1                          # annotated once, not on the snippet
+
+
+# ── Decision Lineage v1, Level 1 — derived mentions (textual evidence, NOT causality) ────────────
+def _lineage_world():
+    # a.rule's act names receipt-hop by NAME-FORM and c.field by SUBJECT_ID; x.one & y.two share PR #117.
+    return [
+        _item(_consult("daryl.a.rule", "a1", answer="uses the receipt hop; see daryl.c.field"), "c0"),
+        _item(_consult("daryl.receipt-hop.v1", "rh1", answer="the hop surface"), "c1"),
+        _item(_consult("daryl.c.field", "cf1", answer="a field"), "c2"),
+        _item(_consult("daryl.x.one", "x1", answer="landed in PR #117"), "c3"),
+        _item(_consult("daryl.y.two", "y1", answer="also PR #117 here"), "c4"),
+    ]
+
+
+def test_name_form_transformation():
+    assert _name_form("daryl.receipt-hop.v1") == "receipt hop"          # strip daryl./version, split -.
+    assert _name_form("daryl.agent-org.views") == "agent org views"
+    assert _name_form("daryl.4b-c.compiler") == "4b c compiler"
+
+
+def test_lineage_subject_token_both_directions():
+    q = _q(_lineage_world())
+    a = {(r.subject_id, r.direction, r.evidence_class) for r in q.project("daryl.a.rule").related}
+    assert ("daryl.receipt-hop.v1", "mentions", "subject-token") in a   # matched by name-form
+    assert ("daryl.c.field", "mentions", "subject-token") in a          # matched by subject_id verbatim
+    rh = {(r.subject_id, r.direction) for r in q.project("daryl.receipt-hop.v1").related}
+    assert ("daryl.a.rule", "mentioned by") in rh                       # the reverse direction
+    assert all(r.subject_id != "daryl.a.rule" for r in q.project("daryl.a.rule").related)   # no self
+
+
+def test_lineage_shared_marker():
+    x = _q(_lineage_world()).project("daryl.x.one").related
+    assert any(r.subject_id == "daryl.y.two" and r.evidence_class == "shared-marker"
+               and r.token == "PR #117" for r in x)
+
+
+def test_lineage_render_disclaimer_and_no_because():
+    out = render_knowledge_object(_q(_lineage_world()).project("daryl.a.rule"))
+    assert "related decisions:  (mentions — textual evidence, NOT causality)" in out
+    assert "because" not in out.lower()                                 # the feature never asserts causality
+    assert "[go object daryl.receipt-hop.v1]" in out                    # the edge lands via [go object]
+
+
+def test_lineage_derived_drop_rebuild_identical():
+    world = _lineage_world()
+    assert render_knowledge_object(_q(world).project("daryl.a.rule")) == \
+        render_knowledge_object(_q(world).project("daryl.a.rule"))
 
 
 # ── Object search v1 — content + certified metadata (Knowledge Map, first cut) ──────────────────
