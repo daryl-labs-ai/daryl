@@ -169,6 +169,48 @@ hypothesis born from use**, exactly as the nine robustness frontiers were born f
 
 ---
 
+## O-005 — Linked Projections v1 makes the projection web usable; the friction is missing direct edges, not missing state
+
+**Surface:** Linked Projections v1 (`prl go <type> <id>` + typed annotations + the two display
+fixes, PR #119) · **Method:** observation run under the **follow-annotations-only** discipline (a
+hop may only target an id printed with its `[go …]` annotation on the current page; an un-offered
+hop is a datum), primary + reverse chains on the O-004 corpus, per-hop friction log, repo-side,
+throwaway store, no credential · **Date:** 2026-07-02 · **main = f9bebbb**
+
+**Observation.** Linked Projections v1 makes the projection web **usable without an interactive
+navigation shell**. The dominant friction is **not lack of state** — it is a **small set of missing
+direct edges**, especially **agent→org**, plus the **separately emerging receipt hop**. `prl nav`
+remains deferred.
+
+**What the run confirms.** `go` works; the annotations work; claim↔object works in both directions;
+the **object hub** works (every traversal meets an object); the noise rule is right (second bare
+occurrences were never wanted); explicit typing is right; **no persistent graph and no entity are
+needed.** The "web of projections" model (O-004) **holds in use**.
+
+**The observed gaps, ranked.**
+1. **Agent→org direct — the sharpest.** From an agent page one wants the orgs touched/involved
+   (`orgs touched: org.acme [go org org.acme] · …`). Not `prl nav` — one missing printed edge (the
+   `org_id` is already on the agent's acts; purely derivable).
+2. **Object→object siblings — a weak signal, deliberately not built.** From an object one may want
+   neighbours (same org, same agent, perhaps same decision status). This is closer to a real map:
+   **noted as a signal, to be grounded later, not now.** (First time this deferred item surfaces
+   from actual use.)
+3. **Receipt hop — real but separate.** Receipts are printed everywhere; the absence of
+   `prl receipt <hash>` is starting to show. Classified as an **independent candidate surface**,
+   not a fix to `go`.
+4. **Unknown/legacy bucket not link-reachable — acceptable for v1.** It is a diagnostic bucket,
+   not daily navigation.
+
+**Decision.** No `prl nav` now. **Agent→Org links (v1.1)** is the probable next increment. The
+receipt hop stays a **separate candidate surface**. Object↔object relations get **grounded later**,
+on more signal.
+
+**The doctrinal conclusion.** The projection web works by **explicit edges, not by an interactive
+session.** Navigation keeps being display + dispatch over derived projections — still zero entity,
+zero persistent index, zero new model.
+
+---
+
 ## How to add an entry
 One entry per real-use signal that changes a product decision. State: the surface, the method, the
 observation, what it **advances** or **defers**, and the **steer**. Not a proof (🟢) and not a build (🔵) —
