@@ -146,22 +146,35 @@ class SubjectStandingsQuery:
     (claim → standing); the standing is ``StandingQuery``'s single-source derivation, never
     recomputed here. Runs unchanged on RR or any other :class:`RegistryProjection`."""
 
-    def __init__(self, storage: Any, index_dir: Any, *, _navigator: RegistryProjection | None = None):
+    def __init__(self, storage: Any, index_dir: Any, *, _navigator: RegistryProjection | None = None,
+                 _standing: Any | None = None):
         if _navigator is None:
             builder = RRIndexBuilder(storage=storage, index_dir=str(index_dir))
             builder.build()
             _navigator = RRNavigator(builder, storage)
         self._consult = ConsultationQuery(storage, index_dir, _navigator=_navigator)
-        self._standing = StandingQuery(storage, index_dir, _navigator=_navigator)
+        # v1.3 (perf): accept a shared one-pass ``StandingIndex`` (built once by the discovery path) to
+        # avoid ``StandingQuery``'s O(N)-per-claim re-walk of ``prl.resolution``. Both feed the SAME
+        # ``derive_standing`` — standings are byte-identical; only the walk is amortized. Default keeps
+        # ``StandingQuery`` so every standalone caller's path is unchanged.
+        self._standing = _standing if _standing is not None else StandingQuery(
+            storage, index_dir, _navigator=_navigator)
 
-    def standings_of_subject(self, subject_id: str) -> SubjectStandingsView:
+    def standings_of_subject(self, subject_id: str, *, _consults: Any | None = None) -> SubjectStandingsView:
         """Gather every claim under ``subject_id`` and read each claim's standing — side by
         side, **no cross-claim logic**. The bridge is ``subject → consultation.claim_id →
-        standing_of(claim)``; nothing here merges, ranks, or reconciles the claims."""
+        standing_of(claim)``; nothing here merges, ranks, or reconciles the claims.
+
+        ``_consults`` (v1.3, perf) — the subject's consultation views, pre-gathered by the caller from a
+        single shared pass (the discovery path already resolves them once). When given, it replaces the
+        per-subject ``ConsultationQuery.list(subject_id)`` re-walk. It **must** be exactly what ``list``
+        would return (``view_from_entry`` over ``resolve_entries``, subject-filtered) — same views, same
+        order — so the claim de-dup and derived standings are **byte-identical**."""
         # subject → its consultation acts → their claim_ids (de-duplicated, record order).
         seen: set[str] = set()
         claims: list[ClaimStanding] = []
-        for v in self._consult.list(subject_id=subject_id):
+        consults = _consults if _consults is not None else self._consult.list(subject_id=subject_id)
+        for v in consults:
             if not v.claim_id or v.claim_id in seen:
                 continue
             seen.add(v.claim_id)
