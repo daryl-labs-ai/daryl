@@ -34,7 +34,7 @@ from dsm.rr.index import RRIndexBuilder
 from dsm.rr.navigator import RRNavigator
 
 from .standing_read import RegistryProjection, StandingQuery
-from .subject_read import SubjectStandingsQuery
+from .subject_read import SubjectStandingsQuery, SubjectStandingsView
 
 
 def derive_governance_state(conflict: bool) -> str:
@@ -95,13 +95,18 @@ class GovernanceQuery:
     ``SubjectStandingsQuery`` (#4b coherence) over one shared projection, and **derives** the
     governance state above latest-wins. It holds **no write path**; it changes nothing."""
 
-    def __init__(self, storage: Any, index_dir: Any, *, _navigator: RegistryProjection | None = None):
+    def __init__(self, storage: Any, index_dir: Any, *, _navigator: RegistryProjection | None = None,
+                 _standing: Any | None = None):
         if _navigator is None:
             builder = RRIndexBuilder(storage=storage, index_dir=str(index_dir))
             builder.build()
             _navigator = RRNavigator(builder, storage)
-        self._standing = StandingQuery(storage, index_dir, _navigator=_navigator)
-        self._subject = SubjectStandingsQuery(storage, index_dir, _navigator=_navigator)
+        # v1.3 (perf): reuse the shared one-pass ``StandingIndex`` for both the claim-standing read and
+        # the inner subject gather, so the discovery path walks ``prl.resolution`` once (not twice per
+        # subject). Same ``derive_standing`` → byte-identical. Default keeps ``StandingQuery`` unchanged.
+        self._standing = _standing if _standing is not None else StandingQuery(
+            storage, index_dir, _navigator=_navigator)
+        self._subject = SubjectStandingsQuery(storage, index_dir, _navigator=_navigator, _standing=_standing)
 
     def governance_of_claim(self, claim_id: str) -> ClaimGovernance:
         """Derive a claim's governance posture from its #2 conflict signal — the standing is
@@ -116,10 +121,15 @@ class GovernanceQuery:
     def governance_of_subject(self, subject_id: str) -> SubjectGovernance:
         """Derive a subject's governance posture from its #4b coherence + its claims' #2
         conflicts (rule G-1). Consolidates the proven signals; governs nothing."""
-        sv = self._subject.standings_of_subject(subject_id)
+        return self.governance_from_view(self._subject.standings_of_subject(subject_id))
+
+    def governance_from_view(self, sv: SubjectStandingsView) -> SubjectGovernance:
+        """The same derivation, from an **already-gathered** subject view — so a caller that already
+        holds the view (v1.3 discovery path) derives governance without recomputing the gather. Pure;
+        byte-identical to ``governance_of_subject`` for the same subject."""
         conflicts = [c.conflict for c in sv.claims]
         return SubjectGovernance(
-            subject_id=subject_id,
+            subject_id=sv.subject_id,
             governance=derive_subject_governance_state(sv.coherence, conflicts),
             coherence=sv.coherence,
             contested_claims=tuple(c.claim_id for c in sv.claims if c.conflict),

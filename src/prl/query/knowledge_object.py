@@ -27,7 +27,7 @@ from dsm.rr.index import RRIndexBuilder
 from dsm.rr.navigator import RRNavigator
 
 from ..types import ConsultationNode, from_entry
-from .consultation_read import ConsultationQuery
+from .consultation_read import ConsultationQuery, view_from_entry
 from .explain_read import ExplainQuery
 from .governance_read import GovernanceQuery
 from .links import LinkAnnotator
@@ -319,11 +319,13 @@ class KnowledgeObjectQuery:
             _navigator = RRNavigator(builder, storage)
         self._nav: RegistryProjection = _navigator
         self._consult = ConsultationQuery(storage, index_dir, _navigator=_navigator)
-        self._subject = SubjectStandingsQuery(storage, index_dir, _navigator=_navigator)
-        self._gov = GovernanceQuery(storage, index_dir, _navigator=_navigator)
-        self._explain = ExplainQuery(storage, index_dir, _navigator=_navigator)
-        # one-pass grouping of resolutions by claim — gives resolver agents + decisions for --search
+        # one-pass grouping of resolutions by claim (built ONCE). Gives resolver agents + decisions for
+        # --search AND — v1.3, perf — is shared into SubjectStandingsQuery/GovernanceQuery so the
+        # discovery path walks prl.resolution once instead of O(N)-per-claim. Same derive_standing.
         self._standing = StandingIndex(storage, index_dir, _navigator=_navigator)
+        self._subject = SubjectStandingsQuery(storage, index_dir, _navigator=_navigator, _standing=self._standing)
+        self._gov = GovernanceQuery(storage, index_dir, _navigator=_navigator, _standing=self._standing)
+        self._explain = ExplainQuery(storage, index_dir, _navigator=_navigator)
 
     def discover_objects(
         self, *, org_id: str | None = None, contested: bool = False,
@@ -347,6 +349,13 @@ class KnowledgeObjectQuery:
         records = self._nav.navigate_action("prl.consultation")
         entries = self._nav.resolve_entries(records)
         by_id = {getattr(e, "id", None): e for e in entries}
+        # v1.3 (perf): gather each subject's consultation views from THIS single resolve pass — exactly
+        # what ConsultationQuery.list(subject_id) returns (view_from_entry over resolve_entries order,
+        # subject-filtered) — so standings/governance read them without a per-subject bucket re-walk.
+        consults_of: dict[str, list] = {}
+        for e in entries:
+            v = view_from_entry(e)
+            consults_of.setdefault(v.subject_id, []).append(v)
         last_ord: dict[str, int] = {}
         org_of: dict[str, str] = {}
         last_kind: dict[str, str] = {}
@@ -374,7 +383,7 @@ class KnowledgeObjectQuery:
             receipts_of.setdefault(subj, []).append(str(getattr(entry, "hash", "") or ""))
         out: list[KnowledgeObjectSummary] = []
         for subj, ord_ in last_ord.items():
-            sv = self._subject.standings_of_subject(subj)
+            sv = self._subject.standings_of_subject(subj, _consults=consults_of.get(subj, []))
             mfields: tuple[str, ...] = ()
             msnip = ""
             if search:
@@ -388,7 +397,7 @@ class KnowledgeObjectQuery:
                 subject_id=subj,
                 object_standing=sv.object_standing,
                 coherence=sv.coherence,
-                governance=self._gov.governance_of_subject(subj).governance,
+                governance=self._gov.governance_from_view(sv).governance,
                 n_claims=len(sv.claims),
                 has_conflict=any(c.conflict for c in sv.claims),
                 org_id=org_of.get(subj, ""),
