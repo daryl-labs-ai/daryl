@@ -53,10 +53,20 @@ from .standing_read import StandingQuery, render_standing
 from .subject_read import SubjectStandingsQuery, render_subject_standings
 
 
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="prl", description="Project Recall Layer")
+def build_parser(prog: str = "prl", description: str = "Project Recall Layer") -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog=prog, description=description)
     sub = parser.add_subparsers(dest="command", required=True)
+    register_common_subparsers(sub)
+    return parser
 
+
+def register_common_subparsers(sub: "argparse._SubParsersAction") -> None:
+    """Register the shared PRL subcommands on a subparsers action.
+
+    Extracted from ``build_parser`` so the ``daryl`` user surface (``prl.daryl_cli``)
+    composes the *identical* verb set — same parsers, same handlers — without forking
+    behavior or renaming internals. ``prl``'s own parser is unchanged: ``build_parser()``
+    still yields exactly the same parser it always did (default ``prog='prl'``)."""
     p_index = sub.add_parser("index", help="scan declared projects and commit their map to DSM")
     p_index.add_argument("--project", help="index a single folder (ad-hoc, no config file needed)")
     p_index.add_argument("--config", help="path to the PRL config JSON")
@@ -250,8 +260,6 @@ def build_parser() -> argparse.ArgumentParser:
     p_proj.add_argument("--rr-index-dir", dest="rr_index_dir",
                         help="directory for RR's derived index (default: <storage-dir>/_rr_index)")
     p_proj.add_argument("--db", required=True, help="SQLite projection path to (re)build")
-
-    return parser
 
 
 def _make_embedder(model_name: str):
@@ -729,8 +737,12 @@ def cmd_ask(args: argparse.Namespace) -> int:
     return 0
 
 
-def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+def dispatch(args: argparse.Namespace) -> int:
+    """Route a parsed namespace to its handler.
+
+    Extracted from ``main`` so the ``daryl`` surface reuses the exact same routing for
+    every shared verb. ``daryl``'s only addition (``init``) is handled by ``daryl_cli``
+    *before* it delegates here, so this function is unaware of it."""
     if args.command == "index":
         return cmd_index(args)
     if args.command == "status":
@@ -766,3 +778,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "project-sqlite":
         return cmd_project_sqlite(args)
     return 1  # pragma: no cover (argparse 'required' guards this)
+
+
+def main(argv: list[str] | None = None) -> int:
+    return dispatch(build_parser().parse_args(argv))
