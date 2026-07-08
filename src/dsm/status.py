@@ -37,6 +37,7 @@ class StorageReceiptStatus(str, Enum):
     ENTRY_MISSING = "ENTRY_MISSING"
     HASH_MISMATCH = "HASH_MISMATCH"
     SHARD_MISSING = "SHARD_MISSING"
+    DUPLICATE = "DUPLICATE"  # Receipt replay detected
 
 
 class SealStorageStatus(str, Enum):

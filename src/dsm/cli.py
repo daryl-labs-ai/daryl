@@ -1217,6 +1217,133 @@ def _cmd_tail(args) -> None:
         pass  # User cancelled — clean exit
 
 
+# ============================================================================
+# DCP v1.1 Continuity Protocol — CLI handlers
+# ============================================================================
+
+def _cmd_catch_up(args) -> int:
+    """dsm catch-up <project_id>: recover full project state from DSM."""
+    import time as _time
+    from dsm.verify import verify_shard as _vs
+    from dsm.rr.relay import DSMReadRelay
+
+    storage = _get_storage(args.data_dir)
+    project_id = args.project_id
+    t0 = _time.monotonic()
+    ir = _vs(storage, project_id)
+    entries = storage.read(project_id, limit=50)
+    relay = DSMReadRelay(storage=storage)
+    summary = relay.summary(project_id, limit=500) if entries else {"entry_count": 0}
+    elapsed = (_time.monotonic() - t0) * 1000
+
+    print(f"Project: {project_id}")
+    print(f"Integrity: {ir.get('status')}")
+    print(f"Entries: {len(entries)}")
+    print(f"catch_up time: {elapsed:.1f} ms")
+    print()
+    if entries:
+        print("Decisions (chronological):")
+        for e in reversed(entries):
+            agent = e.source
+            action = (e.metadata or {}).get("action_name", "?")
+            ts = e.timestamp.isoformat() if hasattr(e.timestamp, "isoformat") else str(e.timestamp)
+            print(f"  [{agent:16}] {action:12} | {ts[:19]} | {e.content[:80]}")
+    else:
+        print("(no prior decisions — empty project)")
+    return 0
+
+
+def _cmd_join_project(args) -> int:
+    """dsm join-project <project_id>: join a project's continuity."""
+    storage = _get_storage(args.data_dir)
+    project_id = args.project_id
+    agent_id = args.agent_id or "cli"
+    entries = storage.read(project_id, limit=50)
+    print(f"Project: {project_id}")
+    print(f"Agent: {agent_id}")
+    print(f"Project exists: {len(entries) > 0}")
+    print(f"Entry count: {len(entries)}")
+    if entries:
+        last = entries[0]
+        print(f"Last activity: {last.source} at {last.timestamp.isoformat()[:19] if hasattr(last.timestamp, 'isoformat') else last.timestamp}")
+    print(f"Authorized: True")
+    return 0
+
+
+def _cmd_publish(args) -> int:
+    """dsm publish <project_id> <task> <result>: write a decision + issue a receipt."""
+    from dsm.core.models import Entry
+    from dsm.exchange import issue_receipt as _issue
+
+    storage = _get_storage(args.data_dir)
+    project_id = args.project_id
+    agent_id = args.agent_id or "cli"
+    task = args.task
+    result = args.result
+
+    tip = storage.read(project_id, limit=1)
+    prev_hash = tip[0].hash if tip else None
+
+    entry = Entry(
+        id=f"{agent_id}_{datetime.now(timezone.utc).strftime('%H%M%S%f')}",
+        timestamp=datetime.now(timezone.utc),
+        session_id=f"dcp_{agent_id}",
+        source=agent_id,
+        content=result,
+        shard=project_id,
+        hash="",
+        prev_hash=prev_hash,
+        metadata={"event_type": "decision", "action_name": task},
+        version="v2.0",
+    )
+    written = storage.append(entry)
+    receipt = _issue(storage, agent_id=agent_id, entry_id=written.id,
+                     shard_id=project_id, task_description=task)
+
+    print(f"Published to: {project_id}")
+    print(f"Entry ID: {written.id}")
+    print(f"Entry hash: {written.hash}")
+    print(f"Agent: {agent_id}")
+    print(f"Task: {task}")
+    print(f"Receipt hash: {receipt.receipt_hash}")
+    return 0
+
+
+def _cmd_dcp_verify(args) -> int:
+    """dsm dcp-verify <project_id>: verify project integrity."""
+    from dsm.verify import verify_shard as _vs
+
+    storage = _get_storage(args.data_dir)
+    ir = _vs(storage, args.project_id)
+    status = str(ir.get("status"))
+    print(f"Project: {args.project_id}")
+    print(f"Status: {status}")
+    print(f"Entries: {ir.get('total_entries', ir.get('observed_entry_count', 0))}")
+    print(f"Truncation detected: {ir.get('truncation_detected', False)}")
+    return 0 if "OK" in status else 1
+
+
+def _cmd_project_context(args) -> int:
+    """dsm project-context <project_id>: get provenance block."""
+    from dsm.verify import verify_shard as _vs
+
+    storage = _get_storage(args.data_dir)
+    project_id = args.project_id
+    entries = storage.read(project_id, limit=100)
+    ir = _vs(storage, project_id)
+    agents = list(set(e.source for e in entries))
+
+    print(f"Project: {project_id}")
+    print(f"Integrity: {ir.get('status')}")
+    print(f"Entry count: {len(entries)}")
+    print(f"Agents: {', '.join(agents) if agents else '(none)'}")
+    if entries:
+        print(f"Recent hashes:")
+        for e in entries[:10]:
+            print(f"  {e.hash[:24]}... [{e.source}]")
+    return 0
+
+
 def main_dsm() -> None:
     """Entry point for the 'dsm' command."""
     parser = argparse.ArgumentParser(prog="dsm", description="DSM CLI - status, list-shards, read, append, replay")
@@ -1488,6 +1615,42 @@ def main_dsm() -> None:
     p_witness_check.add_argument("--key", default=None, help="Optional witness key (must match capture)")
     p_witness_check.add_argument("--shard", default=None, help="Check a single shard by ID")
     p_witness_check.set_defaults(func=_cmd_witness_check)
+
+    # === DCP v1.1 Continuity Protocol Primitives ===
+
+    # dsm catch-up <project_id>
+    p_catchup = subparsers.add_parser("catch-up", help="DCP: recover project state (all prior decisions)")
+    p_catchup.add_argument("project_id", help="Project shard ID")
+    p_catchup.add_argument("--data-dir", default=None, help="DSM data directory (default: data)")
+    p_catchup.set_defaults(func=_cmd_catch_up)
+
+    # dsm join-project <project_id>
+    p_join = subparsers.add_parser("join-project", help="DCP: join a project's continuity")
+    p_join.add_argument("project_id", help="Project shard ID")
+    p_join.add_argument("--agent-id", default=None, help="Your agent identity (default: cli)")
+    p_join.add_argument("--data-dir", default=None, help="DSM data directory (default: data)")
+    p_join.set_defaults(func=_cmd_join_project)
+
+    # dsm publish <project_id> <task> <result>
+    p_publish = subparsers.add_parser("publish", help="DCP: publish a decision + issue a receipt")
+    p_publish.add_argument("project_id", help="Project shard ID")
+    p_publish.add_argument("task", help="Short task label (e.g. implement, review, test)")
+    p_publish.add_argument("result", help="The decision or work result (1-2 sentences)")
+    p_publish.add_argument("--agent-id", default=None, help="Your agent identity (default: cli)")
+    p_publish.add_argument("--data-dir", default=None, help="DSM data directory (default: data)")
+    p_publish.set_defaults(func=_cmd_publish)
+
+    # dsm dcp-verify <project_id>
+    p_dcp_verify = subparsers.add_parser("dcp-verify", help="DCP: verify project integrity")
+    p_dcp_verify.add_argument("project_id", help="Project shard ID")
+    p_dcp_verify.add_argument("--data-dir", default=None, help="DSM data directory (default: data)")
+    p_dcp_verify.set_defaults(func=_cmd_dcp_verify)
+
+    # dsm project-context <project_id>
+    p_context = subparsers.add_parser("project-context", help="DCP: get provenance block for a project")
+    p_context.add_argument("project_id", help="Project shard ID")
+    p_context.add_argument("--data-dir", default=None, help="DSM data directory (default: data)")
+    p_context.set_defaults(func=_cmd_project_context)
 
     args = parser.parse_args()
     ret = args.func(args)

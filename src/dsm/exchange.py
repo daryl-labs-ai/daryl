@@ -9,6 +9,7 @@ P9: optional Ed25519 signature and public_key on receipt.
 import hashlib
 import json
 import logging
+import threading
 from datetime import datetime, timezone
 from typing import List, Optional
 from uuid import uuid4
@@ -272,3 +273,87 @@ def list_received_receipts(storage: Storage, shard_id: str = "receipts") -> List
         except (json.JSONDecodeError, KeyError):
             continue
     return result
+
+
+# ---------------------------------------------------------------------------
+# Replay Protection (DCP extension)
+# ---------------------------------------------------------------------------
+
+
+class ReplayProtector:
+    """Tracks seen receipt_ids to detect and reject duplicate receipts.
+
+    Lives above the kernel. Uses a dedicated DSM shard ('receipt_seen') as
+    persistent storage — no kernel modification, no external state.
+
+    Usage::
+
+        rp = ReplayProtector(storage)
+        rp.protect(receipt)  # raises if duplicate, records if new
+    """
+
+    SEEN_SHARD = "receipt_seen"
+
+    def __init__(self, storage: Storage):
+        self._storage = storage
+        self._seen_cache: Optional[set] = None
+        self._lock = threading.Lock()  # prevents concurrent protect() race
+
+    def _load_seen(self) -> set:
+        """Load seen receipt_ids from shard (lazy, cached)."""
+        if self._seen_cache is not None:
+            return self._seen_cache
+        seen = set()
+        entries = self._storage.read(self.SEEN_SHARD, limit=10**6)
+        for e in entries:
+            rid = (e.metadata or {}).get("receipt_id")
+            if rid:
+                seen.add(rid)
+        self._seen_cache = seen
+        return seen
+
+    def is_seen(self, receipt_id: str) -> bool:
+        """Check if a receipt_id has already been recorded."""
+        return receipt_id in self._load_seen()
+
+    def protect(self, receipt: "TaskReceipt") -> bool:
+        """Record a receipt as seen. Returns True if new, False if duplicate.
+
+        Does NOT raise — the caller decides what to do with a duplicate.
+        Call this BEFORE accepting a receipt.
+
+        Thread-safe: uses an internal lock to prevent concurrent-protect
+        race conditions where two threads could both see "not seen" before
+        either writes to the shard.
+        """
+        with self._lock:
+            seen = self._load_seen()
+            if receipt.receipt_id in seen:
+                return False  # duplicate
+            # Record in shard
+            entry = Entry(
+                id=str(uuid4()),
+                timestamp=datetime.now(timezone.utc),
+                session_id="replay_protection",
+                source="replay_protector",
+                content=receipt.receipt_id,
+                shard=self.SEEN_SHARD,
+                hash="",
+                prev_hash=None,
+                metadata={"event_type": "seen_receipt", "receipt_id": receipt.receipt_id},
+                version="v2.0",
+            )
+            self._storage.append(entry)
+            seen.add(receipt.receipt_id)
+            return True
+
+    def verify_with_replay(self, receipt: "TaskReceipt") -> dict:
+        """Verify a receipt AND check for replay.
+
+        Returns the standard verify_receipt_against_storage result, but with
+        status=DUPLICATE if the receipt was already seen.
+        """
+        if receipt.receipt_id in self._load_seen():
+            return {"receipt_id": receipt.receipt_id, "status": StorageReceiptStatus.DUPLICATE,
+                    "entry_found": False, "hash_matches": False}
+        return verify_receipt_against_storage(self._storage, receipt)

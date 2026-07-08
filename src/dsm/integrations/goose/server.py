@@ -428,6 +428,204 @@ def dsm_status() -> str:
 
 
 # ---------------------------------------------------------------------------
+# DCP v1.1 Continuity Protocol Primitives
+# ---------------------------------------------------------------------------
+
+@mcp.tool()
+def dsm_join_project(project_id: str, agent_id: str = "") -> str:
+    """Join a project's continuity. Returns participation context + initial catch_up.
+
+    Call this ONCE when you start working on a project, before any other work.
+    If the project has prior history, you will see it in the context_bundle.
+
+    Args:
+        project_id: The project shard name (e.g. "project_auth_module").
+        agent_id: Your agent identity (e.g. "claude", "cursor"). Defaults to the server agent.
+    """
+    import time as _time
+    agent = _get_agent()
+    storage = agent.storage
+    aid = agent_id or agent.agent_id
+
+    from dsm.verify import verify_shard as _vs
+    from dsm.rr.relay import DSMReadRelay
+
+    t0 = _time.monotonic()
+    ir = _vs(storage, project_id)
+    entries = storage.read(project_id, limit=50)
+    relay = DSMReadRelay(storage=storage)
+    summary = relay.summary(project_id, limit=500) if entries else {"entry_count": 0}
+    elapsed = (_time.monotonic() - t0) * 1000
+
+    decisions = []
+    for e in reversed(entries):
+        decisions.append({
+            "agent": e.source,
+            "action": (e.metadata or {}).get("action_name", "?"),
+            "content": e.content[:200],
+            "timestamp": e.timestamp.isoformat() if hasattr(e.timestamp, "isoformat") else str(e.timestamp),
+        })
+
+    return json.dumps({
+        "project_id": project_id,
+        "authorized": True,
+        "project_exists": len(entries) > 0,
+        "entry_count": len(entries),
+        "integrity": str(ir.get("status")),
+        "total_decisions": len(decisions),
+        "decisions": decisions,
+        "summary": summary,
+        "catch_up_time_ms": round(elapsed, 1),
+    })
+
+
+@mcp.tool()
+def dsm_catch_up(project_id: str) -> str:
+    """Recover full project state from DSM. Call this before starting work.
+
+    Returns all prior decisions, integrity status, and activity summary.
+    If integrity is not OK, do NOT continue — the project memory may be corrupted.
+
+    Args:
+        project_id: The project shard name.
+    """
+    import time as _time
+    agent = _get_agent()
+    storage = agent.storage
+
+    from dsm.verify import verify_shard as _vs
+    from dsm.rr.relay import DSMReadRelay
+
+    t0 = _time.monotonic()
+    ir = _vs(storage, project_id)
+    entries = storage.read(project_id, limit=50)
+    relay = DSMReadRelay(storage=storage)
+    summary = relay.summary(project_id, limit=500)
+    elapsed = (_time.monotonic() - t0) * 1000
+
+    decisions = []
+    for e in reversed(entries):
+        decisions.append({
+            "agent": e.source,
+            "action": (e.metadata or {}).get("action_name", "?"),
+            "content": e.content[:200],
+            "timestamp": e.timestamp.isoformat() if hasattr(e.timestamp, "isoformat") else str(e.timestamp),
+        })
+
+    return json.dumps({
+        "project_id": project_id,
+        "integrity_ok": str(ir.get("status")) == "VerifyStatus.OK",
+        "integrity_status": str(ir.get("status")),
+        "total_decisions": len(decisions),
+        "decisions": decisions,
+        "summary": summary,
+        "catch_up_time_ms": round(elapsed, 1),
+    })
+
+
+@mcp.tool()
+def dsm_publish_receipt(project_id: str, task: str, result: str,
+                        agent_id: str = "") -> str:
+    """Publish a decision to the project memory and issue a verifiable receipt.
+
+    Call this AFTER you complete work. The receipt is portable proof that
+    you participated in this project.
+
+    Args:
+        project_id: The project shard name.
+        task: Short task label (e.g. "implement", "review", "test").
+        result: The decision or work result (1-2 sentences).
+        agent_id: Your agent identity. Defaults to the server agent.
+    """
+    agent = _get_agent()
+    storage = agent.storage
+    aid = agent_id or agent.agent_id
+
+    from dsm.core.models import Entry
+    from dsm.exchange import issue_receipt as _issue
+
+    # Read last entry hash for chain continuity
+    tip_entries = storage.read(project_id, limit=1)
+    prev_hash = tip_entries[0].hash if tip_entries else None
+
+    entry = Entry(
+        id=f"{aid}_{datetime.now(timezone.utc).strftime('%H%M%S%f')}",
+        timestamp=datetime.now(timezone.utc),
+        session_id=f"dcp_{aid}",
+        source=aid,
+        content=result,
+        shard=project_id,
+        hash="",
+        prev_hash=prev_hash,
+        metadata={"event_type": "decision", "action_name": task},
+        version="v2.0",
+    )
+    written = storage.append(entry)
+
+    receipt = _issue(
+        storage, agent_id=aid, entry_id=written.id,
+        shard_id=project_id, task_description=task,
+    )
+
+    return json.dumps({
+        "entry_id": written.id,
+        "entry_hash": written.hash,
+        "agent_id": aid,
+        "task": task,
+        "project_id": project_id,
+        "receipt": receipt.to_dict(),
+    })
+
+
+@mcp.tool()
+def dsm_dcp_verify(project_id: str) -> str:
+    """Verify the integrity of a project's memory.
+
+    Returns OK if the hash chain is intact and no truncation is detected.
+    Call this before trusting recalled context.
+
+    Args:
+        project_id: The project shard name.
+    """
+    agent = _get_agent()
+    from dsm.verify import verify_shard as _vs
+    ir = _vs(agent.storage, project_id)
+    return json.dumps({
+        "project_id": project_id,
+        "status": str(ir.get("status")),
+        "total_entries": ir.get("total_entries", ir.get("observed_entry_count", 0)),
+        "truncation_detected": ir.get("truncation_detected", False),
+    })
+
+
+@mcp.tool()
+def dsm_project_context(project_id: str) -> str:
+    """Get a prompt-ready provenance block for the project.
+
+    Returns entry hashes, agents involved, and integrity status.
+    Use this to include project provenance in an LLM prompt or external report.
+
+    Args:
+        project_id: The project shard name.
+    """
+    agent = _get_agent()
+    storage = agent.storage
+
+    from dsm.verify import verify_shard as _vs
+    entries = storage.read(project_id, limit=100)
+    ir = _vs(storage, project_id)
+
+    return json.dumps({
+        "project_id": project_id,
+        "entry_hashes": [e.hash for e in entries[:20]],
+        "entry_count": len(entries),
+        "integrity": str(ir.get("status")),
+        "agents": list(set(e.source for e in entries)),
+        "verification_hint": f"dsm verify --shard {project_id}" if str(ir.get("status")) == "VerifyStatus.OK" else "INTEGRITY FAILURE",
+    })
+
+
+# ---------------------------------------------------------------------------
 # MCP Resources
 # ---------------------------------------------------------------------------
 
