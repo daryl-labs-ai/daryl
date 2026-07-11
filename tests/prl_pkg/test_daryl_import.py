@@ -142,11 +142,13 @@ def test_import_seeds_and_reports_counts(tmp_path):
 
 
 def test_import_writes_certified_acts(tmp_path):
-    import_chatgpt(_config(tmp_path), _export(tmp_path))
+    rep = import_chatgpt(_config(tmp_path), _export(tmp_path))
     storage = Storage(data_dir=str(tmp_path / "store"))
     report = verify_shard(storage, CONSULTATION_SHARD)
     assert str(report["status"]).endswith("OK")
-    assert report["total_entries"] == 3       # one certified act per turn
+    # turn acts (3) + one boundary SessionNode per imported conversation (2) + one manifest (1)
+    assert report["total_entries"] == rep.acts + rep.boundary_acts + 1
+    assert rep.boundary_acts == 2
 
 
 def test_import_suggestions_are_recency_ordered_object_pointers(tmp_path):
