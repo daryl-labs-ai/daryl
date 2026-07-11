@@ -155,10 +155,11 @@ def test_import_suggestions_are_recency_ordered_object_pointers(tmp_path):
     assert report.suggestions[0].startswith('daryl object --subject "onboarding-ux.c2"')
 
 
-def test_import_rejects_raw_zip(tmp_path):
+def test_import_malformed_zip_errors_honestly(tmp_path):
+    # .zip is now accepted (D2b); a file that isn't a real zip fails with an honest error.
     zip_path = tmp_path / "export.zip"
-    zip_path.write_bytes(b"PK\x03\x04")
-    with pytest.raises(PRLError, match="later release"):
+    zip_path.write_bytes(b"PK\x03\x04not-a-zip")
+    with pytest.raises(PRLError, match="not a valid zip"):
         import_chatgpt(_config(tmp_path), zip_path)
 
 
@@ -179,12 +180,12 @@ def test_cli_import_end_to_end(tmp_path, capsys):
     assert "Try these now:" in out
 
 
-def test_cli_import_zip_refused(tmp_path, capsys):
+def test_cli_import_malformed_zip_errors(tmp_path, capsys):
     zip_path = tmp_path / "e.zip"
-    zip_path.write_bytes(b"PK")
+    zip_path.write_bytes(b"PKnope")
     cfg = tmp_path / "cfg.json"
     cfg.write_text(json.dumps({"declared_projects": [str(tmp_path)],
                                "storage_dir": str(tmp_path / "store")}))
     rc = main(["import", "chatgpt", str(zip_path), "--config", str(cfg)])
     assert rc == 2
-    assert "later release" in capsys.readouterr().err
+    assert "not a valid zip" in capsys.readouterr().err

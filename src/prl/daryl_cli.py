@@ -126,6 +126,13 @@ def cmd_import(args: argparse.Namespace) -> int:
     print(f"  subjects:    {report.subjects}")
     print(f"  acts:        {report.acts}")
     print(f"  truncations: {report.truncations}  (turns over {MAX_ANSWER_CHARS} chars, marked)")
+    n = report.normalization
+    if n.any():
+        # P5: nothing dropped silently — official-tree drops reported by reason.
+        print(f"  normalization (official export): "
+              f"branches={n.dropped_branches} system={n.dropped_system} "
+              f"hidden={n.dropped_hidden} empty={n.dropped_empty} "
+              f"non-text-placeholders={n.placeholder_nontext}")
     if report.suggestions:
         print("\nTry these now:")
         for line in report.suggestions:

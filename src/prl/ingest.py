@@ -29,6 +29,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
+from .chatgpt_normalize import NormalizationReport, resolve_conversations
 from .collectors import ConsultationAdapter
 from .config import PRLConfig
 from .exceptions import PRLError
@@ -167,6 +168,8 @@ class ImportReport:
     acts: int = 0
     truncations: int = 0
     suggestions: list[str] = field(default_factory=list)
+    # Official-tree normalization drops (P5); all zero on the already-normalized path.
+    normalization: NormalizationReport = field(default_factory=NormalizationReport)
 
 
 def _suggestions(recents: list[tuple[int | None, str, str]]) -> list[str]:
@@ -198,14 +201,10 @@ def import_chatgpt(
     """Seed every conversation turn as an Observation act into ``config``'s store, and
     return the :class:`ImportReport`. ``on_progress(done, total)`` is called per conversation
     for UX. Certified via ``commit_act`` (hash-chained); receipts mint fresh on each import."""
-    path = Path(export_path)
-    if path.suffix.lower() == ".zip":
-        raise PRLError(
-            "raw ChatGPT .zip import arrives in a later release (PR-2b); "
-            "export a normalized JSON for now"
-        )
-
-    conversations = load_conversations(path)
+    # Resolve any accepted source to the normalized D2a shape: an official OpenAI export
+    # (.zip or conversations.json tree) is normalized here (D2b); an already-normalized
+    # JSON passes through. The seeding below is unchanged either way.
+    conversations, normalization = resolve_conversations(export_path)
     store = open_store(config)
     adapter = ConsultationAdapter()
 
@@ -240,4 +239,5 @@ def import_chatgpt(
         acts=acts,
         truncations=truncations,
         suggestions=_suggestions(recents),
+        normalization=normalization,
     )
