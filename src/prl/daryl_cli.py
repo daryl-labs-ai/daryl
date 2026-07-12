@@ -24,6 +24,7 @@ from .config import _DEFAULT_CONFIG_PATH, PRLConfig
 from .exceptions import PRLError
 from .ingest import MAX_ANSWER_CHARS, import_chatgpt
 from .query.cli import dispatch, register_common_subparsers
+from .query.source_map_read import SourceMapQuery, render_source_map
 from .store import open_storage
 
 # The store's default home. Mirrors ``PRLConfig.storage_dir``'s default so
@@ -40,6 +41,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
     _add_init_subparser(sub)
     _add_import_subparser(sub)
+    _add_source_subparser(sub)
     register_common_subparsers(sub)  # ask / objects / object / agent / org / receipt / go / …
     return parser
 
@@ -82,17 +84,29 @@ def _add_import_subparser(sub: "argparse._SubParsersAction") -> None:
     p_import.add_argument("source", choices=["chatgpt"], help="corpus format")
     p_import.add_argument(
         "export",
-        help="path to the export — a normalized ChatGPT JSON (raw .zip lands in a later release)",
+        help="path to the export — a ChatGPT official .zip, or a normalized/backup JSON",
     )
     p_import.add_argument("--config", help="path to the PRL config JSON (default: the init'ed store)")
     p_import.add_argument("--storage-dir", dest="storage_dir", help="override the DSM storage dir")
     p_import.add_argument("--org-id", dest="org_id", help="owning organization id (optional)")
 
 
-def _resolve_write_config(args: argparse.Namespace) -> PRLConfig:
-    """Resolve the store to write into: an explicit --config, else an explicit
+def _add_source_subparser(sub: "argparse._SubParsersAction") -> None:
+    p_source = sub.add_parser(
+        "source",
+        help="show a conversation's source map (provenance: boundary + ordered turn receipts)",
+    )
+    p_source.add_argument("--subject", required=True, help="the subject id (slug(title).<id6>)")
+    p_source.add_argument("--config", help="path to the PRL config JSON (default: the init'ed store)")
+    p_source.add_argument("--storage-dir", dest="storage_dir", help="override the DSM storage dir")
+    p_source.add_argument("--rr-index-dir", dest="rr_index_dir",
+                          help="directory for RR's derived index (default: <storage-dir>/_rr_index)")
+
+
+def _resolve_store_config(args: argparse.Namespace) -> PRLConfig:
+    """Resolve the store to read/write: an explicit --config, else an explicit
     --storage-dir, else the init'ed default config. ``declared_projects`` is unused on the
-    write path (it exists only to satisfy the P0 invariant)."""
+    import/read path (it exists only to satisfy the P0 invariant)."""
     if getattr(args, "config", None):
         config = PRLConfig.load(Path(args.config))
     elif getattr(args, "storage_dir", None):
@@ -113,7 +127,7 @@ def cmd_import(args: argparse.Namespace) -> int:
             print(f"  … {done}/{total} conversations", file=sys.stderr)
 
     try:
-        config = _resolve_write_config(args)
+        config = _resolve_store_config(args)
         print(f"importing {args.source} corpus into {config.storage_dir} …")
         report = import_chatgpt(
             config, args.export, org_id=getattr(args, "org_id", None), on_progress=_progress
@@ -125,6 +139,7 @@ def cmd_import(args: argparse.Namespace) -> int:
     print(f"✓ imported {report.acts} acts from {report.conversations} conversations")
     print(f"  subjects:    {report.subjects}")
     print(f"  acts:        {report.acts}")
+    print(f"  boundary:    {report.boundary_acts}  (one SessionNode envelope per conversation)")
     print(f"  truncations: {report.truncations}  (turns over {MAX_ANSWER_CHARS} chars, marked)")
     n = report.normalization
     if n.any():
@@ -133,10 +148,29 @@ def cmd_import(args: argparse.Namespace) -> int:
               f"branches={n.dropped_branches} system={n.dropped_system} "
               f"hidden={n.dropped_hidden} empty={n.dropped_empty} "
               f"non-text-placeholders={n.placeholder_nontext}")
+    # Import identity — abbreviated; full identity + durable accounting live in the manifest.
+    print(f"  import id:   {report.run_id[:12]}…  (full manifest via `daryl source`)")
     if report.suggestions:
         print("\nTry these now:")
         for line in report.suggestions:
             print(f"  {line}")
+        top = report.suggestions[0].split('"')
+        if len(top) >= 2:  # a working provenance pointer for the most recent subject
+            print(f'  daryl source --subject "{top[1]}"   # provenance + receipts')
+    return 0
+
+
+def cmd_source(args: argparse.Namespace) -> int:
+    """Show a conversation's source map — the boundary receipt and its authoritative ordered
+    turn receipts (provenance). Derived, read-only; keyed by subject_id."""
+    try:
+        config = _resolve_store_config(args)
+        rr_dir = args.rr_index_dir or (Path(config.storage_dir) / "_rr_index")
+        query = SourceMapQuery(open_storage(config), rr_dir)
+        print(render_source_map(query.project(args.subject)))
+    except PRLError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
     return 0
 
 
@@ -197,6 +231,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_init(args)
     if args.command == "import":
         return cmd_import(args)
+    if args.command == "source":
+        return cmd_source(args)
     return dispatch(args)  # every shared verb runs the identical prl handler
 
 
