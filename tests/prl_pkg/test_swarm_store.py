@@ -272,14 +272,18 @@ def test_writer_refuses_wrong_version(tmp_path):
 def test_writer_refuses_prl_and_unknown_actions(tmp_path):
     store = _store(tmp_path)
     base = to_swarm_entry(_run())
-    for action in ("prl.consultation", "prl.project", "swarm.decision", "anything"):
+    for action in ("prl.consultation", "prl.project", "swarm.memory_candidate", "anything"):
         bad = base.model_copy(
             update={"metadata": {**base.metadata, "action_name": action}}
         )
         with pytest.raises(PRLValidationError, match="closed"):
             store.commit_swarm_entry(bad)
     assert _shard_count(store) == 0
-    assert SWARM_ACTIONS == {"swarm.run", "swarm.task"}  # closed set, v0.1 slice
+    # closed set, v0.1 semantic core: memory_candidate / context_grant deferred
+    assert SWARM_ACTIONS == {
+        "swarm.run", "swarm.task", "swarm.work", "swarm.review",
+        "swarm.decision", "swarm.conflict",
+    }
 
 
 def test_writer_refuses_wrong_schema_version_metadata(tmp_path):
@@ -341,6 +345,164 @@ def test_writer_refuses_handcrafted_arbitrary_draft(tmp_path):
     with pytest.raises(PRLValidationError):
         store.commit_swarm_entry(draft)
     assert len(store._storage.read("swarm_x", limit=10)) == 0
+
+
+# --- semantic core: every new action through the bounded writer -------------
+
+
+def test_writer_accepts_all_semantic_core_actions(tmp_path):
+    from prl.swarm import ConflictRecord, DecisionReceipt, ReviewReceipt, WorkReceipt
+
+    store = _store(tmp_path)
+    records = [
+        _run(),
+        _task(),
+        WorkReceipt(
+            work_id="work:t-1",
+            swarm_run_id=RUN_ID,
+            claimed_actions=("edited file",),
+            task_node_id="task:t-1",
+            agent_id="agent:worker-alpha",
+            created_at="2026-07-21T10:00:03.000Z",
+        ),
+        ReviewReceipt(
+            review_id="review:t-1",
+            swarm_run_id=RUN_ID,
+            reviewed_ref="work:t-1",
+            lens="correctness",
+            verdict="approve",
+            created_at="2026-07-21T10:00:04.000Z",
+        ),
+        DecisionReceipt(
+            decision_id="dec:t-1",
+            swarm_run_id=RUN_ID,
+            subject_id="subject:t",
+            decision="accept the work",
+            status="accepted",
+            created_at="2026-07-21T10:00:05.000Z",
+        ),
+        ConflictRecord(
+            conflict_id="conf:t-1",
+            swarm_run_id=RUN_ID,
+            competing_refs=("dec:t-1", "work:t-1"),
+            conflict_type="decision",
+            state="open",
+            created_at="2026-07-21T10:00:06.000Z",
+        ),
+    ]
+    actions = [store.commit_swarm_entry(to_swarm_entry(r)).action_name for r in records]
+    assert actions == [
+        "swarm.run", "swarm.task", "swarm.work",
+        "swarm.review", "swarm.decision", "swarm.conflict",
+    ]
+    entries = list(reversed(store._storage.read(SHARD, limit=10)))
+    assert len(entries) == 6
+    assert all(e.metadata["kernel_version"] == "1.0" for e in entries)
+    for e, nxt in zip(entries, entries[1:]):
+        assert nxt.prev_hash == e.hash
+
+
+def test_writer_refuses_new_action_kind_mismatch(tmp_path):
+    from prl.swarm import WorkReceipt
+
+    store = _store(tmp_path)
+    work = WorkReceipt(
+        work_id="work:t-1",
+        swarm_run_id=RUN_ID,
+        claimed_actions=("x",),
+    )
+    draft = to_swarm_entry(work)
+    bad = draft.model_copy(
+        update={"metadata": {**draft.metadata, "action_name": "swarm.review"}}
+    )
+    with pytest.raises(PRLValidationError):
+        store.commit_swarm_entry(bad)
+    assert _shard_count(store) == 0
+
+
+# --- integrated scenario: append -> RR -> projection -> verify -> tamper -----
+
+
+def test_full_semantic_scenario_on_real_kernel(tmp_path):
+    from prl.swarm import DecisionReceipt, ReviewReceipt, WorkReceipt, project_run
+
+    store = _store(tmp_path)
+    records = [
+        _run(),
+        _task(),
+        WorkReceipt(
+            work_id="work:t-1",
+            swarm_run_id=RUN_ID,
+            claimed_actions=("implemented the slice",),
+            task_node_id="task:t-1",
+            agent_id="agent:worker-alpha",
+            required_checks=("pytest", "ruff"),
+            claimed_checks=("pytest",),
+            limitations=("no integration test",),
+            created_at="2026-07-21T10:00:03.000Z",
+        ),
+        ReviewReceipt(
+            review_id="review:t-1",
+            swarm_run_id=RUN_ID,
+            reviewed_ref="work:t-1",
+            lens="correctness",
+            reviewer_agent_id="agent:reviewer-beta",
+            verdict="approve",
+            limitations=("saw only the diff",),
+            created_at="2026-07-21T10:00:04.000Z",
+        ),
+        DecisionReceipt(
+            decision_id="dec:t-1",
+            swarm_run_id=RUN_ID,
+            subject_id="subject:t",
+            decision="ship the slice",
+            status="accepted",
+            task_node_id="task:t-1",
+            evidence_refs=("work:t-1", "review:t-1"),
+            agent_id="agent:planner",
+            created_at="2026-07-21T10:00:05.000Z",
+        ),
+    ]
+    for r in records:
+        store.commit_swarm_entry(to_swarm_entry(r))
+
+    # RR replay: authoritative order = navigate_action, join by entry_id
+    builder = RRIndexBuilder(
+        storage=store._storage, index_dir=str(store._storage.data_dir / "rr_index")
+    )
+    builder.build()
+    nav = RRNavigator(builder, store._storage)
+    recs: list[dict] = []
+    for action in sorted(SWARM_ACTIONS):
+        recs.extend(nav.navigate_action(action))
+    recs.sort(key=lambda r: r["timestamp"])  # global authoritative order
+    by_id = {e.id: e for e in nav.resolve_entries(recs)}
+    decoded = [from_swarm_entry(by_id[r["entry_id"]]) for r in recs]
+
+    proj = project_run(decoded)
+    assert proj.swarm_run_id == RUN_ID and proj.run_status == "open"
+    view = proj.tasks["task:t-1"]
+    assert view.work_state == "work_reviewed"
+    assert view.review_signal == "positive"
+    assert view.decision_ids == ("dec:t-1",)
+    assert proj.decisions["dec:t-1"].status == "accepted"
+    cov = proj.check_coverage["work:t-1"]
+    assert cov.missing == ("ruff",) and cov.ratio == 0.5
+    assert any(d.kind == "required_checks_uncovered" for d in proj.derived_conflicts)
+    assert ("work:t-1", "no integration test") in proj.limitations
+
+    report = verify_shard(store._storage, SHARD)
+    assert report["status"] == VerifyStatus.OK
+    assert report["verified"] == report["total_entries"] == 5
+
+    seg = [
+        p
+        for p in store._storage.data_dir.rglob(f"*{SHARD}*")
+        if p.is_file() and "integrity" not in str(p)
+    ][0]
+    raw = seg.read_bytes()
+    seg.write_bytes(raw.replace(b"ship the slice", b"SHIP THE SLICE", 1))
+    assert verify_shard(store._storage, SHARD)["status"] == VerifyStatus.TAMPERED
 
 
 # --- PRL coexistence (point 19 spot-check; full suite runs in CI) -----------
