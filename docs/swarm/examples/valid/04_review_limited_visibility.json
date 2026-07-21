@@ -1,0 +1,20 @@
+{
+  "action_name": "swarm.review",
+  "payload": {
+    "created_at": "2026-07-21T09:00:03.000Z",
+    "evidence_visible": [
+      "diff only"
+    ],
+    "kind": "review",
+    "lens": "correctness",
+    "limitations": [
+      "did not execute the code"
+    ],
+    "review_id": "review:ex-1",
+    "reviewed_ref": "work:ex-1",
+    "reviewer_agent_id": "agent:reviewer-beta",
+    "schema_version": "swarm.v0.1",
+    "swarm_run_id": "swarm_run_ex01",
+    "verdict": "approve"
+  }
+}

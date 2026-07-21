@@ -1,0 +1,14 @@
+{
+  "action_name": "swarm.review",
+  "payload": {
+    "kind": "review",
+    "lens": "correctness",
+    "review_id": "review:bad",
+    "reviewed_ref": "work:ex-1",
+    "schema_version": "swarm.v0.1",
+    "swarm_run_id": "swarm_run_ex01",
+    "verdict": "looks_good_to_me"
+  },
+  "reason": "verdict vocabulary is closed (approve/reject/inconclusive) so divergence stays derivable",
+  "reject_at": "model"
+}

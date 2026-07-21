@@ -1,0 +1,35 @@
+{
+  "expected_diagnostics": [
+    "self_supersession"
+  ],
+  "reason": "a record may not supersede itself",
+  "records": [
+    {
+      "action_name": "swarm.run",
+      "payload": {
+        "kind": "run",
+        "objective": "focused examples for the v0.1 semantic core",
+        "orchestrator_id": "agent:orch",
+        "schema_version": "swarm.v0.1",
+        "started_at": "2026-07-21T09:00:00.000Z",
+        "status": "open",
+        "subject_id": "subject:examples",
+        "swarm_run_id": "swarm_run_ex01"
+      }
+    },
+    {
+      "action_name": "swarm.decision",
+      "payload": {
+        "created_at": "2026-07-21T09:00:04.000Z",
+        "decision": "d",
+        "decision_id": "dec:a",
+        "kind": "decision",
+        "schema_version": "swarm.v0.1",
+        "status": "accepted",
+        "subject_id": "subject:examples",
+        "supersedes": "dec:a",
+        "swarm_run_id": "swarm_run_ex01"
+      }
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "action_name": "swarm.decision",
+  "payload": {
+    "agent_id": "agent:planner",
+    "created_at": "2026-07-21T09:00:04.000Z",
+    "decision": "use approach B instead of A",
+    "decision_id": "dec:ex-2",
+    "kind": "decision",
+    "rationale": "approach A fails on unicode input",
+    "schema_version": "swarm.v0.1",
+    "status": "accepted",
+    "subject_id": "subject:examples",
+    "supersedes": "dec:ex-1",
+    "swarm_run_id": "swarm_run_ex01"
+  }
+}

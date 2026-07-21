@@ -1,0 +1,14 @@
+{
+  "action_name": "swarm.decision",
+  "payload": {
+    "decision": "x",
+    "decision_id": "dec:bad",
+    "kind": "decision",
+    "schema_version": "swarm.v0.1",
+    "status": "conflicted",
+    "subject_id": "s",
+    "swarm_run_id": "swarm_run_ex01"
+  },
+  "reason": "'conflicted' is a DERIVED overlay, never a stored status",
+  "reject_at": "model"
+}

@@ -1,0 +1,18 @@
+{
+  "action_name": "swarm.run",
+  "envelope_overrides": {
+    "version": "prl.v1"
+  },
+  "payload": {
+    "kind": "run",
+    "objective": "x",
+    "orchestrator_id": "o",
+    "schema_version": "swarm.v0.1",
+    "started_at": "2026-07-21T09:00:00.000Z",
+    "status": "open",
+    "subject_id": "s",
+    "swarm_run_id": "swarm_run_ex01"
+  },
+  "reason": "envelope version must be swarm.v0.1",
+  "reject_at": "writer"
+}

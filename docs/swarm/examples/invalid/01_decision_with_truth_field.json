@@ -1,0 +1,15 @@
+{
+  "action_name": "swarm.decision",
+  "payload": {
+    "decision": "x",
+    "decision_id": "dec:bad",
+    "kind": "decision",
+    "schema_version": "swarm.v0.1",
+    "status": "accepted",
+    "subject_id": "s",
+    "swarm_run_id": "swarm_run_ex01",
+    "verified_truth": true
+  },
+  "reason": "unknown field: no record may carry a truth claim (extra='forbid')",
+  "reject_at": "model"
+}

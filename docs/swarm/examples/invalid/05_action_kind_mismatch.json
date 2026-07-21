@@ -1,0 +1,14 @@
+{
+  "action_name": "swarm.review",
+  "payload": {
+    "claimed_actions": [
+      "x"
+    ],
+    "kind": "work",
+    "schema_version": "swarm.v0.1",
+    "swarm_run_id": "swarm_run_ex01",
+    "work_id": "work:bad"
+  },
+  "reason": "a valid WORK payload may not travel under the review action",
+  "reject_at": "writer"
+}

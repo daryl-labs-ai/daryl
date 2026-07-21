@@ -1,0 +1,17 @@
+{
+  "action_name": "swarm.conflict",
+  "payload": {
+    "competing_refs": [
+      "a",
+      "b"
+    ],
+    "conflict_id": "conf:bad",
+    "conflict_type": "decision",
+    "kind": "conflict",
+    "schema_version": "swarm.v0.1",
+    "state": "resolved",
+    "swarm_run_id": "swarm_run_ex01"
+  },
+  "reason": "'resolved' requires an explicit resolution_ref",
+  "reject_at": "model"
+}

@@ -1,0 +1,60 @@
+{
+  "expected_diagnostics": [
+    "required_checks_uncovered"
+  ],
+  "reason": "claimed completion with uncovered required checks is a derived conflict; coverage is computed, never author-supplied",
+  "records": [
+    {
+      "action_name": "swarm.run",
+      "payload": {
+        "kind": "run",
+        "objective": "focused examples for the v0.1 semantic core",
+        "orchestrator_id": "agent:orch",
+        "schema_version": "swarm.v0.1",
+        "started_at": "2026-07-21T09:00:00.000Z",
+        "status": "open",
+        "subject_id": "subject:examples",
+        "swarm_run_id": "swarm_run_ex01"
+      }
+    },
+    {
+      "action_name": "swarm.task",
+      "payload": {
+        "assigned_agent_id": "agent:worker-alpha",
+        "assigned_carrier": {
+          "model": "claude-fable-5",
+          "provider": "anthropic"
+        },
+        "created_at": "2026-07-21T09:00:01.000Z",
+        "kind": "task",
+        "objective": "implement the feature",
+        "role": "worker",
+        "schema_version": "swarm.v0.1",
+        "status": "delegated",
+        "swarm_run_id": "swarm_run_ex01",
+        "task_node_id": "task:ex-1"
+      }
+    },
+    {
+      "action_name": "swarm.work",
+      "payload": {
+        "claimed_actions": [
+          "did everything"
+        ],
+        "claimed_checks": [
+          "pytest"
+        ],
+        "kind": "work",
+        "required_checks": [
+          "pytest",
+          "ruff",
+          "bandit"
+        ],
+        "schema_version": "swarm.v0.1",
+        "swarm_run_id": "swarm_run_ex01",
+        "task_node_id": "task:ex-1",
+        "work_id": "work:x"
+      }
+    }
+  ]
+}

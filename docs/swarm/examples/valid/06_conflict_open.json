@@ -1,0 +1,17 @@
+{
+  "action_name": "swarm.conflict",
+  "payload": {
+    "competing_refs": [
+      "dec:ex-1",
+      "dec:ex-2"
+    ],
+    "conflict_id": "conf:ex-1",
+    "conflict_type": "decision",
+    "created_at": "2026-07-21T09:00:05.000Z",
+    "detected_by": "derived",
+    "kind": "conflict",
+    "schema_version": "swarm.v0.1",
+    "state": "open",
+    "swarm_run_id": "swarm_run_ex01"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "envelope": "dsm.Entry (discriminated by metadata.action_name)",
+  "records": {
+    "swarm.conflict": "swarm_conflict.schema.json",
+    "swarm.decision": "swarm_decision.schema.json",
+    "swarm.review": "swarm_review.schema.json",
+    "swarm.run": "swarm_run.schema.json",
+    "swarm.task": "swarm_task.schema.json",
+    "swarm.work": "swarm_work.schema.json"
+  },
+  "schema_version": "swarm.v0.1"
+}

@@ -1,0 +1,105 @@
+{
+  "additionalProperties": false,
+  "description": "An explicitly observed incompatibility between records \u2014 recorded,\nNEVER auto-resolved (a conflict record captures the divergence, not its\nresolution). ``state == 'resolved'`` requires an explicit\n``resolution_ref`` naming the resolving act.",
+  "properties": {
+    "affected_tasks": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Affected Tasks",
+      "type": "array"
+    },
+    "competing_refs": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Competing Refs",
+      "type": "array"
+    },
+    "conflict_id": {
+      "title": "Conflict Id",
+      "type": "string"
+    },
+    "conflict_type": {
+      "enum": [
+        "decision",
+        "rule",
+        "context",
+        "work_product",
+        "other"
+      ],
+      "title": "Conflict Type",
+      "type": "string"
+    },
+    "created_at": {
+      "title": "Created At",
+      "type": "string"
+    },
+    "detected_by": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Detected By"
+    },
+    "kind": {
+      "const": "conflict",
+      "default": "conflict",
+      "title": "Kind",
+      "type": "string"
+    },
+    "resolution_ref": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Resolution Ref"
+    },
+    "schema_version": {
+      "default": "swarm.v0.1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "state": {
+      "enum": [
+        "open",
+        "acknowledged",
+        "resolved"
+      ],
+      "title": "State",
+      "type": "string"
+    },
+    "supporting_evidence": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Supporting Evidence",
+      "type": "array"
+    },
+    "swarm_run_id": {
+      "title": "Swarm Run Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "conflict_id",
+    "swarm_run_id",
+    "competing_refs",
+    "conflict_type",
+    "state"
+  ],
+  "title": "ConflictRecord",
+  "type": "object"
+}
