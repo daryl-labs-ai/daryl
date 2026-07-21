@@ -1,0 +1,33 @@
+{
+  "expected_diagnostics": [
+    "review_of_unknown_ref"
+  ],
+  "reason": "a review of a nonexistent object is a derived gap, not an error to hide",
+  "records": [
+    {
+      "action_name": "swarm.run",
+      "payload": {
+        "kind": "run",
+        "objective": "focused examples for the v0.1 semantic core",
+        "orchestrator_id": "agent:orch",
+        "schema_version": "swarm.v0.1",
+        "started_at": "2026-07-21T09:00:00.000Z",
+        "status": "open",
+        "subject_id": "subject:examples",
+        "swarm_run_id": "swarm_run_ex01"
+      }
+    },
+    {
+      "action_name": "swarm.review",
+      "payload": {
+        "kind": "review",
+        "lens": "correctness",
+        "review_id": "review:x",
+        "reviewed_ref": "work:ghost",
+        "schema_version": "swarm.v0.1",
+        "swarm_run_id": "swarm_run_ex01",
+        "verdict": "approve"
+      }
+    }
+  ]
+}

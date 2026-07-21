@@ -15,12 +15,16 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from importlib import resources
 
 from dsm.core.models import Entry
 from dsm.core.storage import Storage
 
 from ..config import PRLConfig
+from ..exceptions import PRLValidationError
 from ..index.mapper import ProjectMap
+from ..swarm.types import SCHEMA_VERSION as SWARM_SCHEMA_VERSION
+from ..swarm.types import SWARM_ACTION, SWARM_ACTIONS, from_swarm_entry
 from ..types import EntryDraft, PRLNode, to_entry
 
 
@@ -95,6 +99,101 @@ class CommitResult:
     tip_hash: str  # hash of the last appended entry (shard chain tip after commit)
 
 
+# ---------------------------------------------------------------------------
+# Swarm bounded append (v0.1) — the ONE physical Storage.append call site for
+# swarm records, kept in this already-registered LEGITIMATE_WRITERS module.
+# ---------------------------------------------------------------------------
+
+_kernel_version_cache: str | None = None
+
+
+def _dsm_kernel_version() -> str:
+    """Read the real frozen-kernel version from the packaged marker file
+    ``dsm/core/KERNEL_VERSION`` (line ``DSM_KERNEL_VERSION = "<v>"``).
+
+    The value is stamped into ``metadata['kernel_version']`` of every swarm
+    entry at the append boundary — the writer is the kernel-facing module, so
+    the kernel version is a write-time fact, not a pure-model concern. Cached
+    after first read; raises :class:`PRLValidationError` if the marker cannot
+    be resolved (never silently ``"unknown"``).
+    """
+    global _kernel_version_cache
+    if _kernel_version_cache is None:
+        try:
+            text = (resources.files("dsm.core") / "KERNEL_VERSION").read_text()
+            line = next(
+                ln for ln in text.splitlines() if ln.startswith("DSM_KERNEL_VERSION")
+            )
+            _kernel_version_cache = line.split("=", 1)[1].strip().strip('"')
+        except (OSError, StopIteration, IndexError) as exc:
+            raise PRLValidationError(
+                f"cannot resolve DSM_KERNEL_VERSION from dsm/core/KERNEL_VERSION: {exc}"
+            ) from exc
+    return _kernel_version_cache
+
+
+@dataclass(frozen=True)
+class SwarmActResult:
+    """Result of committing a single swarm record (bounded write path v0.1)."""
+
+    swarm_run_id: str
+    shard: str
+    action_name: str
+    entry_id: str
+    tip_hash: str  # hash of the appended entry (certification: hash + prev_hash chain)
+
+
+def _validate_swarm_draft(draft: EntryDraft) -> str:
+    """Bounded-writer gate: refuse anything that is not a validated swarm
+    draft. Returns the draft's ``action_name``. Raises
+    :class:`PRLValidationError` BEFORE any append on the first violation.
+
+    Checks (closed by construction — the action set lives in
+    ``prl.swarm.types`` only):
+      * ``source == "swarm"`` — no PRL/arbitrary source may borrow this path;
+      * ``version`` and ``metadata['schema_version']`` == ``swarm.v0.1``;
+      * ``metadata['action_name']`` ∈ the closed ``SWARM_ACTIONS`` set;
+      * ``content`` re-validates against the swarm model for that action
+        (``from_swarm_entry`` — the payload is proven, not trusted);
+      * the decoded record's kind maps back to the same action, and its
+        ``swarm_run_id`` matches ``session_id`` (run-scoped replay integrity).
+    """
+    if draft.source != "swarm":
+        raise PRLValidationError(
+            f"commit_swarm_entry: draft.source must be 'swarm', got {draft.source!r}"
+        )
+    if draft.version != SWARM_SCHEMA_VERSION:
+        raise PRLValidationError(
+            f"commit_swarm_entry: draft.version must be {SWARM_SCHEMA_VERSION!r}, "
+            f"got {draft.version!r}"
+        )
+    metadata = draft.metadata or {}
+    action = metadata.get("action_name")
+    if action not in SWARM_ACTIONS:
+        raise PRLValidationError(
+            f"commit_swarm_entry: action_name {action!r} is not in the closed "
+            f"swarm action set {sorted(SWARM_ACTIONS)}"
+        )
+    if metadata.get("schema_version") != SWARM_SCHEMA_VERSION:
+        raise PRLValidationError(
+            f"commit_swarm_entry: metadata['schema_version'] must be "
+            f"{SWARM_SCHEMA_VERSION!r}, got {metadata.get('schema_version')!r}"
+        )
+    record = from_swarm_entry(draft)  # raises if the payload fails its model
+    if SWARM_ACTION[record.kind] != action:
+        raise PRLValidationError(
+            f"commit_swarm_entry: payload kind {record.kind!r} does not match "
+            f"action_name {action!r}"
+        )
+    run_id = getattr(record, "swarm_run_id", None)
+    if run_id != draft.session_id:
+        raise PRLValidationError(
+            f"commit_swarm_entry: session_id {draft.session_id!r} must equal the "
+            f"record's swarm_run_id {run_id!r}"
+        )
+    return action
+
+
 @dataclass(frozen=True)
 class ActResult:
     """Result of committing a single Knowledge Act (e.g. a consultation, ADR-PRL-0008)."""
@@ -152,3 +251,34 @@ class PRLStore:
         written = self._storage.append(_draft_to_entry(draft))
         act_id = getattr(node, "consultation_id", "") or ""
         return ActResult(run_id=run_id, shard=shard, act_id=act_id, tip_hash=written.hash)
+
+    def commit_swarm_entry(self, draft: EntryDraft) -> SwarmActResult:
+        """Append ONE validated swarm :class:`EntryDraft` (bounded path, v0.1).
+
+        This is deliberately NOT a general ``commit_draft``: it accepts only
+        drafts produced by ``prl.swarm.types.to_swarm_entry`` — source
+        ``"swarm"``, contract version ``swarm.v0.1``, an ``action_name`` from
+        the closed swarm set, and a payload that re-validates against the
+        corresponding swarm model (:func:`_validate_swarm_draft`). Any other
+        draft is refused with :class:`PRLValidationError` before any append.
+
+        The real ``DSM_KERNEL_VERSION`` is stamped into
+        ``metadata['kernel_version']`` here, at the kernel boundary. Same write
+        path as :meth:`commit_map` / :meth:`commit_act` (``Storage.append`` in
+        this registered writer module), so the record is certified (hash +
+        prev_hash chain) and readable via RR by its ``action_name``.
+        """
+        action = _validate_swarm_draft(draft)
+        stamped = draft.model_copy(
+            update={
+                "metadata": {**draft.metadata, "kernel_version": _dsm_kernel_version()}
+            }
+        )
+        written = self._storage.append(_draft_to_entry(stamped))
+        return SwarmActResult(
+            swarm_run_id=draft.session_id,
+            shard=draft.shard,
+            action_name=action,
+            entry_id=written.id,
+            tip_hash=written.hash,
+        )

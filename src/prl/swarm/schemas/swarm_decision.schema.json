@@ -1,0 +1,312 @@
+{
+  "$defs": {
+    "Carrier": {
+      "additionalProperties": false,
+      "description": "The execution **carrier-of-record** (ADR-PRL-0009): *what executed* an act, kept\nalongside the logical ``agent_id`` \u2014 never its source. ``provider`` names the carrier\n(``openai`` / ``anthropic`` / ``local`` / ``human``); ``model`` / ``adapter`` are null\nfor a human contributor. The *type* (human vs agent) lives here, not in ``agent_id``.",
+      "properties": {
+        "adapter": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Adapter"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        },
+        "provider": {
+          "title": "Provider",
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider"
+      ],
+      "title": "Carrier",
+      "type": "object"
+    },
+    "MEF": {
+      "additionalProperties": false,
+      "description": "Minimal Epistemic Frame (ADR-PRL-0004 Ch2) \u2014 the non-strippable transport\ncontract. The historical fields are required: a record cannot be constructed without a\ncomplete MEF, so \"MEF complete or refuse\" is enforced by the type, not by a\nconvention. ``regime`` is a free string here (its exact taxonomy is ADR-0003 /\nopen question 8.a \u2014 not canonized at this layer).\n\nADR-PRL-0009 adds the **structured contributor attribution**: ``agent_id`` (the stable\nlogical contributor, frame-level \u2014 *who contributes?*) and ``carrier`` (the execution\ncarrier-of-record). Both are **optional** so acts written before 0009 still read with\n``agent_id = None`` (no read-time inference, unknown means unknown). New acts MUST set\n``agent_id`` at the producer. ``agent_id`` is never derived from the carrier.",
+      "properties": {
+        "agent_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Agent Id"
+        },
+        "carrier": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Carrier"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "claim_id": {
+          "title": "Claim Id",
+          "type": "string"
+        },
+        "confidence": {
+          "title": "Confidence",
+          "type": "number"
+        },
+        "contested": {
+          "title": "Contested",
+          "type": "boolean"
+        },
+        "producer": {
+          "title": "Producer",
+          "type": "string"
+        },
+        "regime": {
+          "title": "Regime",
+          "type": "string"
+        }
+      },
+      "required": [
+        "claim_id",
+        "regime",
+        "confidence",
+        "contested",
+        "producer"
+      ],
+      "title": "MEF",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "A decision and its declared bases \u2014 NOT a truth certificate about the\nworld (``decision != truth``). Stored ``status`` never includes\n``conflicted``; conflict is derived by replay. ``supersedes`` declares a\nreplacement by id \u2014 it never deletes or rewrites the older record, and its\neffect (latest-wins) is applied only by the replay projection when the\nsupersession chain is valid and unambiguous.",
+  "properties": {
+    "affected_components": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Affected Components",
+      "type": "array"
+    },
+    "agent_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Agent Id"
+    },
+    "alternatives_considered": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Alternatives Considered",
+      "type": "array"
+    },
+    "carrier": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Carrier"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "confidence": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Confidence"
+    },
+    "created_at": {
+      "title": "Created At",
+      "type": "string"
+    },
+    "decision": {
+      "title": "Decision",
+      "type": "string"
+    },
+    "decision_id": {
+      "title": "Decision Id",
+      "type": "string"
+    },
+    "declared_invariants": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Declared Invariants",
+      "type": "array"
+    },
+    "evidence_refs": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Evidence Refs",
+      "type": "array"
+    },
+    "kind": {
+      "const": "decision",
+      "default": "decision",
+      "title": "Kind",
+      "type": "string"
+    },
+    "mef": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/MEF"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "parent_decision_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Parent Decision Id"
+    },
+    "rationale": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Rationale"
+    },
+    "role": {
+      "anyOf": [
+        {
+          "enum": [
+            "planner",
+            "worker",
+            "reviewer",
+            "reconciler",
+            "other"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Role"
+    },
+    "schema_version": {
+      "default": "swarm.v0.1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "scope": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Scope"
+    },
+    "status": {
+      "enum": [
+        "proposed",
+        "accepted",
+        "superseded",
+        "rejected"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "subject_id": {
+      "title": "Subject Id",
+      "type": "string"
+    },
+    "supersedes": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Supersedes"
+    },
+    "swarm_run_id": {
+      "title": "Swarm Run Id",
+      "type": "string"
+    },
+    "task_node_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Task Node Id"
+    }
+  },
+  "required": [
+    "decision_id",
+    "swarm_run_id",
+    "subject_id",
+    "decision",
+    "status"
+  ],
+  "title": "DecisionReceipt",
+  "type": "object"
+}

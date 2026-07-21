@@ -1,0 +1,157 @@
+{
+  "$defs": {
+    "Carrier": {
+      "additionalProperties": false,
+      "description": "The execution **carrier-of-record** (ADR-PRL-0009): *what executed* an act, kept\nalongside the logical ``agent_id`` \u2014 never its source. ``provider`` names the carrier\n(``openai`` / ``anthropic`` / ``local`` / ``human``); ``model`` / ``adapter`` are null\nfor a human contributor. The *type* (human vs agent) lives here, not in ``agent_id``.",
+      "properties": {
+        "adapter": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Adapter"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        },
+        "provider": {
+          "title": "Provider",
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider"
+      ],
+      "title": "Carrier",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "A delegated unit of work. Parentage is recorded delegation, not causal\ncertainty (``task parentage != causal certainty``).",
+  "properties": {
+    "acceptance_criteria": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Acceptance Criteria",
+      "type": "array"
+    },
+    "assigned_agent_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Assigned Agent Id"
+    },
+    "assigned_carrier": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Carrier"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "created_at": {
+      "title": "Created At",
+      "type": "string"
+    },
+    "dependencies": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Dependencies",
+      "type": "array"
+    },
+    "kind": {
+      "const": "task",
+      "default": "task",
+      "title": "Kind",
+      "type": "string"
+    },
+    "objective": {
+      "title": "Objective",
+      "type": "string"
+    },
+    "parent_task_node_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Parent Task Node Id"
+    },
+    "role": {
+      "enum": [
+        "planner",
+        "worker",
+        "reviewer",
+        "reconciler",
+        "other"
+      ],
+      "title": "Role",
+      "type": "string"
+    },
+    "schema_version": {
+      "default": "swarm.v0.1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "delegated",
+        "in_progress",
+        "claimed_done",
+        "accepted",
+        "abandoned",
+        "blocked"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "swarm_run_id": {
+      "title": "Swarm Run Id",
+      "type": "string"
+    },
+    "task_node_id": {
+      "title": "Task Node Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "task_node_id",
+    "swarm_run_id",
+    "role",
+    "objective",
+    "status"
+  ],
+  "title": "TaskNode",
+  "type": "object"
+}

@@ -1,0 +1,32 @@
+{
+  "action_name": "swarm.work",
+  "payload": {
+    "actual_checks": [
+      {
+        "name": "pytest",
+        "outcome": "pass"
+      }
+    ],
+    "agent_id": "agent:worker-alpha",
+    "claimed_actions": [
+      "edited parser.py",
+      "added unit test"
+    ],
+    "claimed_checks": [
+      "pytest"
+    ],
+    "created_at": "2026-07-21T09:00:02.000Z",
+    "kind": "work",
+    "limitations": [
+      "did not run the integration suite"
+    ],
+    "required_checks": [
+      "pytest",
+      "ruff"
+    ],
+    "schema_version": "swarm.v0.1",
+    "swarm_run_id": "swarm_run_ex01",
+    "task_node_id": "task:ex-1",
+    "work_id": "work:ex-1"
+  }
+}

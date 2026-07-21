@@ -1,0 +1,274 @@
+{
+  "$defs": {
+    "Carrier": {
+      "additionalProperties": false,
+      "description": "The execution **carrier-of-record** (ADR-PRL-0009): *what executed* an act, kept\nalongside the logical ``agent_id`` \u2014 never its source. ``provider`` names the carrier\n(``openai`` / ``anthropic`` / ``local`` / ``human``); ``model`` / ``adapter`` are null\nfor a human contributor. The *type* (human vs agent) lives here, not in ``agent_id``.",
+      "properties": {
+        "adapter": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Adapter"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        },
+        "provider": {
+          "title": "Provider",
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider"
+      ],
+      "title": "Carrier",
+      "type": "object"
+    },
+    "CheckResult": {
+      "additionalProperties": false,
+      "description": "One captured check result (``WorkReceipt.actual_checks``).",
+      "properties": {
+        "evidence_ref": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Evidence Ref"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "outcome": {
+          "enum": [
+            "pass",
+            "fail",
+            "error",
+            "skipped"
+          ],
+          "title": "Outcome",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "outcome"
+      ],
+      "title": "CheckResult",
+      "type": "object"
+    },
+    "MEF": {
+      "additionalProperties": false,
+      "description": "Minimal Epistemic Frame (ADR-PRL-0004 Ch2) \u2014 the non-strippable transport\ncontract. The historical fields are required: a record cannot be constructed without a\ncomplete MEF, so \"MEF complete or refuse\" is enforced by the type, not by a\nconvention. ``regime`` is a free string here (its exact taxonomy is ADR-0003 /\nopen question 8.a \u2014 not canonized at this layer).\n\nADR-PRL-0009 adds the **structured contributor attribution**: ``agent_id`` (the stable\nlogical contributor, frame-level \u2014 *who contributes?*) and ``carrier`` (the execution\ncarrier-of-record). Both are **optional** so acts written before 0009 still read with\n``agent_id = None`` (no read-time inference, unknown means unknown). New acts MUST set\n``agent_id`` at the producer. ``agent_id`` is never derived from the carrier.",
+      "properties": {
+        "agent_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Agent Id"
+        },
+        "carrier": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Carrier"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "claim_id": {
+          "title": "Claim Id",
+          "type": "string"
+        },
+        "confidence": {
+          "title": "Confidence",
+          "type": "number"
+        },
+        "contested": {
+          "title": "Contested",
+          "type": "boolean"
+        },
+        "producer": {
+          "title": "Producer",
+          "type": "string"
+        },
+        "regime": {
+          "title": "Regime",
+          "type": "string"
+        }
+      },
+      "required": [
+        "claim_id",
+        "regime",
+        "confidence",
+        "contested",
+        "producer"
+      ],
+      "title": "MEF",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "What an agent **claims** to have done \u2014 a work claim, NEVER proof that\nthe work really happened (``work claim != verified work``).\n\n``required_checks`` (what was demanded), ``claimed_checks`` (what the\nauthor says they ran) and ``actual_checks`` (captured results) are three\ndistinct axes and are never merged. There is deliberately NO author-supplied\ncoverage number: coverage is computed by the replay projection\n(``prl.swarm.replay``), never trusted from the author.",
+  "properties": {
+    "actual_checks": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/CheckResult"
+      },
+      "title": "Actual Checks",
+      "type": "array"
+    },
+    "agent_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Agent Id"
+    },
+    "carrier": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Carrier"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "claimed_actions": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Claimed Actions",
+      "type": "array"
+    },
+    "claimed_checks": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Claimed Checks",
+      "type": "array"
+    },
+    "created_at": {
+      "title": "Created At",
+      "type": "string"
+    },
+    "kind": {
+      "const": "work",
+      "default": "work",
+      "title": "Kind",
+      "type": "string"
+    },
+    "limitations": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Limitations",
+      "type": "array"
+    },
+    "mef": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/MEF"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "produced_artifacts": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Produced Artifacts",
+      "type": "array"
+    },
+    "required_checks": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Required Checks",
+      "type": "array"
+    },
+    "schema_version": {
+      "default": "swarm.v0.1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "swarm_run_id": {
+      "title": "Swarm Run Id",
+      "type": "string"
+    },
+    "task_node_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Task Node Id"
+    },
+    "unresolved_issues": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Unresolved Issues",
+      "type": "array"
+    },
+    "work_id": {
+      "title": "Work Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "work_id",
+    "swarm_run_id",
+    "claimed_actions"
+  ],
+  "title": "WorkReceipt",
+  "type": "object"
+}

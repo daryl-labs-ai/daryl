@@ -1,0 +1,108 @@
+{
+  "additionalProperties": false,
+  "description": "One coordinated multi-agent execution (opens the run's shard).",
+  "properties": {
+    "budget_constraints": {
+      "additionalProperties": true,
+      "title": "Budget Constraints",
+      "type": "object"
+    },
+    "ended_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Ended At"
+    },
+    "environment_ref": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Environment Ref"
+    },
+    "kind": {
+      "const": "run",
+      "default": "run",
+      "title": "Kind",
+      "type": "string"
+    },
+    "objective": {
+      "title": "Objective",
+      "type": "string"
+    },
+    "orchestrator_id": {
+      "title": "Orchestrator Id",
+      "type": "string"
+    },
+    "org_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Org Id"
+    },
+    "schema_version": {
+      "default": "swarm.v0.1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "started_at": {
+      "title": "Started At",
+      "type": "string"
+    },
+    "status": {
+      "default": "open",
+      "enum": [
+        "open",
+        "closed",
+        "aborted"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "subject_id": {
+      "title": "Subject Id",
+      "type": "string"
+    },
+    "swarm_run_id": {
+      "title": "Swarm Run Id",
+      "type": "string"
+    },
+    "trace_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Trace Id"
+    }
+  },
+  "required": [
+    "swarm_run_id",
+    "subject_id",
+    "orchestrator_id",
+    "objective"
+  ],
+  "title": "SwarmRun",
+  "type": "object"
+}

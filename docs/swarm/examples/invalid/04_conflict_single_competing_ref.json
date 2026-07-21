@@ -1,0 +1,16 @@
+{
+  "action_name": "swarm.conflict",
+  "payload": {
+    "competing_refs": [
+      "a"
+    ],
+    "conflict_id": "conf:bad",
+    "conflict_type": "decision",
+    "kind": "conflict",
+    "schema_version": "swarm.v0.1",
+    "state": "open",
+    "swarm_run_id": "swarm_run_ex01"
+  },
+  "reason": "a conflict needs >= 2 competing refs",
+  "reject_at": "model"
+}
