@@ -21,16 +21,29 @@ Contract:
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from prl.swarm.types import ACTION_TO_MODEL
 
-from .cases import BenchmarkCase
+from .cases import BenchmarkCase, CaseEvent
 from .eventlog import EventLog, LogEvent
 from .recorder import BaseRecorder, OrchestratorEmitter, RecorderReceipt
 
 
-def walk_case(case: BenchmarkCase, recorder: BaseRecorder) -> tuple[EventLog, list[RecorderReceipt]]:
+def walk_case(
+    case: BenchmarkCase,
+    recorder: BaseRecorder,
+    *,
+    prompt_hash_fn: Callable[[CaseEvent], str] | None = None,
+) -> tuple[EventLog, list[RecorderReceipt]]:
     """Execute the case script under one condition. Returns the common event
-    log (walk-owned) and the recorder receipts (condition-owned)."""
+    log (walk-owned) and the recorder receipts (condition-owned).
+
+    ``prompt_hash_fn`` (B3 runner) supplies the EFFECTIVE prompt hash journaled
+    for a step (``""`` = no provider interaction for that step). The walk stays
+    the single definition of journaling semantics; the runner only injects the
+    prompt/provider concern through this hook.
+    """
     log = EventLog()
     receipts: list[RecorderReceipt] = []
     for event in case.events:
@@ -42,6 +55,7 @@ def walk_case(case: BenchmarkCase, recorder: BaseRecorder) -> tuple[EventLog, li
                 task_ref=event.task_ref,
                 attempt=event.attempt,
                 note=event.log_note,
+                prompt_hash=prompt_hash_fn(event) if prompt_hash_fn else "",
                 payload=dict(event.emit.payload) if event.emit else {},
             )
         )
