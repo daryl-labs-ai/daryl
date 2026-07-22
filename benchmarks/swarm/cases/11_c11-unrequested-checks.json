@@ -1,0 +1,167 @@
+{
+  "case_id": "c11-unrequested-checks",
+  "events": [
+    {
+      "attempt": 1,
+      "emit": {
+        "action_name": "swarm.run",
+        "payload": {
+          "objective": "benchmark case",
+          "orchestrator_id": "orch:bench-v1",
+          "started_at": "2026-07-22T10:00:00.000Z",
+          "status": "open",
+          "subject_id": "subject:bench",
+          "swarm_run_id": "swarm_run_c11"
+        }
+      },
+      "log_note": "run opened",
+      "role": "orchestrator",
+      "seq": 1,
+      "step_kind": "run_setup",
+      "task_ref": ""
+    },
+    {
+      "attempt": 1,
+      "log_note": "planner decomposes",
+      "role": "planner",
+      "seq": 2,
+      "step_kind": "plan",
+      "task_ref": ""
+    },
+    {
+      "attempt": 1,
+      "emit": {
+        "action_name": "swarm.task",
+        "payload": {
+          "assigned_agent_id": "agent:worker-1",
+          "assigned_carrier": {
+            "model": "fake-worker-1",
+            "provider": "fake"
+          },
+          "created_at": "2026-07-22T10:00:01.000Z",
+          "objective": "implement the subtask",
+          "role": "worker",
+          "status": "delegated",
+          "swarm_run_id": "swarm_run_c11",
+          "task_node_id": "task:1"
+        }
+      },
+      "log_note": "delegate subtask",
+      "role": "orchestrator",
+      "seq": 3,
+      "step_kind": "delegate",
+      "task_ref": "task:1"
+    },
+    {
+      "attempt": 1,
+      "log_note": "worker implements",
+      "role": "worker",
+      "seq": 4,
+      "step_kind": "implement",
+      "task_ref": "task:1"
+    },
+    {
+      "attempt": 1,
+      "emit": {
+        "action_name": "swarm.work",
+        "payload": {
+          "actual_checks": [
+            {
+              "name": "pytest",
+              "outcome": "pass"
+            }
+          ],
+          "agent_id": "agent:worker-1",
+          "claimed_actions": [
+            "implemented the subtask"
+          ],
+          "claimed_checks": [
+            "pytest",
+            "extra-lint"
+          ],
+          "created_at": "2026-07-22T10:00:05.000Z",
+          "required_checks": [
+            "pytest"
+          ],
+          "swarm_run_id": "swarm_run_c11",
+          "task_node_id": "task:1",
+          "work_id": "work:1"
+        }
+      },
+      "log_note": "work claim",
+      "role": "worker",
+      "seq": 5,
+      "step_kind": "submit_work",
+      "task_ref": "task:1"
+    },
+    {
+      "attempt": 1,
+      "emit": {
+        "action_name": "swarm.review",
+        "payload": {
+          "created_at": "2026-07-22T10:00:06.000Z",
+          "lens": "correctness",
+          "review_id": "review:1",
+          "reviewed_ref": "work:1",
+          "reviewer_agent_id": "agent:reviewer-1",
+          "swarm_run_id": "swarm_run_c11",
+          "verdict": "approve"
+        }
+      },
+      "log_note": "review",
+      "role": "reviewer",
+      "seq": 6,
+      "step_kind": "review",
+      "task_ref": "task:1"
+    },
+    {
+      "attempt": 1,
+      "emit": {
+        "action_name": "swarm.decision",
+        "payload": {
+          "agent_id": "agent:planner",
+          "created_at": "2026-07-22T10:00:07.000Z",
+          "decision": "accept the work",
+          "decision_id": "dec:1",
+          "evidence_refs": [
+            "work:1",
+            "review:1"
+          ],
+          "status": "accepted",
+          "subject_id": "subject:bench",
+          "swarm_run_id": "swarm_run_c11"
+        }
+      },
+      "log_note": "decision",
+      "role": "planner",
+      "seq": 7,
+      "step_kind": "decide",
+      "task_ref": "task:1"
+    },
+    {
+      "attempt": 1,
+      "log_note": "final report",
+      "role": "orchestrator",
+      "seq": 8,
+      "step_kind": "report",
+      "task_ref": ""
+    }
+  ],
+  "expected_a_detection": "rubric set-difference claimed \\ required",
+  "objective": "claimed set exceeds required set",
+  "planted_faults": [
+    {
+      "description": "'extra-lint' claimed, never required",
+      "detection_tier": "harness",
+      "expected_harness_flags": [
+        "unrequested_checks"
+      ],
+      "fault_id": "f11",
+      "refs": [
+        "work:1"
+      ]
+    }
+  ],
+  "swarm_run_id": "swarm_run_c11",
+  "title": "Checks claimed but never required"
+}
