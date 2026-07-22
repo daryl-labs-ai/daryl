@@ -6,6 +6,7 @@
       "emit": {
         "action_name": "swarm.run",
         "payload": {
+          "kind": "run",
           "objective": "benchmark case",
           "orchestrator_id": "orch:bench-v1",
           "started_at": "2026-07-22T10:00:00.000Z",
@@ -39,6 +40,7 @@
             "provider": "fake"
           },
           "created_at": "2026-07-22T10:00:01.000Z",
+          "kind": "task",
           "objective": "implement the subtask",
           "role": "worker",
           "status": "delegated",
@@ -79,6 +81,7 @@
             "pytest"
           ],
           "created_at": "2026-07-22T10:00:05.000Z",
+          "kind": "work",
           "required_checks": [
             "pytest"
           ],
@@ -99,6 +102,7 @@
         "action_name": "swarm.review",
         "payload": {
           "created_at": "2026-07-22T10:00:06.000Z",
+          "kind": "review",
           "lens": "correctness",
           "review_id": "review:1",
           "reviewed_ref": "work:1",
@@ -126,6 +130,7 @@
             "work:1",
             "review:1"
           ],
+          "kind": "decision",
           "status": "accepted",
           "subject_id": "subject:bench",
           "swarm_run_id": "swarm_run_c01"
