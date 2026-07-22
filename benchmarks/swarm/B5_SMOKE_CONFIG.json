@@ -1,0 +1,23 @@
+{
+  "config_version": "swarm-smoke.v0.1",
+  "case_id": "c01-nominal",
+  "seed": 0,
+  "provider": "openai",
+  "model": "gpt-5-mini",
+  "temperature": 0.0,
+  "request_seed": 7,
+  "request_timeout_seconds": 60.0,
+  "retry": {"max_retries": 2, "backoff_seconds": 2.0},
+  "condition_order": ["A", "Bprime", "B"],
+  "price": {"input_usd_per_mtok": 5.0, "output_usd_per_mtok": 20.0},
+  "caps": {
+    "max_usd": 10.0,
+    "max_total_tokens": 200000,
+    "max_wall_seconds": 900,
+    "max_calls": 30,
+    "max_output_tokens_per_call": 512
+  },
+  "api_key_env": "OPENAI_API_KEY",
+  "live_execution_authorized": false,
+  "authorized_budget_usd": null
+}
