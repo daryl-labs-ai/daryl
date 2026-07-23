@@ -91,10 +91,13 @@ PYTHONPATH=. .venv/bin/python -m benchmarks.swarm.harness.smoke \
   --live --i-authorize-live-spend
 ```
 
-Refused today on THREE independent grounds: the config's
-`live_execution_authorized=false`, the absent authorized budget, and the
-absent `OPENAI_API_KEY`. The dry-run form (drop `--live
---i-authorize-live-spend`) is runnable now at zero cost and zero network.
+Refused today on FOUR independent grounds: the config's
+`live_execution_authorized=false`, `price_table_confirmed=false` (the
+committed price is a placeholder ceiling — live mode is unconstructible until
+the provider's actual published prices are frozen; owner reserve,
+B5-PREFLIGHT validation), the absent authorized budget, and the absent
+`OPENAI_API_KEY`. The dry-run form (drop `--live --i-authorize-live-spend`)
+is runnable now at zero cost and zero network.
 
 ## 7. What the smoke may conclude — and may not
 

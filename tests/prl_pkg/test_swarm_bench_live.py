@@ -62,9 +62,20 @@ def test_config_requires_caps_and_authorized_budget():
     with pytest.raises(Exception):  # caps entirely missing
         _config(caps=None)
     with pytest.raises(Exception, match="authorized_budget_usd"):
-        _config(live_execution_authorized=True, authorized_budget_usd=None)
+        _config(live_execution_authorized=True, price_table_confirmed=True,
+                authorized_budget_usd=None)
     with pytest.raises(Exception, match="exceeds the authorized"):
-        _config(live_execution_authorized=True, authorized_budget_usd=5.0)  # caps=10 > 5
+        _config(live_execution_authorized=True, price_table_confirmed=True,
+                authorized_budget_usd=5.0)  # caps=10 > 5
+
+
+def test_live_refused_with_unconfirmed_price_table():
+    """Owner reserve (B5-PREFLIGHT validation), enforced mechanically: the
+    placeholder price table can never back a live authorization — the config
+    itself is unconstructible until real published prices are frozen."""
+    assert _config().price_table_confirmed is False  # committed default
+    with pytest.raises(Exception, match="price_table_confirmed"):
+        _config(live_execution_authorized=True, authorized_budget_usd=10.0)
 
 
 # --- live refusals -----------------------------------------------------------
@@ -78,7 +89,8 @@ def test_live_refused_without_authorization():
 
 def test_live_refused_without_env_key(monkeypatch):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    config = _config(live_execution_authorized=True, authorized_budget_usd=10.0)
+    config = _config(live_execution_authorized=True, price_table_confirmed=True,
+                     authorized_budget_usd=10.0)
     with pytest.raises(LiveExecutionNotAuthorized, match="OPENAI_API_KEY"):
         build_provider(config, _guard(config), "live")
 

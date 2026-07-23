@@ -7,9 +7,20 @@
   "temperature": 0.0,
   "request_seed": 7,
   "request_timeout_seconds": 60.0,
-  "retry": {"max_retries": 2, "backoff_seconds": 2.0},
-  "condition_order": ["A", "Bprime", "B"],
-  "price": {"input_usd_per_mtok": 5.0, "output_usd_per_mtok": 20.0},
+  "retry": {
+    "max_retries": 2,
+    "backoff_seconds": 2.0
+  },
+  "condition_order": [
+    "A",
+    "Bprime",
+    "B"
+  ],
+  "price": {
+    "input_usd_per_mtok": 5.0,
+    "output_usd_per_mtok": 20.0
+  },
+  "price_table_confirmed": false,
   "caps": {
     "max_usd": 10.0,
     "max_total_tokens": 200000,

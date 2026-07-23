@@ -87,6 +87,11 @@ class SmokeConfig(BaseModel):
     retry: RetryPolicy = Field(default_factory=RetryPolicy)
     condition_order: tuple[str, ...] = ("A", "Bprime", "B")
     price: PriceEntry                          # frozen at authorization time
+    # The committed price is a conservative PLACEHOLDER ceiling. Live mode is
+    # refused until the owner replaces it with the provider's actual published
+    # prices AND flips this flag (owner reserve, B5-PREFLIGHT validation): no
+    # cost estimate may rely on the placeholder during a live run.
+    price_table_confirmed: bool = False
     caps: SmokeCaps
     api_key_env: str = "OPENAI_API_KEY"        # NAME only; value never surfaces
     live_execution_authorized: bool = False    # default: NOTHING live may run
@@ -95,6 +100,11 @@ class SmokeConfig(BaseModel):
     @model_validator(mode="after")
     def _authorization_coherence(self) -> "SmokeConfig":
         if self.live_execution_authorized:
+            if not self.price_table_confirmed:
+                raise ValueError(
+                    "live authorization requires price_table_confirmed=true "
+                    "(real published prices frozen, placeholder forbidden)"
+                )
             if self.authorized_budget_usd is None:
                 raise ValueError(
                     "live authorization requires an explicit authorized_budget_usd"
