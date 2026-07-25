@@ -1,0 +1,65 @@
+# FICTIONAL FIXTURE — the derogation shape, made legible.
+# Same pack as jurisdiction.ma but at 0.2.0, raising required_checks.retention_years from 5 to 10.
+# The domain layer marked that path `requires_derogation`, so the raise is only permitted with a
+# derogation that names the path LITERALLY, cites a signing authority, and expires.
+#
+# What this fixture demonstrates, and what it does NOT:
+#   - the derogation is NOT a precedence layer: it wins nothing, it only answers
+#     "was this override permitted?" at the rank of the pack invoking it (R2);
+#   - it could never lift vocabulary.doctrine_source: `forbidden` is checked BEFORE any
+#     derogation is consulted, so there is no path through the code where a derogation reaches it (R5);
+#   - the signature is CHECKED FOR PRESENCE AND STRUCTURE ONLY. Ed25519 is not wired into the
+#     governance path in v0.1, so this is an audit trail, not an authorization.
+#
+# Evaluation time is an input, never now(): with evaluated_at outside [not_before, expires_at)
+# this exact file yields `derogation_expired` instead. Same packs, different instant, different
+# lawful outcome.
+---
+schema_version: pack.v0.1
+
+identity:
+  pack_id: jurisdiction.ma
+  pack_version: "0.2.0"
+  layer: jurisdiction
+  domain: domain.fiduciaire
+  jurisdiction: MA
+
+compatibility:
+  requires_packs:
+    - pack_id: fiduciaire.base
+      version_range: ">=0.1.0 <0.2.0"
+  requires_resolver:
+    min_version: pack-resolver@0.1.0
+
+composition:
+  controls: []
+  derogations:
+    - derogation_id: der.ma.retention.2026
+      scope:
+        - required_checks.retention_years
+      granted_by:
+        authority_id: authority.ma.regulator
+        key_id: key.ma.regulator.2026
+      not_before: "2026-01-01T00:00:00Z"
+      expires_at: "2027-01-01T00:00:00Z"
+      justification: "Statutory retention period for the jurisdiction exceeds the domain default."
+      signature: "FIXTURE-UNVERIFIED-SIGNATURE"
+
+vocabulary:
+  terms:
+    - etats_de_synthese
+    - cgnc
+  labels:
+    etats_de_synthese: "Etats de synthese"
+
+required_checks:
+  checks:
+    - check.cgnc_conformite
+    - check.tva_ma
+  retention_years: 10
+
+provenance:
+  authored_by: fixture
+  authority_id: authority.ma.regulator
+  published_at: "2026-02-01T00:00:00Z"
+  source_ref: "fixture://examples/jurisdiction.ma.derogated.pack.yaml"

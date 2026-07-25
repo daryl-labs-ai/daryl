@@ -1,0 +1,45 @@
+# FICTIONAL FIXTURE — a demo firm profile.
+# Layer: organization (highest rank). org_id is ADR-PRL-0010's referent, cited and reused unchanged;
+# ADR-PRL-0014 does not redefine it.
+#
+# The highest layer is still NOT sovereign:
+#   - it renames grand_livre because the domain layer left that path `open`   -> layer_override
+#   - it may not touch vocabulary.doctrine_source                             -> forbidden, absolute
+#   - it may not raise required_checks.retention_years without a derogation   -> requires_derogation
+# "Highest precedence" answers who wins a contest, never who is allowed to enter one.
+---
+schema_version: pack.v0.1
+
+identity:
+  pack_id: organization.demo
+  pack_version: "1.0.0"
+  layer: organization
+  domain: domain.fiduciaire
+  jurisdiction: MA
+  org_id: org.demo
+
+compatibility:
+  requires_packs:
+    - pack_id: fiduciaire.base
+      version_range: ">=0.1.0 <0.2.0"
+  requires_resolver:
+    min_version: pack-resolver@0.1.0
+
+composition:
+  controls: []
+
+vocabulary:
+  terms:
+    - dossier_permanent
+  labels:
+    grand_livre: "Grand livre (cabinet)"
+
+required_checks:
+  checks:
+    - check.revue_associe
+
+provenance:
+  authored_by: fixture
+  authority_id: authority.org.demo
+  published_at: "2026-03-10T00:00:00Z"
+  source_ref: "fixture://examples/organization.demo.profile.yaml"

@@ -1,0 +1,2731 @@
+{
+  "$comment": "Conformance vectors for ADR-PACK-0001. These expectations are FROZEN. They are not regenerated: if a committed expectation stops matching, either the implementation is wrong or the law changed \u2014 and a change to the law is an ADR amendment, never a re-run of a generator. Where this file and ADR-PACK-0001 disagree, the ADR governs and this file is the defect.",
+  "acceptance_criterion": "Two independent implementations receiving the same packs, in any input order, must either produce the same effective manifest by value identity and the same canonical hash, or produce the same typed refusal.",
+  "canonicalization": {
+    "adr": "ADR-0002",
+    "canonical_json": "json.dumps(data, sort_keys=True, separators=(',',':'), ensure_ascii=True, allow_nan=False).encode('utf-8')",
+    "hash": "'v1:' + sha256(canonical_json(data)).hexdigest()",
+    "note": "Reused verbatim from dsm_primitives. No new hashing law is introduced. An implementation that reproduces these hashes with its own canonicalizer has proven the canonicalizer too."
+  },
+  "governs": "ADR-PACK-0001 \u2014 Pack Composition, Precedence and Resolution Refusal",
+  "how_to_use": [
+    "For each vector, assemble its pack documents from `packs` (a SET \u2014 the listed order is transport only).",
+    "Call resolve(packs, evaluated_at, resolver_version) and compare against `expected`.",
+    "Resolved: the effective manifest must match by VALUE IDENTITY and its canonical hash must equal effective_manifest_hash.",
+    "Refused: the phase, the COMPLETE refusal set and refusal_hash must all match. 'It failed' is not a pass.",
+    "Re-run every vector under every permutation of its input order. Any permutation-dependent output is a defect, not a variation.",
+    "A vector whose pack carries schema_valid=false must still be run: the resolver refuses it on its own, without relying on schema validation having happened."
+  ],
+  "packs": {
+    "fiduciaire.base@0.1.0": {
+      "content_hash": "v1:a502de354dff05cd9dc7cebf880842bd246b9626150db3b61ad81486ea3b7a0c",
+      "document": {
+        "compatibility": {
+          "requires_resolver": {
+            "min_version": "pack-resolver@0.1.0"
+          }
+        },
+        "composition": {
+          "controls": [
+            {
+              "merge": "union",
+              "override": "open",
+              "path": "vocabulary.terms"
+            },
+            {
+              "merge": "replace",
+              "override": "open",
+              "path": "vocabulary.labels"
+            },
+            {
+              "merge": "replace",
+              "override": "forbidden",
+              "path": "vocabulary.doctrine_source"
+            },
+            {
+              "merge": "union",
+              "override": "open",
+              "path": "required_checks.checks"
+            },
+            {
+              "merge": "replace",
+              "override": "requires_derogation",
+              "path": "required_checks.retention_years"
+            }
+          ]
+        },
+        "identity": {
+          "domain": "domain.fiduciaire",
+          "layer": "domain",
+          "pack_id": "fiduciaire.base",
+          "pack_version": "0.1.0"
+        },
+        "provenance": {
+          "authored_by": "fixture",
+          "authority_id": "authority.fiduciaire.board",
+          "published_at": "2026-01-15T00:00:00Z",
+          "source_ref": "fixture://examples/fiduciaire.base.pack.yaml"
+        },
+        "required_checks": {
+          "checks": [
+            "check.balance_equilibree",
+            "check.pieces_justificatives"
+          ],
+          "retention_years": 5
+        },
+        "schema_version": "pack.v0.1",
+        "vocabulary": {
+          "doctrine_source": "domain.fiduciaire/doctrine@0.1.0",
+          "labels": {
+            "exercice_comptable": "Exercice comptable",
+            "grand_livre": "Grand livre"
+          },
+          "terms": [
+            "exercice_comptable",
+            "grand_livre",
+            "balance_generale"
+          ]
+        }
+      },
+      "schema_valid": true,
+      "source_example": "examples/fiduciaire.base.pack.yaml",
+      "why": "Domain layer. Introduces every governed path and fixes its control pair."
+    },
+    "fiduciaire.base@0.2.0": {
+      "content_hash": "v1:07f3aa10d064fe5436a8f11afef222459cbc1062fc795296420a4e7dba80bd9c",
+      "document": {
+        "compatibility": {
+          "requires_resolver": {
+            "min_version": "pack-resolver@0.1.0"
+          }
+        },
+        "composition": {
+          "controls": [
+            {
+              "merge": "union",
+              "override": "open",
+              "path": "vocabulary.terms"
+            },
+            {
+              "merge": "replace",
+              "override": "open",
+              "path": "vocabulary.labels"
+            },
+            {
+              "merge": "replace",
+              "override": "forbidden",
+              "path": "vocabulary.doctrine_source"
+            },
+            {
+              "merge": "union",
+              "override": "open",
+              "path": "required_checks.checks"
+            },
+            {
+              "merge": "replace",
+              "override": "requires_derogation",
+              "path": "required_checks.retention_years"
+            }
+          ]
+        },
+        "identity": {
+          "domain": "domain.fiduciaire",
+          "layer": "domain",
+          "pack_id": "fiduciaire.base",
+          "pack_version": "0.2.0"
+        },
+        "provenance": {
+          "authored_by": "fixture",
+          "authority_id": "authority.fiduciaire.board",
+          "published_at": "2026-01-15T00:00:00Z",
+          "source_ref": "vector://resolution-vectors.v0.1.json"
+        },
+        "required_checks": {
+          "checks": [
+            "check.balance_equilibree",
+            "check.pieces_justificatives"
+          ],
+          "retention_years": 5,
+          "review_cycle_days": 30
+        },
+        "schema_version": "pack.v0.1",
+        "vocabulary": {
+          "doctrine_source": "domain.fiduciaire/doctrine@0.1.0",
+          "labels": {
+            "exercice_comptable": "Exercice comptable",
+            "grand_livre": "Grand livre"
+          },
+          "terms": [
+            "exercice_comptable",
+            "grand_livre",
+            "balance_generale"
+          ]
+        }
+      },
+      "schema_valid": true,
+      "source_example": null,
+      "why": "Introduces required_checks.review_cycle_days and declares NO control for it."
+    },
+    "jurisdiction.fr@0.1.0": {
+      "content_hash": "v1:798fe8e09613f782b669f68a3ad6b88a2bc34dcaa179b6e7700d5db092bb6937",
+      "document": {
+        "compatibility": {
+          "requires_packs": [
+            {
+              "pack_id": "fiduciaire.base",
+              "version_range": ">=0.1.0 <0.2.0"
+            }
+          ],
+          "requires_resolver": {
+            "min_version": "pack-resolver@0.1.0"
+          }
+        },
+        "composition": {
+          "controls": []
+        },
+        "identity": {
+          "domain": "domain.fiduciaire",
+          "jurisdiction": "FR",
+          "layer": "jurisdiction",
+          "pack_id": "jurisdiction.fr",
+          "pack_version": "0.1.0"
+        },
+        "provenance": {
+          "authored_by": "fixture",
+          "authority_id": "authority.fr.regulator",
+          "published_at": "2026-02-01T00:00:00Z",
+          "source_ref": "fixture://examples/jurisdiction.fr.pack.yaml"
+        },
+        "required_checks": {
+          "checks": [
+            "check.pcg_conformite",
+            "check.tva_fr"
+          ]
+        },
+        "schema_version": "pack.v0.1",
+        "vocabulary": {
+          "labels": {
+            "liasse_fiscale": "Liasse fiscale"
+          },
+          "terms": [
+            "liasse_fiscale",
+            "pcg"
+          ]
+        }
+      },
+      "schema_valid": true,
+      "source_example": "examples/jurisdiction.fr.pack.yaml",
+      "why": "Jurisdiction FR. Peer of MA; its contributions commute with MA's."
+    },
+    "jurisdiction.fr@0.1.1": {
+      "content_hash": "v1:2a549253095e1046b6f2d686f5b007a54859be7c986e9e6d5de421cfbcac9938",
+      "document": {
+        "compatibility": {
+          "requires_packs": [
+            {
+              "pack_id": "fiduciaire.base",
+              "version_range": ">=0.1.0 <0.2.0"
+            }
+          ],
+          "requires_resolver": {
+            "min_version": "pack-resolver@0.1.0"
+          }
+        },
+        "composition": {
+          "controls": []
+        },
+        "identity": {
+          "domain": "domain.fiduciaire",
+          "jurisdiction": "FR",
+          "layer": "jurisdiction",
+          "pack_id": "jurisdiction.fr",
+          "pack_version": "0.1.1"
+        },
+        "provenance": {
+          "authored_by": "fixture",
+          "authority_id": "authority.fr.regulator",
+          "published_at": "2026-02-01T00:00:00Z",
+          "source_ref": "vector://resolution-vectors.v0.1.json"
+        },
+        "required_checks": {
+          "checks": [
+            "check.pcg_conformite",
+            "check.tva_fr"
+          ]
+        },
+        "schema_version": "pack.v0.1",
+        "vocabulary": {
+          "labels": {
+            "exercice_comptable": "Exercice comptable (FR)",
+            "liasse_fiscale": "Liasse fiscale"
+          },
+          "terms": [
+            "liasse_fiscale",
+            "pcg"
+          ]
+        }
+      },
+      "schema_valid": true,
+      "source_example": null,
+      "why": "Peer contribution to a `replace` path \u2014 competes with jurisdiction.ma@0.1.1."
+    },
+    "jurisdiction.fr@0.7.0": {
+      "content_hash": "v1:3654a104d27e2ec25ab34fe935780dde7278d4edf7f22a910fc6b6620519ba6e",
+      "document": {
+        "compatibility": {
+          "requires_packs": [
+            {
+              "pack_id": "fiduciaire.base",
+              "version_range": ">=0.1.0 <0.2.0"
+            }
+          ],
+          "requires_resolver": {
+            "min_version": "pack-resolver@0.1.0"
+          }
+        },
+        "composition": {
+          "controls": [
+            {
+              "merge": "replace",
+              "path": "vocabulary.aliases"
+            }
+          ]
+        },
+        "identity": {
+          "domain": "domain.fiduciaire",
+          "jurisdiction": "FR",
+          "layer": "jurisdiction",
+          "pack_id": "jurisdiction.fr",
+          "pack_version": "0.7.0"
+        },
+        "provenance": {
+          "authored_by": "fixture",
+          "authority_id": "authority.fr.regulator",
+          "published_at": "2026-02-01T00:00:00Z",
+          "source_ref": "vector://resolution-vectors.v0.1.json"
+        },
+        "required_checks": {
+          "checks": [
+            "check.pcg_conformite",
+            "check.tva_fr"
+          ]
+        },
+        "schema_version": "pack.v0.1",
+        "vocabulary": {
+          "aliases": {
+            "grand_livre": [
+              "GL"
+            ]
+          },
+          "labels": {
+            "liasse_fiscale": "Liasse fiscale"
+          },
+          "terms": [
+            "liasse_fiscale",
+            "pcg"
+          ]
+        }
+      },
+      "schema_valid": true,
+      "source_example": null,
+      "why": "Peer of jurisdiction.ma@0.7.0, claiming the same new path with incompatible merge semantics at equal rank and equal specificity."
+    },
+    "jurisdiction.ma@0.1.0": {
+      "content_hash": "v1:3cd910ce17c5ff7c63faaed8b61ec1d04941824a70b79020c43ddb9933b42820",
+      "document": {
+        "compatibility": {
+          "requires_packs": [
+            {
+              "pack_id": "fiduciaire.base",
+              "version_range": ">=0.1.0 <0.2.0"
+            }
+          ],
+          "requires_resolver": {
+            "min_version": "pack-resolver@0.1.0"
+          }
+        },
+        "composition": {
+          "controls": []
+        },
+        "identity": {
+          "domain": "domain.fiduciaire",
+          "jurisdiction": "MA",
+          "layer": "jurisdiction",
+          "pack_id": "jurisdiction.ma",
+          "pack_version": "0.1.0"
+        },
+        "provenance": {
+          "authored_by": "fixture",
+          "authority_id": "authority.ma.regulator",
+          "published_at": "2026-02-01T00:00:00Z",
+          "source_ref": "fixture://examples/jurisdiction.ma.pack.yaml"
+        },
+        "required_checks": {
+          "checks": [
+            "check.cgnc_conformite",
+            "check.tva_ma"
+          ]
+        },
+        "schema_version": "pack.v0.1",
+        "vocabulary": {
+          "labels": {
+            "etats_de_synthese": "Etats de synthese"
+          },
+          "terms": [
+            "etats_de_synthese",
+            "cgnc"
+          ]
+        }
+      },
+      "schema_valid": true,
+      "source_example": "examples/jurisdiction.ma.pack.yaml",
+      "why": "Jurisdiction MA. Union contributions only."
+    },
+    "jurisdiction.ma@0.1.0#mirror-copy": {
+      "content_hash": "v1:3cd910ce17c5ff7c63faaed8b61ec1d04941824a70b79020c43ddb9933b42820",
+      "document": {
+        "compatibility": {
+          "requires_packs": [
+            {
+              "pack_id": "fiduciaire.base",
+              "version_range": ">=0.1.0 <0.2.0"
+            }
+          ],
+          "requires_resolver": {
+            "min_version": "pack-resolver@0.1.0"
+          }
+        },
+        "composition": {
+          "controls": []
+        },
+        "identity": {
+          "domain": "domain.fiduciaire",
+          "jurisdiction": "MA",
+          "layer": "jurisdiction",
+          "pack_id": "jurisdiction.ma",
+          "pack_version": "0.1.0"
+        },
+        "provenance": {
+          "authored_by": "fixture",
+          "authority_id": "authority.ma.regulator",
+          "published_at": "2026-02-01T00:00:00Z",
+          "source_ref": "mirror://another-deployment/jurisdiction.ma.pack.yaml"
+        },
+        "required_checks": {
+          "checks": [
+            "check.cgnc_conformite",
+            "check.tva_ma"
+          ]
+        },
+        "schema_version": "pack.v0.1",
+        "vocabulary": {
+          "labels": {
+            "etats_de_synthese": "Etats de synthese"
+          },
+          "terms": [
+            "etats_de_synthese",
+            "cgnc"
+          ]
+        }
+      },
+      "schema_valid": true,
+      "source_example": null,
+      "why": "Byte-different copy of jurisdiction.ma@0.1.0: only provenance.source_ref differs. content_hash must be identical (R12) \u2014 a referent is never its carrier."
+    },
+    "jurisdiction.ma@0.1.1": {
+      "content_hash": "v1:6e01ba8708e13114dee7dd20fdc041881a013450e0e84d32950b305c38166e58",
+      "document": {
+        "compatibility": {
+          "requires_packs": [
+            {
+              "pack_id": "fiduciaire.base",
+              "version_range": ">=0.1.0 <0.2.0"
+            }
+          ],
+          "requires_resolver": {
+            "min_version": "pack-resolver@0.1.0"
+          }
+        },
+        "composition": {
+          "controls": []
+        },
+        "identity": {
+          "domain": "domain.fiduciaire",
+          "jurisdiction": "MA",
+          "layer": "jurisdiction",
+          "pack_id": "jurisdiction.ma",
+          "pack_version": "0.1.1"
+        },
+        "provenance": {
+          "authored_by": "fixture",
+          "authority_id": "authority.ma.regulator",
+          "published_at": "2026-02-01T00:00:00Z",
+          "source_ref": "vector://resolution-vectors.v0.1.json"
+        },
+        "required_checks": {
+          "checks": [
+            "check.cgnc_conformite",
+            "check.tva_ma"
+          ]
+        },
+        "schema_version": "pack.v0.1",
+        "vocabulary": {
+          "labels": {
+            "etats_de_synthese": "Etats de synthese",
+            "exercice_comptable": "Exercice comptable (MA)"
+          },
+          "terms": [
+            "etats_de_synthese",
+            "cgnc"
+          ]
+        }
+      },
+      "schema_valid": true,
+      "source_example": null,
+      "why": "Peer contribution to a `replace` path \u2014 competes with jurisdiction.fr@0.1.1."
+    },
+    "jurisdiction.ma@0.2.0": {
+      "content_hash": "v1:314971763fc8bcaae84f54cc55a2faf4c0480eaa17d77158043187636831a0dd",
+      "document": {
+        "compatibility": {
+          "requires_packs": [
+            {
+              "pack_id": "fiduciaire.base",
+              "version_range": ">=0.1.0 <0.2.0"
+            }
+          ],
+          "requires_resolver": {
+            "min_version": "pack-resolver@0.1.0"
+          }
+        },
+        "composition": {
+          "controls": [],
+          "derogations": [
+            {
+              "derogation_id": "der.ma.retention.2026",
+              "expires_at": "2027-01-01T00:00:00Z",
+              "granted_by": {
+                "authority_id": "authority.ma.regulator",
+                "key_id": "key.ma.regulator.2026"
+              },
+              "justification": "Statutory retention period for the jurisdiction exceeds the domain default.",
+              "not_before": "2026-01-01T00:00:00Z",
+              "scope": [
+                "required_checks.retention_years"
+              ],
+              "signature": "FIXTURE-UNVERIFIED-SIGNATURE"
+            }
+          ]
+        },
+        "identity": {
+          "domain": "domain.fiduciaire",
+          "jurisdiction": "MA",
+          "layer": "jurisdiction",
+          "pack_id": "jurisdiction.ma",
+          "pack_version": "0.2.0"
+        },
+        "provenance": {
+          "authored_by": "fixture",
+          "authority_id": "authority.ma.regulator",
+          "published_at": "2026-02-01T00:00:00Z",
+          "source_ref": "fixture://examples/jurisdiction.ma.derogated.pack.yaml"
+        },
+        "required_checks": {
+          "checks": [
+            "check.cgnc_conformite",
+            "check.tva_ma"
+          ],
+          "retention_years": 10
+        },
+        "schema_version": "pack.v0.1",
+        "vocabulary": {
+          "labels": {
+            "etats_de_synthese": "Etats de synthese"
+          },
+          "terms": [
+            "etats_de_synthese",
+            "cgnc"
+          ]
+        }
+      },
+      "schema_valid": true,
+      "source_example": "examples/jurisdiction.ma.derogated.pack.yaml",
+      "why": "Raises retention_years under a signed, scoped, expiring derogation."
+    },
+    "jurisdiction.ma@0.3.0": {
+      "content_hash": "v1:45544c0264a4b55a9ac995f14f2fa6ce08ea389660fe998462549c842878de39",
+      "document": {
+        "compatibility": {
+          "requires_packs": [
+            {
+              "pack_id": "fiduciaire.base",
+              "version_range": ">=0.1.0 <0.2.0"
+            }
+          ],
+          "requires_resolver": {
+            "min_version": "pack-resolver@0.1.0"
+          }
+        },
+        "composition": {
+          "controls": []
+        },
+        "identity": {
+          "domain": "domain.fiduciaire",
+          "jurisdiction": "MA",
+          "layer": "jurisdiction",
+          "pack_id": "jurisdiction.ma",
+          "pack_version": "0.3.0"
+        },
+        "provenance": {
+          "authored_by": "fixture",
+          "authority_id": "authority.ma.regulator",
+          "published_at": "2026-02-01T00:00:00Z",
+          "source_ref": "vector://resolution-vectors.v0.1.json"
+        },
+        "required_checks": {
+          "checks": [
+            "check.cgnc_conformite",
+            "check.tva_ma"
+          ],
+          "retention_years": 7
+        },
+        "schema_version": "pack.v0.1",
+        "vocabulary": {
+          "labels": {
+            "etats_de_synthese": "Etats de synthese"
+          },
+          "terms": [
+            "etats_de_synthese",
+            "cgnc"
+          ]
+        }
+      },
+      "schema_valid": true,
+      "source_example": null,
+      "why": "Raises a `requires_derogation` path carrying no derogation at all."
+    },
+    "jurisdiction.ma@0.4.0": {
+      "content_hash": "v1:1c1ea75f0176211f82dd80a61b4b627c4a56521d1bbc74d80eef549446fdfd20",
+      "document": {
+        "compatibility": {
+          "requires_packs": [
+            {
+              "pack_id": "fiduciaire.base",
+              "version_range": ">=0.1.0 <0.2.0"
+            }
+          ],
+          "requires_resolver": {
+            "min_version": "pack-resolver@0.1.0"
+          }
+        },
+        "composition": {
+          "controls": [],
+          "derogations": [
+            {
+              "derogation_id": "der.ma.retention.malformed",
+              "expires_at": "2026-01-01T00:00:00Z",
+              "granted_by": {
+                "authority_id": "authority.ma.regulator",
+                "key_id": "key.ma.regulator.2026"
+              },
+              "justification": "Statutory retention period for the jurisdiction exceeds the domain default.",
+              "not_before": "2027-01-01T00:00:00Z",
+              "scope": [
+                "required_checks.retention_years"
+              ],
+              "signature": "FIXTURE-UNVERIFIED-SIGNATURE"
+            }
+          ]
+        },
+        "identity": {
+          "domain": "domain.fiduciaire",
+          "jurisdiction": "MA",
+          "layer": "jurisdiction",
+          "pack_id": "jurisdiction.ma",
+          "pack_version": "0.4.0"
+        },
+        "provenance": {
+          "authored_by": "fixture",
+          "authority_id": "authority.ma.regulator",
+          "published_at": "2026-02-01T00:00:00Z",
+          "source_ref": "vector://resolution-vectors.v0.1.json"
+        },
+        "required_checks": {
+          "checks": [
+            "check.cgnc_conformite",
+            "check.tva_ma"
+          ],
+          "retention_years": 10
+        },
+        "schema_version": "pack.v0.1",
+        "vocabulary": {
+          "labels": {
+            "etats_de_synthese": "Etats de synthese"
+          },
+          "terms": [
+            "etats_de_synthese",
+            "cgnc"
+          ]
+        }
+      },
+      "schema_valid": true,
+      "source_example": null,
+      "why": "Derogation whose window is empty (not_before >= expires_at). Schema-valid, law-invalid: exactly the class the schema cannot catch."
+    },
+    "jurisdiction.ma@0.5.0": {
+      "content_hash": "v1:7f328ddbe9a2bb4922b1d50945c65d9c5c6027a5622c62acbf3731a248958646",
+      "document": {
+        "compatibility": {
+          "requires_packs": [
+            {
+              "pack_id": "fiduciaire.base",
+              "version_range": ">=0.1.0 <0.2.0"
+            }
+          ],
+          "requires_resolver": {
+            "min_version": "pack-resolver@0.1.0"
+          }
+        },
+        "composition": {
+          "controls": [
+            {
+              "override": "open",
+              "path": "required_checks.retention_years"
+            }
+          ]
+        },
+        "identity": {
+          "domain": "domain.fiduciaire",
+          "jurisdiction": "MA",
+          "layer": "jurisdiction",
+          "pack_id": "jurisdiction.ma",
+          "pack_version": "0.5.0"
+        },
+        "provenance": {
+          "authored_by": "fixture",
+          "authority_id": "authority.ma.regulator",
+          "published_at": "2026-02-01T00:00:00Z",
+          "source_ref": "vector://resolution-vectors.v0.1.json"
+        },
+        "required_checks": {
+          "checks": [
+            "check.cgnc_conformite",
+            "check.tva_ma"
+          ]
+        },
+        "schema_version": "pack.v0.1",
+        "vocabulary": {
+          "labels": {
+            "etats_de_synthese": "Etats de synthese"
+          },
+          "terms": [
+            "etats_de_synthese",
+            "cgnc"
+          ]
+        }
+      },
+      "schema_valid": true,
+      "source_example": null,
+      "why": "Attempts to relax an inherited `requires_derogation` back to `open`."
+    },
+    "jurisdiction.ma@0.6.0": {
+      "content_hash": "v1:7774076f279066da40a7954627353b840e335ae65a83ae58863da438a0389653",
+      "document": {
+        "compatibility": {
+          "requires_packs": [
+            {
+              "pack_id": "fiduciaire.base",
+              "version_range": ">=0.1.0 <0.2.0"
+            }
+          ],
+          "requires_resolver": {
+            "min_version": "pack-resolver@0.1.0"
+          }
+        },
+        "composition": {
+          "controls": [
+            {
+              "merge": "replace",
+              "path": "vocabulary.terms"
+            }
+          ]
+        },
+        "identity": {
+          "domain": "domain.fiduciaire",
+          "jurisdiction": "MA",
+          "layer": "jurisdiction",
+          "pack_id": "jurisdiction.ma",
+          "pack_version": "0.6.0"
+        },
+        "provenance": {
+          "authored_by": "fixture",
+          "authority_id": "authority.ma.regulator",
+          "published_at": "2026-02-01T00:00:00Z",
+          "source_ref": "vector://resolution-vectors.v0.1.json"
+        },
+        "required_checks": {
+          "checks": [
+            "check.cgnc_conformite",
+            "check.tva_ma"
+          ]
+        },
+        "schema_version": "pack.v0.1",
+        "vocabulary": {
+          "labels": {
+            "etats_de_synthese": "Etats de synthese"
+          },
+          "terms": [
+            "etats_de_synthese",
+            "cgnc"
+          ]
+        }
+      },
+      "schema_valid": true,
+      "source_example": null,
+      "why": "Attempts to re-declare merge semantics fixed by the introducing layer."
+    },
+    "jurisdiction.ma@0.7.0": {
+      "content_hash": "v1:0e6ef2379c9dc37ea3beeaa091a1642d2f8d0b0b08676694a4c4bc6ce52ddb56",
+      "document": {
+        "compatibility": {
+          "requires_packs": [
+            {
+              "pack_id": "fiduciaire.base",
+              "version_range": ">=0.1.0 <0.2.0"
+            }
+          ],
+          "requires_resolver": {
+            "min_version": "pack-resolver@0.1.0"
+          }
+        },
+        "composition": {
+          "controls": [
+            {
+              "merge": "replace",
+              "path": "vocabulary.terms"
+            },
+            {
+              "merge": "intersect",
+              "path": "required_checks.checks"
+            },
+            {
+              "merge": "union",
+              "path": "vocabulary.aliases"
+            }
+          ]
+        },
+        "identity": {
+          "domain": "domain.fiduciaire",
+          "jurisdiction": "MA",
+          "layer": "jurisdiction",
+          "pack_id": "jurisdiction.ma",
+          "pack_version": "0.7.0"
+        },
+        "provenance": {
+          "authored_by": "fixture",
+          "authority_id": "authority.ma.regulator",
+          "published_at": "2026-02-01T00:00:00Z",
+          "source_ref": "vector://resolution-vectors.v0.1.json"
+        },
+        "required_checks": {
+          "checks": [
+            "check.cgnc_conformite",
+            "check.tva_ma"
+          ]
+        },
+        "schema_version": "pack.v0.1",
+        "vocabulary": {
+          "aliases": {
+            "grand_livre": [
+              "gl"
+            ]
+          },
+          "labels": {
+            "etats_de_synthese": "Etats de synthese"
+          },
+          "terms": [
+            "etats_de_synthese",
+            "cgnc"
+          ]
+        }
+      },
+      "schema_valid": true,
+      "source_example": null,
+      "why": "Flips an inherited merge AND opens a new path its peer also claims. Contributes the refusal whose `detail` sorts first but whose `path` sorts last."
+    },
+    "jurisdiction.ma@0.8.0": {
+      "content_hash": "v1:63fab8a09032d1f19f4d329096dbb995d840d4966208247f9f6cd32a881e6544",
+      "document": {
+        "compatibility": {
+          "requires_packs": [
+            {
+              "pack_id": "fiduciaire.zzz",
+              "version_range": ">=1.0.0 <2.0.0"
+            },
+            {
+              "pack_id": "fiduciaire.aaa",
+              "version_range": ">=1.0.0 <2.0.0"
+            }
+          ],
+          "requires_resolver": {
+            "min_version": "pack-resolver@0.1.0"
+          }
+        },
+        "composition": {
+          "controls": []
+        },
+        "identity": {
+          "domain": "domain.fiduciaire",
+          "jurisdiction": "MA",
+          "layer": "jurisdiction",
+          "pack_id": "jurisdiction.ma",
+          "pack_version": "0.8.0"
+        },
+        "provenance": {
+          "authored_by": "fixture",
+          "authority_id": "authority.ma.regulator",
+          "published_at": "2026-02-01T00:00:00Z",
+          "source_ref": "vector://resolution-vectors.v0.1.json"
+        },
+        "required_checks": {
+          "checks": [
+            "check.cgnc_conformite",
+            "check.tva_ma"
+          ]
+        },
+        "schema_version": "pack.v0.1",
+        "vocabulary": {
+          "labels": {
+            "etats_de_synthese": "Etats de synthese"
+          },
+          "terms": [
+            "etats_de_synthese",
+            "cgnc"
+          ]
+        }
+      },
+      "schema_valid": true,
+      "source_example": null,
+      "why": "Two unmet requirements. Both refusals share (code, path, pack_refs) and differ only in `detail`, so the primary key alone leaves them tied \u2014 only the total tie-break orders them. The requirements are listed in anti-canonical order so that an implementation falling back on 'the order I built them in' produces a different refusal_hash."
+    },
+    "jurisdiction.ma@0.9.0": {
+      "content_hash": "v1:0fd64c2989660f2dfe75d13becff18f417c5ac36f9c06b1386195779f24df6a8",
+      "document": {
+        "compatibility": {
+          "requires_packs": [
+            {
+              "pack_id": "fiduciaire.base",
+              "version_range": ">=0.2.0 <0.3.0"
+            }
+          ],
+          "requires_resolver": {
+            "min_version": "pack-resolver@0.1.0"
+          }
+        },
+        "composition": {
+          "controls": []
+        },
+        "identity": {
+          "domain": "domain.fiduciaire",
+          "jurisdiction": "MA",
+          "layer": "jurisdiction",
+          "pack_id": "jurisdiction.ma",
+          "pack_version": "0.9.0"
+        },
+        "provenance": {
+          "authored_by": "fixture",
+          "authority_id": "authority.ma.regulator",
+          "published_at": "2026-02-01T00:00:00Z",
+          "source_ref": "vector://resolution-vectors.v0.1.json"
+        },
+        "required_checks": {
+          "checks": [
+            "check.cgnc_conformite",
+            "check.tva_ma"
+          ]
+        },
+        "schema_version": "pack.v0.1",
+        "vocabulary": {
+          "labels": {
+            "etats_de_synthese": "Etats de synthese"
+          },
+          "terms": [
+            "etats_de_synthese",
+            "cgnc"
+          ]
+        }
+      },
+      "schema_valid": true,
+      "source_example": null,
+      "why": "Requires a domain range the present domain pack does not satisfy."
+    },
+    "organization.demo@1.0.0": {
+      "content_hash": "v1:58a3a0197eb5e9a76b12edf0ca4ea9871e89226ad9fd9711ac0e563b042a2edf",
+      "document": {
+        "compatibility": {
+          "requires_packs": [
+            {
+              "pack_id": "fiduciaire.base",
+              "version_range": ">=0.1.0 <0.2.0"
+            }
+          ],
+          "requires_resolver": {
+            "min_version": "pack-resolver@0.1.0"
+          }
+        },
+        "composition": {
+          "controls": []
+        },
+        "identity": {
+          "domain": "domain.fiduciaire",
+          "jurisdiction": "MA",
+          "layer": "organization",
+          "org_id": "org.demo",
+          "pack_id": "organization.demo",
+          "pack_version": "1.0.0"
+        },
+        "provenance": {
+          "authored_by": "fixture",
+          "authority_id": "authority.org.demo",
+          "published_at": "2026-03-10T00:00:00Z",
+          "source_ref": "fixture://examples/organization.demo.profile.yaml"
+        },
+        "required_checks": {
+          "checks": [
+            "check.revue_associe"
+          ]
+        },
+        "schema_version": "pack.v0.1",
+        "vocabulary": {
+          "labels": {
+            "grand_livre": "Grand livre (cabinet)"
+          },
+          "terms": [
+            "dossier_permanent"
+          ]
+        }
+      },
+      "schema_valid": true,
+      "source_example": "examples/organization.demo.profile.yaml",
+      "why": "Organization layer. Renames one label under an `open` control."
+    },
+    "organization.demo@1.1.0": {
+      "content_hash": "v1:b33888d96389fc32310c33c5fd42606a5fa0d2a6e9a0ab95554f80707936cdcd",
+      "document": {
+        "compatibility": {
+          "requires_packs": [
+            {
+              "pack_id": "fiduciaire.base",
+              "version_range": ">=0.1.0 <0.2.0"
+            }
+          ],
+          "requires_resolver": {
+            "min_version": "pack-resolver@0.1.0"
+          }
+        },
+        "composition": {
+          "controls": []
+        },
+        "identity": {
+          "domain": "domain.fiduciaire",
+          "jurisdiction": "MA",
+          "layer": "organization",
+          "org_id": "org.demo",
+          "pack_id": "organization.demo",
+          "pack_version": "1.1.0"
+        },
+        "provenance": {
+          "authored_by": "fixture",
+          "authority_id": "authority.org.demo",
+          "published_at": "2026-03-10T00:00:00Z",
+          "source_ref": "vector://resolution-vectors.v0.1.json"
+        },
+        "required_checks": {
+          "checks": [
+            "check.revue_associe"
+          ]
+        },
+        "schema_version": "pack.v0.1",
+        "vocabulary": {
+          "doctrine_source": "organization.demo/doctrine@1.0.0",
+          "labels": {
+            "grand_livre": "Grand livre (cabinet)"
+          },
+          "terms": [
+            "dossier_permanent"
+          ]
+        }
+      },
+      "schema_valid": true,
+      "source_example": null,
+      "why": "Highest layer attempts a `forbidden` path. Precedence is not sovereignty."
+    },
+    "organization.demo@2.0.0": {
+      "content_hash": "v1:80cff87e81a07253250ca875983c9d29c8be70103dde9a885f80273aed8ea639",
+      "document": {
+        "compatibility": {
+          "requires_packs": [
+            {
+              "pack_id": "fiduciaire.base",
+              "version_range": ">=0.2.0 <0.3.0"
+            }
+          ],
+          "requires_resolver": {
+            "min_version": "pack-resolver@0.1.0"
+          }
+        },
+        "composition": {
+          "controls": []
+        },
+        "identity": {
+          "domain": "domain.fiduciaire",
+          "jurisdiction": "MA",
+          "layer": "organization",
+          "org_id": "org.demo",
+          "pack_id": "organization.demo",
+          "pack_version": "2.0.0"
+        },
+        "provenance": {
+          "authored_by": "fixture",
+          "source_ref": "vector://resolution-vectors.v0.1.json"
+        },
+        "required_checks": {
+          "review_cycle_days": 90
+        },
+        "schema_version": "pack.v0.1"
+      },
+      "schema_valid": true,
+      "source_example": null,
+      "why": "Overrides a leaf covered by no control declaration. Must fail closed (R3bis / D4)."
+    },
+    "regulator.ma@0.1.0": {
+      "content_hash": "v1:7eae40c3943206eb26b492cc6a2c108a6e4f97faeb9c0f319de94edc86b359d6",
+      "document": {
+        "compatibility": {
+          "requires_resolver": {
+            "min_version": "pack-resolver@0.1.0"
+          }
+        },
+        "composition": {
+          "controls": []
+        },
+        "identity": {
+          "domain": "domain.fiduciaire",
+          "jurisdiction": "MA",
+          "layer": "regulator",
+          "pack_id": "regulator.ma",
+          "pack_version": "0.1.0"
+        },
+        "schema_version": "pack.v0.1",
+        "vocabulary": {
+          "terms": [
+            "visa_reglementaire"
+          ]
+        }
+      },
+      "schema_valid": false,
+      "source_example": null,
+      "why": "Invents a fifth layer. The chain is closed at four (R1); an unknown layer is a typed refusal, never a silent extra rank. Schema-INVALID by design: the enum already refuses it, and the resolver must refuse it too rather than rely on the schema."
+    }
+  },
+  "resolver_version": "pack-resolver@0.1.0",
+  "schema_version": "resolution-vectors.v0.1",
+  "vectors": [
+    {
+      "evaluated_at": "2026-07-01T00:00:00Z",
+      "expected": {
+        "contested_paths": [
+          "vocabulary.labels.grand_livre"
+        ],
+        "effective_manifest": {
+          "context": {
+            "domain": [
+              "domain.fiduciaire"
+            ],
+            "jurisdiction": [
+              "MA"
+            ],
+            "org_id": [
+              "org.demo"
+            ]
+          },
+          "evaluated_at": "2026-07-01T00:00:00Z",
+          "kind": "effective_manifest",
+          "packs": [
+            {
+              "content_hash": "v1:a502de354dff05cd9dc7cebf880842bd246b9626150db3b61ad81486ea3b7a0c",
+              "layer": "domain",
+              "pack_id": "fiduciaire.base",
+              "pack_version": "0.1.0"
+            },
+            {
+              "content_hash": "v1:3cd910ce17c5ff7c63faaed8b61ec1d04941824a70b79020c43ddb9933b42820",
+              "layer": "jurisdiction",
+              "pack_id": "jurisdiction.ma",
+              "pack_version": "0.1.0"
+            },
+            {
+              "content_hash": "v1:58a3a0197eb5e9a76b12edf0ca4ea9871e89226ad9fd9711ac0e563b042a2edf",
+              "layer": "organization",
+              "pack_id": "organization.demo",
+              "pack_version": "1.0.0"
+            }
+          ],
+          "proof_scope": [
+            "required_checks",
+            "vocabulary"
+          ],
+          "resolver_version": "pack-resolver@0.1.0",
+          "schema_version": "pack-resolution.v0.1",
+          "sections": {
+            "required_checks": {
+              "checks": [
+                "check.balance_equilibree",
+                "check.cgnc_conformite",
+                "check.pieces_justificatives",
+                "check.revue_associe",
+                "check.tva_ma"
+              ],
+              "retention_years": 5
+            },
+            "vocabulary": {
+              "doctrine_source": "domain.fiduciaire/doctrine@0.1.0",
+              "labels": {
+                "etats_de_synthese": "Etats de synthese",
+                "exercice_comptable": "Exercice comptable",
+                "grand_livre": "Grand livre (cabinet)"
+              },
+              "terms": [
+                "balance_generale",
+                "cgnc",
+                "dossier_permanent",
+                "etats_de_synthese",
+                "exercice_comptable",
+                "grand_livre"
+              ]
+            }
+          }
+        },
+        "effective_manifest_hash": "v1:86e8b180f181fe7e711aae94eaf11bc7fb58d58c23c9cfa2e7144823be940cf3",
+        "outcome": "resolved",
+        "resolution_trace": {
+          "effective_manifest_hash": "v1:86e8b180f181fe7e711aae94eaf11bc7fb58d58c23c9cfa2e7144823be940cf3",
+          "entries": [
+            {
+              "derogation_applied": null,
+              "effective_value": [
+                "check.balance_equilibree",
+                "check.cgnc_conformite",
+                "check.pieces_justificatives",
+                "check.revue_associe",
+                "check.tva_ma"
+              ],
+              "merge": "union",
+              "overridden_sources": [],
+              "override": "open",
+              "path": "required_checks.checks",
+              "resolution_rule": "commutative_fold",
+              "selected_from": [
+                "fiduciaire.base@0.1.0",
+                "jurisdiction.ma@0.1.0",
+                "organization.demo@1.0.0"
+              ]
+            },
+            {
+              "derogation_applied": null,
+              "effective_value": 5,
+              "merge": "replace",
+              "overridden_sources": [],
+              "override": "requires_derogation",
+              "path": "required_checks.retention_years",
+              "resolution_rule": "introduction",
+              "selected_from": [
+                "fiduciaire.base@0.1.0"
+              ]
+            },
+            {
+              "derogation_applied": null,
+              "effective_value": "domain.fiduciaire/doctrine@0.1.0",
+              "merge": "replace",
+              "overridden_sources": [],
+              "override": "forbidden",
+              "path": "vocabulary.doctrine_source",
+              "resolution_rule": "introduction",
+              "selected_from": [
+                "fiduciaire.base@0.1.0"
+              ]
+            },
+            {
+              "derogation_applied": null,
+              "effective_value": "Etats de synthese",
+              "merge": "replace",
+              "overridden_sources": [],
+              "override": "open",
+              "path": "vocabulary.labels.etats_de_synthese",
+              "resolution_rule": "introduction",
+              "selected_from": [
+                "jurisdiction.ma@0.1.0"
+              ]
+            },
+            {
+              "derogation_applied": null,
+              "effective_value": "Exercice comptable",
+              "merge": "replace",
+              "overridden_sources": [],
+              "override": "open",
+              "path": "vocabulary.labels.exercice_comptable",
+              "resolution_rule": "introduction",
+              "selected_from": [
+                "fiduciaire.base@0.1.0"
+              ]
+            },
+            {
+              "derogation_applied": null,
+              "effective_value": "Grand livre (cabinet)",
+              "merge": "replace",
+              "overridden_sources": [
+                "fiduciaire.base@0.1.0"
+              ],
+              "override": "open",
+              "path": "vocabulary.labels.grand_livre",
+              "resolution_rule": "layer_override",
+              "selected_from": [
+                "organization.demo@1.0.0"
+              ]
+            },
+            {
+              "derogation_applied": null,
+              "effective_value": [
+                "balance_generale",
+                "cgnc",
+                "dossier_permanent",
+                "etats_de_synthese",
+                "exercice_comptable",
+                "grand_livre"
+              ],
+              "merge": "union",
+              "overridden_sources": [],
+              "override": "open",
+              "path": "vocabulary.terms",
+              "resolution_rule": "commutative_fold",
+              "selected_from": [
+                "fiduciaire.base@0.1.0",
+                "jurisdiction.ma@0.1.0",
+                "organization.demo@1.0.0"
+              ]
+            }
+          ],
+          "evaluated_at": "2026-07-01T00:00:00Z",
+          "kind": "resolution_trace",
+          "resolver_version": "pack-resolver@0.1.0",
+          "schema_version": "pack-resolution.v0.1"
+        },
+        "trace_hash": "v1:6cd13116eae64508782d971e8e4bdce99f8ce5a57058ba6f6d62f4b499de81cf"
+      },
+      "id": "three-layer-baseline",
+      "packs": [
+        "fiduciaire.base@0.1.0",
+        "jurisdiction.ma@0.1.0",
+        "organization.demo@1.0.0"
+      ],
+      "why": "The milestone: three fictional layers load, conflict, and resolve to one canonical manifest. vocabulary.labels.grand_livre is contested and the organization wins it \u2014 under a control the domain layer left `open`, never by rank alone."
+    },
+    {
+      "evaluated_at": "2026-07-01T00:00:00Z",
+      "expected": {
+        "contested_paths": [
+          "vocabulary.labels.grand_livre"
+        ],
+        "effective_manifest": {
+          "context": {
+            "domain": [
+              "domain.fiduciaire"
+            ],
+            "jurisdiction": [
+              "MA"
+            ],
+            "org_id": [
+              "org.demo"
+            ]
+          },
+          "evaluated_at": "2026-07-01T00:00:00Z",
+          "kind": "effective_manifest",
+          "packs": [
+            {
+              "content_hash": "v1:a502de354dff05cd9dc7cebf880842bd246b9626150db3b61ad81486ea3b7a0c",
+              "layer": "domain",
+              "pack_id": "fiduciaire.base",
+              "pack_version": "0.1.0"
+            },
+            {
+              "content_hash": "v1:3cd910ce17c5ff7c63faaed8b61ec1d04941824a70b79020c43ddb9933b42820",
+              "layer": "jurisdiction",
+              "pack_id": "jurisdiction.ma",
+              "pack_version": "0.1.0"
+            },
+            {
+              "content_hash": "v1:58a3a0197eb5e9a76b12edf0ca4ea9871e89226ad9fd9711ac0e563b042a2edf",
+              "layer": "organization",
+              "pack_id": "organization.demo",
+              "pack_version": "1.0.0"
+            }
+          ],
+          "proof_scope": [
+            "required_checks",
+            "vocabulary"
+          ],
+          "resolver_version": "pack-resolver@0.1.0",
+          "schema_version": "pack-resolution.v0.1",
+          "sections": {
+            "required_checks": {
+              "checks": [
+                "check.balance_equilibree",
+                "check.cgnc_conformite",
+                "check.pieces_justificatives",
+                "check.revue_associe",
+                "check.tva_ma"
+              ],
+              "retention_years": 5
+            },
+            "vocabulary": {
+              "doctrine_source": "domain.fiduciaire/doctrine@0.1.0",
+              "labels": {
+                "etats_de_synthese": "Etats de synthese",
+                "exercice_comptable": "Exercice comptable",
+                "grand_livre": "Grand livre (cabinet)"
+              },
+              "terms": [
+                "balance_generale",
+                "cgnc",
+                "dossier_permanent",
+                "etats_de_synthese",
+                "exercice_comptable",
+                "grand_livre"
+              ]
+            }
+          }
+        },
+        "effective_manifest_hash": "v1:86e8b180f181fe7e711aae94eaf11bc7fb58d58c23c9cfa2e7144823be940cf3",
+        "outcome": "resolved",
+        "resolution_trace": {
+          "effective_manifest_hash": "v1:86e8b180f181fe7e711aae94eaf11bc7fb58d58c23c9cfa2e7144823be940cf3",
+          "entries": [
+            {
+              "derogation_applied": null,
+              "effective_value": [
+                "check.balance_equilibree",
+                "check.cgnc_conformite",
+                "check.pieces_justificatives",
+                "check.revue_associe",
+                "check.tva_ma"
+              ],
+              "merge": "union",
+              "overridden_sources": [],
+              "override": "open",
+              "path": "required_checks.checks",
+              "resolution_rule": "commutative_fold",
+              "selected_from": [
+                "fiduciaire.base@0.1.0",
+                "jurisdiction.ma@0.1.0",
+                "organization.demo@1.0.0"
+              ]
+            },
+            {
+              "derogation_applied": null,
+              "effective_value": 5,
+              "merge": "replace",
+              "overridden_sources": [],
+              "override": "requires_derogation",
+              "path": "required_checks.retention_years",
+              "resolution_rule": "introduction",
+              "selected_from": [
+                "fiduciaire.base@0.1.0"
+              ]
+            },
+            {
+              "derogation_applied": null,
+              "effective_value": "domain.fiduciaire/doctrine@0.1.0",
+              "merge": "replace",
+              "overridden_sources": [],
+              "override": "forbidden",
+              "path": "vocabulary.doctrine_source",
+              "resolution_rule": "introduction",
+              "selected_from": [
+                "fiduciaire.base@0.1.0"
+              ]
+            },
+            {
+              "derogation_applied": null,
+              "effective_value": "Etats de synthese",
+              "merge": "replace",
+              "overridden_sources": [],
+              "override": "open",
+              "path": "vocabulary.labels.etats_de_synthese",
+              "resolution_rule": "introduction",
+              "selected_from": [
+                "jurisdiction.ma@0.1.0"
+              ]
+            },
+            {
+              "derogation_applied": null,
+              "effective_value": "Exercice comptable",
+              "merge": "replace",
+              "overridden_sources": [],
+              "override": "open",
+              "path": "vocabulary.labels.exercice_comptable",
+              "resolution_rule": "introduction",
+              "selected_from": [
+                "fiduciaire.base@0.1.0"
+              ]
+            },
+            {
+              "derogation_applied": null,
+              "effective_value": "Grand livre (cabinet)",
+              "merge": "replace",
+              "overridden_sources": [
+                "fiduciaire.base@0.1.0"
+              ],
+              "override": "open",
+              "path": "vocabulary.labels.grand_livre",
+              "resolution_rule": "layer_override",
+              "selected_from": [
+                "organization.demo@1.0.0"
+              ]
+            },
+            {
+              "derogation_applied": null,
+              "effective_value": [
+                "balance_generale",
+                "cgnc",
+                "dossier_permanent",
+                "etats_de_synthese",
+                "exercice_comptable",
+                "grand_livre"
+              ],
+              "merge": "union",
+              "overridden_sources": [],
+              "override": "open",
+              "path": "vocabulary.terms",
+              "resolution_rule": "commutative_fold",
+              "selected_from": [
+                "fiduciaire.base@0.1.0",
+                "jurisdiction.ma@0.1.0",
+                "organization.demo@1.0.0"
+              ]
+            }
+          ],
+          "evaluated_at": "2026-07-01T00:00:00Z",
+          "kind": "resolution_trace",
+          "resolver_version": "pack-resolver@0.1.0",
+          "schema_version": "pack-resolution.v0.1"
+        },
+        "trace_hash": "v1:6cd13116eae64508782d971e8e4bdce99f8ce5a57058ba6f6d62f4b499de81cf"
+      },
+      "id": "three-layer-permuted",
+      "packs": [
+        "organization.demo@1.0.0",
+        "fiduciaire.base@0.1.0",
+        "jurisdiction.ma@0.1.0"
+      ],
+      "same_result_as": "three-layer-baseline",
+      "why": "Byte-identical to three-layer-baseline except for input order. Same manifest, same hash. The list is transport; the input is a set (R7)."
+    },
+    {
+      "evaluated_at": "2026-07-01T00:00:00Z",
+      "expected": {
+        "contested_paths": [
+          "vocabulary.labels.grand_livre"
+        ],
+        "effective_manifest": {
+          "context": {
+            "domain": [
+              "domain.fiduciaire"
+            ],
+            "jurisdiction": [
+              "MA"
+            ],
+            "org_id": [
+              "org.demo"
+            ]
+          },
+          "evaluated_at": "2026-07-01T00:00:00Z",
+          "kind": "effective_manifest",
+          "packs": [
+            {
+              "content_hash": "v1:a502de354dff05cd9dc7cebf880842bd246b9626150db3b61ad81486ea3b7a0c",
+              "layer": "domain",
+              "pack_id": "fiduciaire.base",
+              "pack_version": "0.1.0"
+            },
+            {
+              "content_hash": "v1:3cd910ce17c5ff7c63faaed8b61ec1d04941824a70b79020c43ddb9933b42820",
+              "layer": "jurisdiction",
+              "pack_id": "jurisdiction.ma",
+              "pack_version": "0.1.0"
+            },
+            {
+              "content_hash": "v1:58a3a0197eb5e9a76b12edf0ca4ea9871e89226ad9fd9711ac0e563b042a2edf",
+              "layer": "organization",
+              "pack_id": "organization.demo",
+              "pack_version": "1.0.0"
+            }
+          ],
+          "proof_scope": [
+            "required_checks",
+            "vocabulary"
+          ],
+          "resolver_version": "pack-resolver@0.1.0",
+          "schema_version": "pack-resolution.v0.1",
+          "sections": {
+            "required_checks": {
+              "checks": [
+                "check.balance_equilibree",
+                "check.cgnc_conformite",
+                "check.pieces_justificatives",
+                "check.revue_associe",
+                "check.tva_ma"
+              ],
+              "retention_years": 5
+            },
+            "vocabulary": {
+              "doctrine_source": "domain.fiduciaire/doctrine@0.1.0",
+              "labels": {
+                "etats_de_synthese": "Etats de synthese",
+                "exercice_comptable": "Exercice comptable",
+                "grand_livre": "Grand livre (cabinet)"
+              },
+              "terms": [
+                "balance_generale",
+                "cgnc",
+                "dossier_permanent",
+                "etats_de_synthese",
+                "exercice_comptable",
+                "grand_livre"
+              ]
+            }
+          }
+        },
+        "effective_manifest_hash": "v1:86e8b180f181fe7e711aae94eaf11bc7fb58d58c23c9cfa2e7144823be940cf3",
+        "outcome": "resolved",
+        "resolution_trace": {
+          "effective_manifest_hash": "v1:86e8b180f181fe7e711aae94eaf11bc7fb58d58c23c9cfa2e7144823be940cf3",
+          "entries": [
+            {
+              "derogation_applied": null,
+              "effective_value": [
+                "check.balance_equilibree",
+                "check.cgnc_conformite",
+                "check.pieces_justificatives",
+                "check.revue_associe",
+                "check.tva_ma"
+              ],
+              "merge": "union",
+              "overridden_sources": [],
+              "override": "open",
+              "path": "required_checks.checks",
+              "resolution_rule": "commutative_fold",
+              "selected_from": [
+                "fiduciaire.base@0.1.0",
+                "jurisdiction.ma@0.1.0",
+                "organization.demo@1.0.0"
+              ]
+            },
+            {
+              "derogation_applied": null,
+              "effective_value": 5,
+              "merge": "replace",
+              "overridden_sources": [],
+              "override": "requires_derogation",
+              "path": "required_checks.retention_years",
+              "resolution_rule": "introduction",
+              "selected_from": [
+                "fiduciaire.base@0.1.0"
+              ]
+            },
+            {
+              "derogation_applied": null,
+              "effective_value": "domain.fiduciaire/doctrine@0.1.0",
+              "merge": "replace",
+              "overridden_sources": [],
+              "override": "forbidden",
+              "path": "vocabulary.doctrine_source",
+              "resolution_rule": "introduction",
+              "selected_from": [
+                "fiduciaire.base@0.1.0"
+              ]
+            },
+            {
+              "derogation_applied": null,
+              "effective_value": "Etats de synthese",
+              "merge": "replace",
+              "overridden_sources": [],
+              "override": "open",
+              "path": "vocabulary.labels.etats_de_synthese",
+              "resolution_rule": "introduction",
+              "selected_from": [
+                "jurisdiction.ma@0.1.0"
+              ]
+            },
+            {
+              "derogation_applied": null,
+              "effective_value": "Exercice comptable",
+              "merge": "replace",
+              "overridden_sources": [],
+              "override": "open",
+              "path": "vocabulary.labels.exercice_comptable",
+              "resolution_rule": "introduction",
+              "selected_from": [
+                "fiduciaire.base@0.1.0"
+              ]
+            },
+            {
+              "derogation_applied": null,
+              "effective_value": "Grand livre (cabinet)",
+              "merge": "replace",
+              "overridden_sources": [
+                "fiduciaire.base@0.1.0"
+              ],
+              "override": "open",
+              "path": "vocabulary.labels.grand_livre",
+              "resolution_rule": "layer_override",
+              "selected_from": [
+                "organization.demo@1.0.0"
+              ]
+            },
+            {
+              "derogation_applied": null,
+              "effective_value": [
+                "balance_generale",
+                "cgnc",
+                "dossier_permanent",
+                "etats_de_synthese",
+                "exercice_comptable",
+                "grand_livre"
+              ],
+              "merge": "union",
+              "overridden_sources": [],
+              "override": "open",
+              "path": "vocabulary.terms",
+              "resolution_rule": "commutative_fold",
+              "selected_from": [
+                "fiduciaire.base@0.1.0",
+                "jurisdiction.ma@0.1.0",
+                "organization.demo@1.0.0"
+              ]
+            }
+          ],
+          "evaluated_at": "2026-07-01T00:00:00Z",
+          "kind": "resolution_trace",
+          "resolver_version": "pack-resolver@0.1.0",
+          "schema_version": "pack-resolution.v0.1"
+        },
+        "trace_hash": "v1:6cd13116eae64508782d971e8e4bdce99f8ce5a57058ba6f6d62f4b499de81cf"
+      },
+      "id": "same-pack-different-source-ref",
+      "packs": [
+        "fiduciaire.base@0.1.0",
+        "jurisdiction.ma@0.1.0",
+        "jurisdiction.ma@0.1.0#mirror-copy",
+        "organization.demo@1.0.0"
+      ],
+      "same_result_as": "three-layer-baseline",
+      "why": "The same pack supplied twice from two different carriers. It deduplicates by content, and the manifest is identical to three-layer-baseline: a referent is never its carrier (R12)."
+    },
+    {
+      "evaluated_at": "2026-07-01T00:00:00Z",
+      "expected": {
+        "contested_paths": [
+          "vocabulary.labels.grand_livre"
+        ],
+        "effective_manifest": {
+          "context": {
+            "domain": [
+              "domain.fiduciaire"
+            ],
+            "jurisdiction": [
+              "FR",
+              "MA"
+            ],
+            "org_id": [
+              "org.demo"
+            ]
+          },
+          "evaluated_at": "2026-07-01T00:00:00Z",
+          "kind": "effective_manifest",
+          "packs": [
+            {
+              "content_hash": "v1:a502de354dff05cd9dc7cebf880842bd246b9626150db3b61ad81486ea3b7a0c",
+              "layer": "domain",
+              "pack_id": "fiduciaire.base",
+              "pack_version": "0.1.0"
+            },
+            {
+              "content_hash": "v1:798fe8e09613f782b669f68a3ad6b88a2bc34dcaa179b6e7700d5db092bb6937",
+              "layer": "jurisdiction",
+              "pack_id": "jurisdiction.fr",
+              "pack_version": "0.1.0"
+            },
+            {
+              "content_hash": "v1:3cd910ce17c5ff7c63faaed8b61ec1d04941824a70b79020c43ddb9933b42820",
+              "layer": "jurisdiction",
+              "pack_id": "jurisdiction.ma",
+              "pack_version": "0.1.0"
+            },
+            {
+              "content_hash": "v1:58a3a0197eb5e9a76b12edf0ca4ea9871e89226ad9fd9711ac0e563b042a2edf",
+              "layer": "organization",
+              "pack_id": "organization.demo",
+              "pack_version": "1.0.0"
+            }
+          ],
+          "proof_scope": [
+            "required_checks",
+            "vocabulary"
+          ],
+          "resolver_version": "pack-resolver@0.1.0",
+          "schema_version": "pack-resolution.v0.1",
+          "sections": {
+            "required_checks": {
+              "checks": [
+                "check.balance_equilibree",
+                "check.cgnc_conformite",
+                "check.pcg_conformite",
+                "check.pieces_justificatives",
+                "check.revue_associe",
+                "check.tva_fr",
+                "check.tva_ma"
+              ],
+              "retention_years": 5
+            },
+            "vocabulary": {
+              "doctrine_source": "domain.fiduciaire/doctrine@0.1.0",
+              "labels": {
+                "etats_de_synthese": "Etats de synthese",
+                "exercice_comptable": "Exercice comptable",
+                "grand_livre": "Grand livre (cabinet)",
+                "liasse_fiscale": "Liasse fiscale"
+              },
+              "terms": [
+                "balance_generale",
+                "cgnc",
+                "dossier_permanent",
+                "etats_de_synthese",
+                "exercice_comptable",
+                "grand_livre",
+                "liasse_fiscale",
+                "pcg"
+              ]
+            }
+          }
+        },
+        "effective_manifest_hash": "v1:da6f22f024e20dabd034bd00c0121c2b9f3ee8b093d5d09b4a0225ac27acec7f",
+        "outcome": "resolved",
+        "resolution_trace": {
+          "effective_manifest_hash": "v1:da6f22f024e20dabd034bd00c0121c2b9f3ee8b093d5d09b4a0225ac27acec7f",
+          "entries": [
+            {
+              "derogation_applied": null,
+              "effective_value": [
+                "check.balance_equilibree",
+                "check.cgnc_conformite",
+                "check.pcg_conformite",
+                "check.pieces_justificatives",
+                "check.revue_associe",
+                "check.tva_fr",
+                "check.tva_ma"
+              ],
+              "merge": "union",
+              "overridden_sources": [],
+              "override": "open",
+              "path": "required_checks.checks",
+              "resolution_rule": "commutative_fold",
+              "selected_from": [
+                "fiduciaire.base@0.1.0",
+                "jurisdiction.fr@0.1.0",
+                "jurisdiction.ma@0.1.0",
+                "organization.demo@1.0.0"
+              ]
+            },
+            {
+              "derogation_applied": null,
+              "effective_value": 5,
+              "merge": "replace",
+              "overridden_sources": [],
+              "override": "requires_derogation",
+              "path": "required_checks.retention_years",
+              "resolution_rule": "introduction",
+              "selected_from": [
+                "fiduciaire.base@0.1.0"
+              ]
+            },
+            {
+              "derogation_applied": null,
+              "effective_value": "domain.fiduciaire/doctrine@0.1.0",
+              "merge": "replace",
+              "overridden_sources": [],
+              "override": "forbidden",
+              "path": "vocabulary.doctrine_source",
+              "resolution_rule": "introduction",
+              "selected_from": [
+                "fiduciaire.base@0.1.0"
+              ]
+            },
+            {
+              "derogation_applied": null,
+              "effective_value": "Etats de synthese",
+              "merge": "replace",
+              "overridden_sources": [],
+              "override": "open",
+              "path": "vocabulary.labels.etats_de_synthese",
+              "resolution_rule": "introduction",
+              "selected_from": [
+                "jurisdiction.ma@0.1.0"
+              ]
+            },
+            {
+              "derogation_applied": null,
+              "effective_value": "Exercice comptable",
+              "merge": "replace",
+              "overridden_sources": [],
+              "override": "open",
+              "path": "vocabulary.labels.exercice_comptable",
+              "resolution_rule": "introduction",
+              "selected_from": [
+                "fiduciaire.base@0.1.0"
+              ]
+            },
+            {
+              "derogation_applied": null,
+              "effective_value": "Grand livre (cabinet)",
+              "merge": "replace",
+              "overridden_sources": [
+                "fiduciaire.base@0.1.0"
+              ],
+              "override": "open",
+              "path": "vocabulary.labels.grand_livre",
+              "resolution_rule": "layer_override",
+              "selected_from": [
+                "organization.demo@1.0.0"
+              ]
+            },
+            {
+              "derogation_applied": null,
+              "effective_value": "Liasse fiscale",
+              "merge": "replace",
+              "overridden_sources": [],
+              "override": "open",
+              "path": "vocabulary.labels.liasse_fiscale",
+              "resolution_rule": "introduction",
+              "selected_from": [
+                "jurisdiction.fr@0.1.0"
+              ]
+            },
+            {
+              "derogation_applied": null,
+              "effective_value": [
+                "balance_generale",
+                "cgnc",
+                "dossier_permanent",
+                "etats_de_synthese",
+                "exercice_comptable",
+                "grand_livre",
+                "liasse_fiscale",
+                "pcg"
+              ],
+              "merge": "union",
+              "overridden_sources": [],
+              "override": "open",
+              "path": "vocabulary.terms",
+              "resolution_rule": "commutative_fold",
+              "selected_from": [
+                "fiduciaire.base@0.1.0",
+                "jurisdiction.fr@0.1.0",
+                "jurisdiction.ma@0.1.0",
+                "organization.demo@1.0.0"
+              ]
+            }
+          ],
+          "evaluated_at": "2026-07-01T00:00:00Z",
+          "kind": "resolution_trace",
+          "resolver_version": "pack-resolver@0.1.0",
+          "schema_version": "pack-resolution.v0.1"
+        },
+        "trace_hash": "v1:18231ddb5ca4b93fc1bdc7d5a34a5f6344014fe72bf777cf355340cfebdb1389"
+      },
+      "id": "peer-union-commutes",
+      "packs": [
+        "fiduciaire.base@0.1.0",
+        "jurisdiction.ma@0.1.0",
+        "jurisdiction.fr@0.1.0",
+        "organization.demo@1.0.0"
+      ],
+      "why": "Two jurisdiction packs at equal rank. Their contributions are `union`, which commutes, so peers are permitted and the fold is order-free."
+    },
+    {
+      "evaluated_at": "2026-07-01T00:00:00Z",
+      "expected": {
+        "contested_paths": [
+          "required_checks.retention_years"
+        ],
+        "effective_manifest": {
+          "context": {
+            "domain": [
+              "domain.fiduciaire"
+            ],
+            "jurisdiction": [
+              "MA"
+            ],
+            "org_id": []
+          },
+          "evaluated_at": "2026-07-01T00:00:00Z",
+          "kind": "effective_manifest",
+          "packs": [
+            {
+              "content_hash": "v1:a502de354dff05cd9dc7cebf880842bd246b9626150db3b61ad81486ea3b7a0c",
+              "layer": "domain",
+              "pack_id": "fiduciaire.base",
+              "pack_version": "0.1.0"
+            },
+            {
+              "content_hash": "v1:314971763fc8bcaae84f54cc55a2faf4c0480eaa17d77158043187636831a0dd",
+              "layer": "jurisdiction",
+              "pack_id": "jurisdiction.ma",
+              "pack_version": "0.2.0"
+            }
+          ],
+          "proof_scope": [
+            "required_checks",
+            "vocabulary"
+          ],
+          "resolver_version": "pack-resolver@0.1.0",
+          "schema_version": "pack-resolution.v0.1",
+          "sections": {
+            "required_checks": {
+              "checks": [
+                "check.balance_equilibree",
+                "check.cgnc_conformite",
+                "check.pieces_justificatives",
+                "check.tva_ma"
+              ],
+              "retention_years": 10
+            },
+            "vocabulary": {
+              "doctrine_source": "domain.fiduciaire/doctrine@0.1.0",
+              "labels": {
+                "etats_de_synthese": "Etats de synthese",
+                "exercice_comptable": "Exercice comptable",
+                "grand_livre": "Grand livre"
+              },
+              "terms": [
+                "balance_generale",
+                "cgnc",
+                "etats_de_synthese",
+                "exercice_comptable",
+                "grand_livre"
+              ]
+            }
+          }
+        },
+        "effective_manifest_hash": "v1:a747de53aafd47633bfc6216d88808859baf6b05fb85a81a84ab4ae4853d3879",
+        "outcome": "resolved",
+        "resolution_trace": {
+          "effective_manifest_hash": "v1:a747de53aafd47633bfc6216d88808859baf6b05fb85a81a84ab4ae4853d3879",
+          "entries": [
+            {
+              "derogation_applied": null,
+              "effective_value": [
+                "check.balance_equilibree",
+                "check.cgnc_conformite",
+                "check.pieces_justificatives",
+                "check.tva_ma"
+              ],
+              "merge": "union",
+              "overridden_sources": [],
+              "override": "open",
+              "path": "required_checks.checks",
+              "resolution_rule": "commutative_fold",
+              "selected_from": [
+                "fiduciaire.base@0.1.0",
+                "jurisdiction.ma@0.2.0"
+              ]
+            },
+            {
+              "derogation_applied": {
+                "authority_id": "authority.ma.regulator",
+                "derogation_id": "der.ma.retention.2026",
+                "expires_at": "2027-01-01T00:00:00Z",
+                "key_id": "key.ma.regulator.2026"
+              },
+              "effective_value": 10,
+              "merge": "replace",
+              "overridden_sources": [
+                "fiduciaire.base@0.1.0"
+              ],
+              "override": "requires_derogation",
+              "path": "required_checks.retention_years",
+              "resolution_rule": "derogated_override",
+              "selected_from": [
+                "jurisdiction.ma@0.2.0"
+              ]
+            },
+            {
+              "derogation_applied": null,
+              "effective_value": "domain.fiduciaire/doctrine@0.1.0",
+              "merge": "replace",
+              "overridden_sources": [],
+              "override": "forbidden",
+              "path": "vocabulary.doctrine_source",
+              "resolution_rule": "introduction",
+              "selected_from": [
+                "fiduciaire.base@0.1.0"
+              ]
+            },
+            {
+              "derogation_applied": null,
+              "effective_value": "Etats de synthese",
+              "merge": "replace",
+              "overridden_sources": [],
+              "override": "open",
+              "path": "vocabulary.labels.etats_de_synthese",
+              "resolution_rule": "introduction",
+              "selected_from": [
+                "jurisdiction.ma@0.2.0"
+              ]
+            },
+            {
+              "derogation_applied": null,
+              "effective_value": "Exercice comptable",
+              "merge": "replace",
+              "overridden_sources": [],
+              "override": "open",
+              "path": "vocabulary.labels.exercice_comptable",
+              "resolution_rule": "introduction",
+              "selected_from": [
+                "fiduciaire.base@0.1.0"
+              ]
+            },
+            {
+              "derogation_applied": null,
+              "effective_value": "Grand livre",
+              "merge": "replace",
+              "overridden_sources": [],
+              "override": "open",
+              "path": "vocabulary.labels.grand_livre",
+              "resolution_rule": "introduction",
+              "selected_from": [
+                "fiduciaire.base@0.1.0"
+              ]
+            },
+            {
+              "derogation_applied": null,
+              "effective_value": [
+                "balance_generale",
+                "cgnc",
+                "etats_de_synthese",
+                "exercice_comptable",
+                "grand_livre"
+              ],
+              "merge": "union",
+              "overridden_sources": [],
+              "override": "open",
+              "path": "vocabulary.terms",
+              "resolution_rule": "commutative_fold",
+              "selected_from": [
+                "fiduciaire.base@0.1.0",
+                "jurisdiction.ma@0.2.0"
+              ]
+            }
+          ],
+          "evaluated_at": "2026-07-01T00:00:00Z",
+          "kind": "resolution_trace",
+          "resolver_version": "pack-resolver@0.1.0",
+          "schema_version": "pack-resolution.v0.1"
+        },
+        "trace_hash": "v1:4b2914dc552af5459f648f08510343a30dbd1d3df67dbe4e6d75d8e5bd4f5926"
+      },
+      "id": "derogation-valid",
+      "packs": [
+        "fiduciaire.base@0.1.0",
+        "jurisdiction.ma@0.2.0"
+      ],
+      "why": "retention_years is raised 5 -> 10 under a derogation that names the path literally, cites an authority, and is in force at evaluated_at. resolution_rule is derogated_override."
+    },
+    {
+      "evaluated_at": "2026-07-01T00:00:00Z",
+      "expected": {
+        "contested_paths": [],
+        "effective_manifest": {
+          "context": {
+            "domain": [],
+            "jurisdiction": [],
+            "org_id": []
+          },
+          "evaluated_at": "2026-07-01T00:00:00Z",
+          "kind": "effective_manifest",
+          "packs": [],
+          "proof_scope": [
+            "required_checks",
+            "vocabulary"
+          ],
+          "resolver_version": "pack-resolver@0.1.0",
+          "schema_version": "pack-resolution.v0.1",
+          "sections": {}
+        },
+        "effective_manifest_hash": "v1:7f6463f37aa2a7b629450781fa49b1c6dbb13397134cbd538d6959734359c9c6",
+        "outcome": "resolved",
+        "resolution_trace": {
+          "effective_manifest_hash": "v1:7f6463f37aa2a7b629450781fa49b1c6dbb13397134cbd538d6959734359c9c6",
+          "entries": [],
+          "evaluated_at": "2026-07-01T00:00:00Z",
+          "kind": "resolution_trace",
+          "resolver_version": "pack-resolver@0.1.0",
+          "schema_version": "pack-resolution.v0.1"
+        },
+        "trace_hash": "v1:ba6a96a7e83341f9c30d27e226ed56b0ba24cb741065df20f9d6e9b482f32adf"
+      },
+      "id": "empty-packset",
+      "packs": [],
+      "why": "Boundary case. No packs is not an error: it resolves to an empty manifest recording that NO rules were in force. A consumer must read that as 'nothing governed here', never as 'anything permitted' \u2014 the empty manifest authorizes nothing."
+    },
+    {
+      "evaluated_at": "2026-07-01T00:00:00Z",
+      "expected": {
+        "outcome": "refused",
+        "phase": "P5_composition",
+        "refusal_codes": [
+          "peer_conflict"
+        ],
+        "refusal_hash": "v1:b46a1ae848dd20e1456c4e062ee45c26d6403d75c5a2ae4c9865bb2a12803047",
+        "resolution_refusal": {
+          "evaluated_at": "2026-07-01T00:00:00Z",
+          "kind": "resolution_refusal",
+          "phase": "P5_composition",
+          "refusals": [
+            {
+              "code": "peer_conflict",
+              "detail": {
+                "distinct_values": 2,
+                "layer_rank": 2,
+                "merge": "replace"
+              },
+              "pack_refs": [
+                "jurisdiction.fr@0.1.1",
+                "jurisdiction.ma@0.1.1"
+              ],
+              "path": "vocabulary.labels.exercice_comptable"
+            }
+          ],
+          "resolver_version": "pack-resolver@0.1.0",
+          "schema_version": "pack-resolution.v0.1"
+        }
+      },
+      "id": "peer-conflict-replace",
+      "packs": [
+        "fiduciaire.base@0.1.0",
+        "jurisdiction.ma@0.1.1",
+        "jurisdiction.fr@0.1.1"
+      ],
+      "why": "Two peers, `replace` semantics, different values, nothing to distinguish them. Refusing is the correct answer; picking a winner would require an order that does not exist (R4/R7)."
+    },
+    {
+      "evaluated_at": "2026-07-01T00:00:00Z",
+      "expected": {
+        "outcome": "refused",
+        "phase": "P5_composition",
+        "refusal_codes": [
+          "forbidden_override"
+        ],
+        "refusal_hash": "v1:be6f100a73d0e51b92efd1e121b82cead0aa7ab8a9585c4726c6033e65d2379e",
+        "resolution_refusal": {
+          "evaluated_at": "2026-07-01T00:00:00Z",
+          "kind": "resolution_refusal",
+          "phase": "P5_composition",
+          "refusals": [
+            {
+              "code": "forbidden_override",
+              "detail": {
+                "layer_rank": 3
+              },
+              "pack_refs": [
+                "organization.demo@1.1.0"
+              ],
+              "path": "vocabulary.doctrine_source"
+            }
+          ],
+          "resolver_version": "pack-resolver@0.1.0",
+          "schema_version": "pack-resolution.v0.1"
+        }
+      },
+      "id": "forbidden-override",
+      "packs": [
+        "fiduciaire.base@0.1.0",
+        "organization.demo@1.1.0"
+      ],
+      "why": "`forbidden` is absolute and is checked BEFORE any derogation is consulted, so no authority and no rank reaches this path (R5)."
+    },
+    {
+      "evaluated_at": "2026-07-01T00:00:00Z",
+      "expected": {
+        "outcome": "refused",
+        "phase": "P5_composition",
+        "refusal_codes": [
+          "derogation_required"
+        ],
+        "refusal_hash": "v1:a80d8c43a1d8da8437f2fbeeef43e9ac4af033fa3559d6f33df44c807f2db511",
+        "resolution_refusal": {
+          "evaluated_at": "2026-07-01T00:00:00Z",
+          "kind": "resolution_refusal",
+          "phase": "P5_composition",
+          "refusals": [
+            {
+              "code": "derogation_required",
+              "detail": {
+                "layer_rank": 2
+              },
+              "pack_refs": [
+                "jurisdiction.ma@0.3.0"
+              ],
+              "path": "required_checks.retention_years"
+            }
+          ],
+          "resolver_version": "pack-resolver@0.1.0",
+          "schema_version": "pack-resolution.v0.1"
+        }
+      },
+      "id": "derogation-required",
+      "packs": [
+        "fiduciaire.base@0.1.0",
+        "jurisdiction.ma@0.3.0"
+      ],
+      "why": "The permission floor is requires_derogation and no derogation covers the path. Refusal, not a silent grant."
+    },
+    {
+      "evaluated_at": "2027-06-01T00:00:00Z",
+      "expected": {
+        "outcome": "refused",
+        "phase": "P5_composition",
+        "refusal_codes": [
+          "derogation_expired"
+        ],
+        "refusal_hash": "v1:15ccecb51dff9d5781c06af3fc9702f1ebc6c13689a672a5a094966bad47bd69",
+        "resolution_refusal": {
+          "evaluated_at": "2027-06-01T00:00:00Z",
+          "kind": "resolution_refusal",
+          "phase": "P5_composition",
+          "refusals": [
+            {
+              "code": "derogation_expired",
+              "detail": {
+                "derogation_ids": [
+                  "der.ma.retention.2026"
+                ],
+                "evaluated_at": "2027-06-01T00:00:00Z"
+              },
+              "pack_refs": [
+                "jurisdiction.ma@0.2.0"
+              ],
+              "path": "required_checks.retention_years"
+            }
+          ],
+          "resolver_version": "pack-resolver@0.1.0",
+          "schema_version": "pack-resolution.v0.1"
+        }
+      },
+      "id": "derogation-expired",
+      "packs": [
+        "fiduciaire.base@0.1.0",
+        "jurisdiction.ma@0.2.0"
+      ],
+      "why": "Identical packs to derogation-valid, different evaluated_at. Evaluation time is an input (R8): same rules, different instant, different lawful outcome."
+    },
+    {
+      "evaluated_at": "2026-07-01T00:00:00Z",
+      "expected": {
+        "outcome": "refused",
+        "phase": "P4_derogation_form",
+        "refusal_codes": [
+          "derogation_invalid"
+        ],
+        "refusal_hash": "v1:1dcb1e01ce3ebcb9d8c5a49e30efe64e3fc58b102a31cfc004003334eb1d65e7",
+        "resolution_refusal": {
+          "evaluated_at": "2026-07-01T00:00:00Z",
+          "kind": "resolution_refusal",
+          "phase": "P4_derogation_form",
+          "refusals": [
+            {
+              "code": "derogation_invalid",
+              "detail": {
+                "derogation_id": "der.ma.retention.malformed",
+                "reasons": [
+                  "non_positive_window"
+                ]
+              },
+              "pack_refs": [
+                "jurisdiction.ma@0.4.0"
+              ],
+              "path": ""
+            }
+          ],
+          "resolver_version": "pack-resolver@0.1.0",
+          "schema_version": "pack-resolution.v0.1"
+        }
+      },
+      "id": "derogation-malformed",
+      "packs": [
+        "fiduciaire.base@0.1.0",
+        "jurisdiction.ma@0.4.0"
+      ],
+      "why": "Empty derogation window. Fails closed in P4 unconditionally \u2014 even though the path it names would have been contested anyway, the malformed derogation alone refuses the resolution."
+    },
+    {
+      "evaluated_at": "2026-07-01T00:00:00Z",
+      "expected": {
+        "outcome": "refused",
+        "phase": "P3_control",
+        "refusal_codes": [
+          "strategy_relaxation_refused"
+        ],
+        "refusal_hash": "v1:802f30a791902da2e252325365290dd9a98880fa8517b8f0a00d203786ef3601",
+        "resolution_refusal": {
+          "evaluated_at": "2026-07-01T00:00:00Z",
+          "kind": "resolution_refusal",
+          "phase": "P3_control",
+          "refusals": [
+            {
+              "code": "strategy_relaxation_refused",
+              "detail": {
+                "attempted": [
+                  "open"
+                ],
+                "floor": "requires_derogation"
+              },
+              "pack_refs": [
+                "jurisdiction.ma@0.5.0"
+              ],
+              "path": "required_checks.retention_years"
+            }
+          ],
+          "resolver_version": "pack-resolver@0.1.0",
+          "schema_version": "pack-resolution.v0.1"
+        }
+      },
+      "id": "strategy-relaxation-refused",
+      "packs": [
+        "fiduciaire.base@0.1.0",
+        "jurisdiction.ma@0.5.0"
+      ],
+      "why": "override may be tightened, never loosened. A layer cannot vote itself more freedom than the layer that introduced the field granted it (R3)."
+    },
+    {
+      "evaluated_at": "2026-07-01T00:00:00Z",
+      "expected": {
+        "outcome": "refused",
+        "phase": "P3_control",
+        "refusal_codes": [
+          "merge_semantics_conflict"
+        ],
+        "refusal_hash": "v1:3fca5e4a65041eea4011bbcef654069bfdc5ac206359b8a4d9f755ea1c78afeb",
+        "resolution_refusal": {
+          "evaluated_at": "2026-07-01T00:00:00Z",
+          "kind": "resolution_refusal",
+          "phase": "P3_control",
+          "refusals": [
+            {
+              "code": "merge_semantics_conflict",
+              "detail": {
+                "attempted": [
+                  "replace"
+                ],
+                "introduced": "union",
+                "reason": "merge semantics are fixed by the introducing layer"
+              },
+              "pack_refs": [
+                "jurisdiction.ma@0.6.0"
+              ],
+              "path": "vocabulary.terms"
+            }
+          ],
+          "resolver_version": "pack-resolver@0.1.0",
+          "schema_version": "pack-resolution.v0.1"
+        }
+      },
+      "id": "merge-semantics-conflict",
+      "packs": [
+        "fiduciaire.base@0.1.0",
+        "jurisdiction.ma@0.6.0"
+      ],
+      "why": "merge is fixed at introduction and is not overridable at any rank. Allowing a higher layer to flip union -> replace would change the MEANING of a field silently (R3)."
+    },
+    {
+      "evaluated_at": "2026-07-01T00:00:00Z",
+      "expected": {
+        "outcome": "refused",
+        "phase": "P5_composition",
+        "refusal_codes": [
+          "forbidden_override"
+        ],
+        "refusal_hash": "v1:c045a478d8c956b096ebe5cb322b409864501b3276c6b3d523e5dbcde4725053",
+        "resolution_refusal": {
+          "evaluated_at": "2026-07-01T00:00:00Z",
+          "kind": "resolution_refusal",
+          "phase": "P5_composition",
+          "refusals": [
+            {
+              "code": "forbidden_override",
+              "detail": {
+                "layer_rank": 3
+              },
+              "pack_refs": [
+                "organization.demo@2.0.0"
+              ],
+              "path": "required_checks.review_cycle_days"
+            }
+          ],
+          "resolver_version": "pack-resolver@0.1.0",
+          "schema_version": "pack-resolution.v0.1"
+        }
+      },
+      "id": "undeclared-control-fails-closed",
+      "packs": [
+        "fiduciaire.base@0.2.0",
+        "organization.demo@2.0.0"
+      ],
+      "why": "A leaf covered by no control declaration takes {merge: replace, override: forbidden}. An undeclared field is not an open field. This mirrors verify_hash failing closed on an unknown prefix (R3bis/D4)."
+    },
+    {
+      "evaluated_at": "2026-07-01T00:00:00Z",
+      "expected": {
+        "outcome": "refused",
+        "phase": "P1_identity",
+        "refusal_codes": [
+          "unknown_referent"
+        ],
+        "refusal_hash": "v1:172a9151f94c2b52d451beda1680de0a83988e137241c987c471f410ab84e70e",
+        "resolution_refusal": {
+          "evaluated_at": "2026-07-01T00:00:00Z",
+          "kind": "resolution_refusal",
+          "phase": "P1_identity",
+          "refusals": [
+            {
+              "code": "unknown_referent",
+              "detail": {
+                "referent": "layer",
+                "value": "regulator"
+              },
+              "pack_refs": [
+                "regulator.ma@0.1.0"
+              ],
+              "path": ""
+            }
+          ],
+          "resolver_version": "pack-resolver@0.1.0",
+          "schema_version": "pack-resolution.v0.1"
+        }
+      },
+      "id": "unknown-referent-layer",
+      "packs": [
+        "fiduciaire.base@0.1.0",
+        "regulator.ma@0.1.0"
+      ],
+      "why": "A fifth layer is refused in P1 rather than ranked. Note the pack is deliberately schema-invalid: the resolver must refuse it on its own, without leaning on the schema having run."
+    },
+    {
+      "evaluated_at": "2026-07-01T00:00:00Z",
+      "expected": {
+        "outcome": "refused",
+        "phase": "P1_identity",
+        "refusal_codes": [
+          "duplicate_pack_identity"
+        ],
+        "refusal_hash": "v1:609ca14b9dbb0d9e5d066c4cb70804291dd2ce84f624653d3c14ff91a920d359",
+        "resolution_refusal": {
+          "evaluated_at": "2026-07-01T00:00:00Z",
+          "kind": "resolution_refusal",
+          "phase": "P1_identity",
+          "refusals": [
+            {
+              "code": "duplicate_pack_identity",
+              "detail": {
+                "reason": "same pack_id at multiple versions in one resolution"
+              },
+              "pack_refs": [
+                "jurisdiction.ma@0.1.0",
+                "jurisdiction.ma@0.2.0"
+              ],
+              "path": ""
+            }
+          ],
+          "resolver_version": "pack-resolver@0.1.0",
+          "schema_version": "pack-resolution.v0.1"
+        }
+      },
+      "id": "duplicate-pack-identity",
+      "packs": [
+        "fiduciaire.base@0.1.0",
+        "jurisdiction.ma@0.1.0",
+        "jurisdiction.ma@0.2.0"
+      ],
+      "why": "The same pack_id at two versions in one resolution. Which version governs is undecidable, so it is refused rather than resolved by list position."
+    },
+    {
+      "evaluated_at": "2026-07-01T00:00:00Z",
+      "expected": {
+        "outcome": "refused",
+        "phase": "P2_compatibility",
+        "refusal_codes": [
+          "compatibility_violation"
+        ],
+        "refusal_hash": "v1:c360c97a17669a28c2530e01ddc39dbf12b93a6a89696f6aa1459c57f4a72347",
+        "resolution_refusal": {
+          "evaluated_at": "2026-07-01T00:00:00Z",
+          "kind": "resolution_refusal",
+          "phase": "P2_compatibility",
+          "refusals": [
+            {
+              "code": "compatibility_violation",
+              "detail": {
+                "actual": "0.1.0",
+                "expected": ">=0.2.0 <0.3.0",
+                "pack_id": "fiduciaire.base",
+                "requirement": "requires_packs"
+              },
+              "pack_refs": [
+                "jurisdiction.ma@0.9.0"
+              ],
+              "path": ""
+            }
+          ],
+          "resolver_version": "pack-resolver@0.1.0",
+          "schema_version": "pack-resolution.v0.1"
+        }
+      },
+      "id": "compatibility-violation",
+      "packs": [
+        "fiduciaire.base@0.1.0",
+        "jurisdiction.ma@0.9.0"
+      ],
+      "why": "A pack's own declared requirement is unmet. Checked in P2, before any value is composed."
+    },
+    {
+      "evaluated_at": "2026-07-01T00:00:00Z",
+      "expected": {
+        "outcome": "refused",
+        "phase": "P3_control",
+        "refusal_codes": [
+          "merge_semantics_conflict"
+        ],
+        "refusal_hash": "v1:3b1e374ce6bef78aca5f3a6b43de6d78debd24d2feab9925e0eb9a1b54dfcbe4",
+        "resolution_refusal": {
+          "evaluated_at": "2026-07-01T00:00:00Z",
+          "kind": "resolution_refusal",
+          "phase": "P3_control",
+          "refusals": [
+            {
+              "code": "merge_semantics_conflict",
+              "detail": {
+                "attempted": [
+                  "intersect"
+                ],
+                "introduced": "union",
+                "reason": "merge semantics are fixed by the introducing layer"
+              },
+              "pack_refs": [
+                "jurisdiction.ma@0.7.0"
+              ],
+              "path": "required_checks.checks"
+            },
+            {
+              "code": "merge_semantics_conflict",
+              "detail": {
+                "declared": [
+                  "replace",
+                  "union"
+                ],
+                "reason": "competing merge semantics at equal specificity"
+              },
+              "pack_refs": [
+                "jurisdiction.fr@0.7.0",
+                "jurisdiction.ma@0.7.0"
+              ],
+              "path": "vocabulary.aliases.grand_livre"
+            },
+            {
+              "code": "merge_semantics_conflict",
+              "detail": {
+                "attempted": [
+                  "replace"
+                ],
+                "introduced": "union",
+                "reason": "merge semantics are fixed by the introducing layer"
+              },
+              "pack_refs": [
+                "jurisdiction.ma@0.7.0"
+              ],
+              "path": "vocabulary.terms"
+            }
+          ],
+          "resolver_version": "pack-resolver@0.1.0",
+          "schema_version": "pack-resolution.v0.1"
+        }
+      },
+      "id": "refusal-ordering-by-path",
+      "packs": [
+        "fiduciaire.base@0.1.0",
+        "jurisdiction.ma@0.7.0",
+        "jurisdiction.fr@0.7.0"
+      ],
+      "why": "Two refusals sharing one code. R9 orders them by `path`; sorting the whole refusal object canonically would order them by `detail`, which comes first alphabetically and is prose. The two orders disagree here, so this vector separates the rule from a plausible imitation of it \u2014 and because the refusal set is hashed, the disagreement is a different refusal_hash, not a cosmetic difference."
+    },
+    {
+      "evaluated_at": "2026-07-01T00:00:00Z",
+      "expected": {
+        "outcome": "refused",
+        "phase": "P2_compatibility",
+        "refusal_codes": [
+          "compatibility_violation"
+        ],
+        "refusal_hash": "v1:e6592c390b7409d5c9fc2960252fde3c1ecae3d3b060e1d1a1450dc3082527cd",
+        "resolution_refusal": {
+          "evaluated_at": "2026-07-01T00:00:00Z",
+          "kind": "resolution_refusal",
+          "phase": "P2_compatibility",
+          "refusals": [
+            {
+              "code": "compatibility_violation",
+              "detail": {
+                "expected": ">=1.0.0 <2.0.0",
+                "missing": "fiduciaire.aaa",
+                "requirement": "requires_packs"
+              },
+              "pack_refs": [
+                "jurisdiction.ma@0.8.0"
+              ],
+              "path": ""
+            },
+            {
+              "code": "compatibility_violation",
+              "detail": {
+                "expected": ">=1.0.0 <2.0.0",
+                "missing": "fiduciaire.zzz",
+                "requirement": "requires_packs"
+              },
+              "pack_refs": [
+                "jurisdiction.ma@0.8.0"
+              ],
+              "path": ""
+            }
+          ],
+          "resolver_version": "pack-resolver@0.1.0",
+          "schema_version": "pack-resolution.v0.1"
+        }
+      },
+      "id": "refusal-ordering-tie-break",
+      "packs": [
+        "fiduciaire.base@0.1.0",
+        "jurisdiction.ma@0.8.0"
+      ],
+      "why": "Two refusals identical in (code, path, pack_refs). The primary key cannot separate them, so an implementation without the total tie-break falls back on construction order \u2014 here, the order the author happened to type the requirements in. That is exactly the input-order dependence R9 exists to remove, hiding one level down inside a hashed structure."
+    }
+  ],
+  "x-daryl-status": "Proposed \u2014 awaiting human ratification"
+}

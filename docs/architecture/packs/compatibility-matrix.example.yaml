@@ -1,0 +1,53 @@
+# NON-NORMATIVE EXAMPLE — a worked compatibility declaration.
+#
+# What this file is: a human-facing, out-of-band record of which pack combinations an author
+# has actually tested together, and which the resolver will refuse in phase P2.
+#
+# What this file is NOT, and must never become:
+#   - it is NOT an input to resolution. The resolver reads `compatibility.requires_packs`
+#     inside each pack and nothing else. A matrix that could relax a pack's own declared
+#     requirement would be a second source of law, and the second source always wins by
+#     accident (ADR-PACK-0001 R7: only declared rules arbitrate, never ambient context).
+#   - it is NOT a registry, a distribution index, or a trust root. Pack discovery,
+#     distribution and trust bootstrapping are explicit non-goals of v0.1.
+#   - its ROW ORDER carries no meaning whatsoever.
+---
+schema_version: compatibility-matrix.example.v0.1
+
+resolver:
+  version: pack-resolver@0.1.0
+
+# Version ranges use the only grammar v0.1 accepts: ">=A.B.C <D.E.F".
+# Deliberately minimal — caret/tilde grammars are a classic source of divergence between
+# two independent implementations, and this lot is graded on two implementations agreeing.
+matrix:
+  - domain_pack: fiduciaire.base
+    domain_range: ">=0.1.0 <0.2.0"
+    jurisdiction_packs:
+      - pack_id: jurisdiction.ma
+        range: ">=0.1.0 <0.3.0"
+        status: tested
+        note: "0.2.0 raises retention_years under a signed, expiring derogation."
+      - pack_id: jurisdiction.fr
+        range: ">=0.1.0 <0.2.0"
+        status: tested
+        note: >-
+          Peer of jurisdiction.ma. Union contributions commute and resolve; a competing
+          `replace` on the same label refuses with peer_conflict. Both are correct outcomes.
+    organization_profiles:
+      - pack_id: organization.demo
+        range: ">=1.0.0 <2.0.0"
+        status: tested
+
+# Combinations known to refuse, recorded so the refusal reads as designed rather than broken.
+# Every one of these is reproduced as a vector in resolution-vectors.v0.1.json.
+expected_refusals:
+  - combination: "fiduciaire.base@0.1.0 + jurisdiction.ma@0.9.0"
+    code: compatibility_violation
+    why: "The jurisdiction pack requires a domain range the present domain pack does not satisfy."
+  - combination: "fiduciaire.base@0.1.0 + jurisdiction.ma@0.1.0 + jurisdiction.fr@0.1.0 (competing label)"
+    code: peer_conflict
+    why: "Two packs at equal rank, `replace` semantics, different values. Nothing may order them."
+  - combination: "fiduciaire.base@0.1.0 + organization.demo@1.1.0 (sets doctrine_source)"
+    code: forbidden_override
+    why: "`forbidden` is absolute. Highest precedence is not sovereignty."

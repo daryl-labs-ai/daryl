@@ -1,0 +1,240 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://daryl-labs.ai/schemas/pack.v0.1.schema.json",
+  "title": "Daryl Pack v0.1",
+  "description": "Envelope of a Daryl knowledge pack. Governed by ADR-PACK-0001 (composition law) and ADR-PRL-0014 (context referents). The envelope RESERVES all fourteen sections so later versions need not rewrite it, but the v0.1 proof carries ONLY 'vocabulary' and 'required_checks': a conforming v0.1 resolver MUST NOT compose, and MUST NOT hash into the effective manifest, any section marked x-daryl-proof-scope=reserved. Where this schema and ADR-PACK-0001 disagree, the ADR governs and this schema is the defect.",
+  "x-daryl-status": "Proposed — awaiting human ratification",
+  "x-daryl-proof-scope-in": ["vocabulary", "required_checks"],
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "identity", "composition"],
+  "properties": {
+    "schema_version": {
+      "const": "pack.v0.1"
+    },
+
+    "identity": {
+      "description": "ADR-PRL-0014 referents. Declared, never inferred from path, file name, storage, deployment region or model. An absent referent reads as unknown, never as universal.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pack_id", "pack_version", "layer"],
+      "properties": {
+        "pack_id": {
+          "description": "Stable logical identity. Not the file, not the path, not the repository.",
+          "type": "string",
+          "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+          "minLength": 1
+        },
+        "pack_version": {
+          "description": "semver MAJOR.MINOR.PATCH. A pack is immutable at a version; changing governed content requires a new version. The citable unit is pack_id@pack_version.",
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+        },
+        "layer": {
+          "description": "Precedence rank. The chain is closed at four: derogation is NOT a layer (ADR-PACK-0001 R2).",
+          "enum": ["core", "domain", "jurisdiction", "organization"]
+        },
+        "domain": {
+          "description": "A body of professional thinking, not a task type or a shard family.",
+          "type": "string",
+          "pattern": "^domain\\.[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+        },
+        "jurisdiction": {
+          "description": "A regulatory space, NOT a deployment region, data-residency zone or locale. ISO 3166-1 alpha-2 upper, optionally XX-REGION.",
+          "type": "string",
+          "pattern": "^[A-Z]{2}(?:-[A-Z0-9]{1,3})?$"
+        },
+        "org_id": {
+          "description": "ADR-PRL-0010 referent, CITED AND REUSED UNCHANGED. Not redefined here or in ADR-PRL-0014.",
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+
+    "compatibility": {
+      "description": "What this pack requires of its neighbours and of the resolver. Violations are refused in phase P2 with compatibility_violation.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "requires_packs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["pack_id", "version_range"],
+            "properties": {
+              "pack_id": {"type": "string", "minLength": 1},
+              "version_range": {
+                "description": "v0.1 supports only a caret-free explicit range of the form '>=A.B.C <D.E.F'. Deliberately minimal: range grammars are a source of implementation divergence.",
+                "type": "string",
+                "pattern": "^>=(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*) <(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+              }
+            }
+          }
+        },
+        "requires_resolver": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["min_version"],
+          "properties": {
+            "min_version": {"type": "string", "pattern": "^pack-resolver@(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"}
+          }
+        }
+      }
+    },
+
+    "composition": {
+      "description": "Per-field control (ADR-PACK-0001 R3/R3bis) and derogations (R6). Derogation is not a layer: it is a field-level permission effect evaluated inside composition.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["controls"],
+      "properties": {
+        "controls": {
+          "description": "A control names a leaf path or a path prefix; for a given leaf the LONGEST matching declaration wins. A leaf covered by no declaration takes the fail-closed default {merge: replace, override: forbidden}.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path"],
+            "properties": {
+              "path": {
+                "description": "Dotted path rooted at a section name, e.g. 'vocabulary.terms'. No wildcards.",
+                "type": "string",
+                "pattern": "^[a-z0-9_]+(?:\\.[A-Za-z0-9_-]+)*$"
+              },
+              "merge": {
+                "description": "HOW values combine. Fixed by the introducing layer, immutable, never overridable. 'append', 'union' and 'intersect' apply to arrays only. 'union'/'intersect' are commutative and therefore the only semantics peers may both contribute to (R4).",
+                "enum": ["replace", "append", "union", "intersect"],
+                "default": "replace"
+              },
+              "override": {
+                "description": "WHO may change it. Monotonically tightenable only: open < requires_derogation < forbidden. 'forbidden' is ABSOLUTE — no authority, no derogation, no higher layer lifts it (R5).",
+                "enum": ["open", "requires_derogation", "forbidden"],
+                "default": "forbidden"
+              }
+            }
+          }
+        },
+        "derogations": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/derogation"}
+        }
+      }
+    },
+
+    "vocabulary": {
+      "description": "IN PROOF SCOPE for v0.1. Governed content tree: objects are namespaces, leaves are scalars or arrays.",
+      "x-daryl-proof-scope": "in-scope",
+      "$ref": "#/$defs/governed_section"
+    },
+
+    "required_checks": {
+      "description": "IN PROOF SCOPE for v0.1. The 'required' axis only. swarm.v0.1's WorkReceipt keeps three never-merged axes — required_checks / claimed_checks / actual_checks — with coverage computed in replay and never trusted from the author. A pack supplies the first axis and MUST NOT touch the other two.",
+      "x-daryl-proof-scope": "in-scope",
+      "$ref": "#/$defs/governed_section"
+    },
+
+    "roles":              {"x-daryl-proof-scope": "reserved", "$ref": "#/$defs/reserved_section"},
+    "capabilities":       {"x-daryl-proof-scope": "reserved", "$ref": "#/$defs/reserved_section"},
+    "input_contracts":    {"x-daryl-proof-scope": "reserved", "$ref": "#/$defs/reserved_section"},
+    "output_contracts":   {"x-daryl-proof-scope": "reserved", "$ref": "#/$defs/reserved_section"},
+    "validation_policies":{"x-daryl-proof-scope": "reserved", "$ref": "#/$defs/reserved_section"},
+    "risk_classes":       {"x-daryl-proof-scope": "reserved", "$ref": "#/$defs/reserved_section"},
+    "evaluation_cases":   {"x-daryl-proof-scope": "reserved", "$ref": "#/$defs/reserved_section"},
+
+    "provenance": {
+      "description": "Who authored the pack and under what authority. Descriptive: never an input to precedence.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "authored_by": {"type": "string", "minLength": 1},
+        "authority_id": {"type": "string", "minLength": 1},
+        "published_at": {"$ref": "#/$defs/rfc3339_utc"},
+        "source_ref": {
+          "description": "Opaque provenance reference. NEVER read as identity, precedence or ordering.",
+          "type": "string"
+        }
+      }
+    },
+
+    "signatures": {
+      "description": "NOT VERIFIED IN v0.1. Ed25519 exists in dsm-primitives but is not wired into the governance path; a v0.1 resolver checks presence and structure only. Until wired, a signature is an audit trail, not an authorization.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["authority_id", "key_id", "algorithm", "signature"],
+        "properties": {
+          "authority_id": {"type": "string", "minLength": 1},
+          "key_id": {"type": "string", "minLength": 1},
+          "algorithm": {"const": "ed25519"},
+          "signature": {"type": "string", "minLength": 1}
+        }
+      }
+    }
+  },
+
+  "$defs": {
+    "rfc3339_utc": {
+      "description": "RFC 3339, UTC, 'Z' suffix only. Local offsets are refused: an offset is a carrier detail, and evaluation time is a governed input (R8).",
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+
+    "governed_section": {
+      "description": "An object tree. Objects are namespaces; leaves are scalars or arrays. Arrays of arrays and arrays of objects are refused in v0.1 — canonical set semantics over nested containers are an unnecessary divergence risk this early.",
+      "type": "object",
+      "additionalProperties": {"$ref": "#/$defs/governed_node"}
+    },
+
+    "governed_node": {
+      "anyOf": [
+        {"type": ["string", "number", "boolean", "null"]},
+        {"type": "array", "items": {"type": ["string", "number", "boolean"]}},
+        {"type": "object", "additionalProperties": {"$ref": "#/$defs/governed_node"}}
+      ]
+    },
+
+    "reserved_section": {
+      "description": "RESERVED in v0.1. The envelope accepts the key so later versions need not rewrite it. A conforming v0.1 resolver MUST NOT compose it and MUST NOT hash it into the effective manifest. Reserving a name is not proving a behaviour.",
+      "type": "object"
+    },
+
+    "derogation": {
+      "description": "ADR-PACK-0001 R6. Authority, scope and expiry are ALL required; any of them missing is derogation_invalid, fail-closed, even if the path it names is never contested. A derogation never wins a value and never lifts 'forbidden'.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["derogation_id", "scope", "granted_by", "not_before", "expires_at", "justification", "signature"],
+      "properties": {
+        "derogation_id": {"type": "string", "minLength": 1},
+        "scope": {
+          "description": "A finite, LITERAL list of leaf paths. No wildcards, no prefixes, no 'all'. A derogation that does not literally name the path does not cover it. (Controls may be declared by prefix; derogations may not — a control is authored by the field's owner, a derogation is an exception against that owner.)",
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "pattern": "^[a-z0-9_]+(?:\\.[A-Za-z0-9_-]+)+$"}
+        },
+        "granted_by": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["authority_id", "key_id"],
+          "properties": {
+            "authority_id": {"type": "string", "minLength": 1},
+            "key_id": {"type": "string", "minLength": 1}
+          }
+        },
+        "not_before": {"$ref": "#/$defs/rfc3339_utc"},
+        "expires_at": {
+          "description": "Bounded. An open-ended derogation is malformed, not permanent.",
+          "$ref": "#/$defs/rfc3339_utc"
+        },
+        "justification": {"type": "string", "minLength": 1},
+        "signature": {
+          "description": "Presence and structure checked in v0.1; cryptographic validity NOT verified (prerequisite not delivered).",
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

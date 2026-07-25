@@ -1,0 +1,45 @@
+# FICTIONAL FIXTURE — not French regulation, not professional guidance.
+# Layer: jurisdiction (FR). PEER of jurisdiction.ma: same rank, nothing distinguishes them,
+# therefore nothing may order them (ADR-PACK-0001 R4).
+#
+# This fixture exists to make BOTH peer outcomes reachable from real files:
+#   - its union contributions (vocabulary.terms, required_checks.checks) COMMUTE -> they resolve;
+#   - vector "peer-conflict-replace" adds a competing vocabulary.labels.exercice_comptable
+#     to show that a non-commutative peer contribution REFUSES instead of picking a winner.
+---
+schema_version: pack.v0.1
+
+identity:
+  pack_id: jurisdiction.fr
+  pack_version: "0.1.0"
+  layer: jurisdiction
+  domain: domain.fiduciaire
+  jurisdiction: FR
+
+compatibility:
+  requires_packs:
+    - pack_id: fiduciaire.base
+      version_range: ">=0.1.0 <0.2.0"
+  requires_resolver:
+    min_version: pack-resolver@0.1.0
+
+composition:
+  controls: []
+
+vocabulary:
+  terms:
+    - liasse_fiscale
+    - pcg
+  labels:
+    liasse_fiscale: "Liasse fiscale"
+
+required_checks:
+  checks:
+    - check.pcg_conformite
+    - check.tva_fr
+
+provenance:
+  authored_by: fixture
+  authority_id: authority.fr.regulator
+  published_at: "2026-02-01T00:00:00Z"
+  source_ref: "fixture://examples/jurisdiction.fr.pack.yaml"

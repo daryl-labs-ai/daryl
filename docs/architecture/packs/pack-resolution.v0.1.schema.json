@@ -1,0 +1,281 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://daryl-labs.ai/schemas/pack-resolution.v0.1.schema.json",
+  "title": "Daryl Pack Resolution v0.1",
+  "description": "Outputs of resolve(packs: Set, evaluated_at: Instant, resolver_version: Str) -> Resolved(manifest, trace) | Refused(refusals). Governed by ADR-PACK-0001. Resolution is a pure function: no clock, no I/O, no locale, no filesystem order, no randomness. Hashing is dsm_primitives.hash_canonical over ADR-0002 canonical JSON — no new hashing law is introduced.",
+  "x-daryl-status": "Proposed — awaiting human ratification",
+  "oneOf": [
+    {"$ref": "#/$defs/effective_manifest"},
+    {"$ref": "#/$defs/resolution_trace"},
+    {"$ref": "#/$defs/resolution_refusal"},
+    {"$ref": "#/$defs/pack_loaded_receipt"},
+    {"$ref": "#/$defs/pack_resolution_receipt"},
+    {"$ref": "#/$defs/work_receipt_pack_binding"}
+  ],
+
+  "$defs": {
+    "hash_v1": {
+      "description": "ADR-0002 canonical hash. Unknown prefixes fail closed.",
+      "type": "string",
+      "pattern": "^v1:[0-9a-f]{64}$"
+    },
+
+    "rfc3339_utc": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+
+    "resolver_version": {
+      "type": "string",
+      "pattern": "^pack-resolver@(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+    },
+
+    "pack_ref": {
+      "description": "pack_id@pack_version — the citable unit of governed rules (ADR-PRL-0014 R3).",
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*@(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+    },
+
+    "pack_stamp": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pack_id", "pack_version", "layer", "content_hash"],
+      "properties": {
+        "pack_id": {"type": "string", "minLength": 1},
+        "pack_version": {"type": "string", "minLength": 1},
+        "layer": {"enum": ["core", "domain", "jurisdiction", "organization"]},
+        "content_hash": {"$ref": "#/$defs/hash_v1"}
+      }
+    },
+
+    "refusal_code": {
+      "description": "Closed taxonomy, ten codes (ADR-PACK-0001 R11). An unrecognized code fails closed: a consumer that cannot type a refusal must treat it as refusal, never as success.",
+      "enum": [
+        "unknown_referent",
+        "duplicate_pack_identity",
+        "compatibility_violation",
+        "merge_semantics_conflict",
+        "strategy_relaxation_refused",
+        "derogation_invalid",
+        "peer_conflict",
+        "forbidden_override",
+        "derogation_required",
+        "derogation_expired"
+      ]
+    },
+
+    "effective_manifest": {
+      "description": "The canonical result of a successful resolution. Contains NOTHING order-dependent, no execution timestamp, no host, no filesystem path. Its hash is the value cited by every downstream receipt.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "kind", "resolver_version", "evaluated_at", "proof_scope", "context", "packs", "sections"],
+      "properties": {
+        "schema_version": {"const": "pack-resolution.v0.1"},
+        "kind": {"const": "effective_manifest"},
+        "resolver_version": {"$ref": "#/$defs/resolver_version"},
+        "evaluated_at": {
+          "description": "An explicit INPUT, never now(). A resolver that reads the wall clock is non-conforming (R8).",
+          "$ref": "#/$defs/rfc3339_utc"
+        },
+        "proof_scope": {
+          "description": "The sections this manifest actually composed. v0.1 is exactly ['required_checks','vocabulary']; reserved sections are neither composed nor hashed.",
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "context": {
+          "description": "Referent values DECLARED by the pack set, collected and canonically sorted. Never inferred, never defaulted; an absent referent is an empty list (unknown), which is not 'universal'.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["domain", "jurisdiction", "org_id"],
+          "properties": {
+            "domain": {"type": "array", "items": {"type": "string"}},
+            "jurisdiction": {"type": "array", "items": {"type": "string"}},
+            "org_id": {"type": "array", "items": {"type": "string"}}
+          }
+        },
+        "packs": {
+          "description": "The pack set, canonically sorted by (layer_rank, pack_id, pack_version). This ordering is REPORTING ONLY and may never arbitrate a value (R7).",
+          "type": "array",
+          "items": {"$ref": "#/$defs/pack_stamp"}
+        },
+        "sections": {
+          "description": "The composed governed content, in-proof-scope sections only.",
+          "type": "object"
+        }
+      }
+    },
+
+    "resolution_trace": {
+      "description": "The full trace. Stored as a content-addressed artifact keyed by its own v1 hash (R12); NEVER embedded in a receipt.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "kind", "resolver_version", "evaluated_at", "effective_manifest_hash", "entries"],
+      "properties": {
+        "schema_version": {"const": "pack-resolution.v0.1"},
+        "kind": {"const": "resolution_trace"},
+        "resolver_version": {
+          "description": "Carried once here and once in the manifest, not repeated per entry: it is constant per resolution, and repeating it inflates a content-addressed artifact without adding information.",
+          "$ref": "#/$defs/resolver_version"
+        },
+        "evaluated_at": {"$ref": "#/$defs/rfc3339_utc"},
+        "effective_manifest_hash": {"$ref": "#/$defs/hash_v1"},
+        "entries": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/trace_entry"}
+        }
+      }
+    },
+
+    "trace_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "effective_value", "selected_from", "overridden_sources", "resolution_rule", "merge", "override"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "effective_value": {},
+        "selected_from": {
+          "description": "Every pack whose contribution survives in the effective value. Canonically sorted.",
+          "type": "array",
+          "items": {"$ref": "#/$defs/pack_ref"}
+        },
+        "overridden_sources": {
+          "description": "Every pack whose contribution did NOT survive. Canonically sorted. Non-empty means this path is contested in the composition sense (R14) — which is NOT MEF.contested.",
+          "type": "array",
+          "items": {"$ref": "#/$defs/pack_ref"}
+        },
+        "resolution_rule": {
+          "enum": ["introduction", "layer_override", "commutative_fold", "derogated_override"]
+        },
+        "merge": {"enum": ["replace", "append", "union", "intersect"]},
+        "override": {"enum": ["open", "requires_derogation", "forbidden"]},
+        "derogation_applied": {
+          "description": "The derogation consumed to permit this override, if any. null when none was needed.",
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "required": ["derogation_id", "authority_id", "key_id", "expires_at"],
+          "properties": {
+            "derogation_id": {"type": "string"},
+            "authority_id": {"type": "string"},
+            "key_id": {"type": "string"},
+            "expires_at": {"$ref": "#/$defs/rfc3339_utc"}
+          }
+        }
+      }
+    },
+
+    "resolution_refusal": {
+      "description": "The other lawful outcome. Phase-staged: the FIRST phase producing any refusal terminates resolution and reports EVERY refusal of that phase, canonically sorted by (code, path, pack_refs) — 'first error encountered' is order-dependent and therefore forbidden (R9). This object is canonically hashed, so 'the same typed refusal' is a hash equality, not a judgement call.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "kind", "resolver_version", "evaluated_at", "phase", "refusals"],
+      "properties": {
+        "schema_version": {"const": "pack-resolution.v0.1"},
+        "kind": {"const": "resolution_refusal"},
+        "resolver_version": {"$ref": "#/$defs/resolver_version"},
+        "evaluated_at": {"$ref": "#/$defs/rfc3339_utc"},
+        "phase": {
+          "enum": ["P1_identity", "P2_compatibility", "P3_control", "P4_derogation_form", "P5_composition"]
+        },
+        "refusals": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["code", "path", "pack_refs"],
+            "properties": {
+              "code": {"$ref": "#/$defs/refusal_code"},
+              "path": {
+                "description": "The contested leaf path, or \"\" for refusals that are not path-scoped (P1/P2).",
+                "type": "string"
+              },
+              "pack_refs": {"type": "array", "items": {"$ref": "#/$defs/pack_ref"}},
+              "detail": {
+                "description": "Canonical, machine-comparable discriminators only. Free prose here would break hash equality between independent implementations.",
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "pack_loaded_receipt": {
+      "description": "Act 1 of 3: a pack entered the process. Per Rule A, issued only after DSMWriter.write() returns non-None.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "kind", "pack_id", "pack_version", "layer", "content_hash", "loaded_at"],
+      "properties": {
+        "schema_version": {"const": "pack-resolution.v0.1"},
+        "kind": {"const": "PackLoadedReceipt"},
+        "pack_id": {"type": "string", "minLength": 1},
+        "pack_version": {"type": "string", "minLength": 1},
+        "layer": {"enum": ["core", "domain", "jurisdiction", "organization"]},
+        "content_hash": {"$ref": "#/$defs/hash_v1"},
+        "source_ref": {
+          "description": "Opaque. A referent is never its carrier: this is provenance, never identity and never precedence.",
+          "type": "string"
+        },
+        "loaded_at": {"$ref": "#/$defs/rfc3339_utc"}
+      }
+    },
+
+    "pack_resolution_receipt": {
+      "description": "Act 2 of 3: a rule set was composed. Carries HASHES, VERSIONS, OUTCOME and CONTESTED FIELDS inline — and nothing else. No effective values, no trace entries, no pack bodies: a receipt is a citation, not a copy (R13).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "kind", "resolver_version", "evaluated_at", "packs", "outcome"],
+      "properties": {
+        "schema_version": {"const": "pack-resolution.v0.1"},
+        "kind": {"const": "PackResolutionReceipt"},
+        "resolver_version": {"$ref": "#/$defs/resolver_version"},
+        "evaluated_at": {"$ref": "#/$defs/rfc3339_utc"},
+        "packs": {"type": "array", "items": {"$ref": "#/$defs/pack_stamp"}},
+        "outcome": {"enum": ["resolved", "refused"]},
+        "effective_manifest_hash": {"$ref": "#/$defs/hash_v1"},
+        "trace_hash": {"$ref": "#/$defs/hash_v1"},
+        "refusal_hash": {"$ref": "#/$defs/hash_v1"},
+        "refusal_codes": {
+          "description": "Sorted. Present iff outcome = refused.",
+          "type": "array",
+          "items": {"$ref": "#/$defs/refusal_code"}
+        },
+        "contested_paths": {
+          "description": "Sorted. Paths whose resolution overrode a lower-layer value or consumed a derogation. A COMPOSITION fact — unrelated to MEF.contested (ADR-PRL-0011), never merged with it, never derived from it (R14).",
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"outcome": {"const": "resolved"}}, "required": ["outcome"]},
+          "then": {
+            "required": ["effective_manifest_hash", "trace_hash", "contested_paths"],
+            "not": {"anyOf": [{"required": ["refusal_hash"]}, {"required": ["refusal_codes"]}]}
+          }
+        },
+        {
+          "if": {"properties": {"outcome": {"const": "refused"}}, "required": ["outcome"]},
+          "then": {
+            "required": ["refusal_hash", "refusal_codes"],
+            "not": {"anyOf": [{"required": ["effective_manifest_hash"]}, {"required": ["trace_hash"]}]}
+          }
+        }
+      ]
+    },
+
+    "work_receipt_pack_binding": {
+      "description": "Act 3 of 3, the binding fragment ONLY. swarm.v0.1's WorkReceipt / ReviewReceipt are NOT redefined here: this fragment is what a work receipt adds to cite the rules that governed it. The three never-merged axes (required_checks / claimed_checks / actual_checks) stay exactly as they are, with coverage computed in replay and never trusted from the author.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "kind", "effective_manifest_hash", "resolver_version"],
+      "properties": {
+        "schema_version": {"const": "pack-resolution.v0.1"},
+        "kind": {"const": "WorkReceiptPackBinding"},
+        "effective_manifest_hash": {"$ref": "#/$defs/hash_v1"},
+        "resolver_version": {"$ref": "#/$defs/resolver_version"},
+        "pack_refs": {"type": "array", "items": {"$ref": "#/$defs/pack_ref"}}
+      }
+    }
+  }
+}
