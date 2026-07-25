@@ -1,0 +1,45 @@
+# FICTIONAL FIXTURE — not Moroccan regulation, not professional guidance.
+# Layer: jurisdiction (MA). A regulatory space, NOT a deployment region (ADR-PRL-0014 R4).
+#
+# This pack only contributes where the domain layer left the door open:
+#   - unions into vocabulary.terms and required_checks.checks   (override: open)
+#   - introduces new labels                                      (no override of an existing value)
+# It does NOT touch required_checks.retention_years (requires_derogation — see the .derogated fixture)
+# and it does NOT touch vocabulary.doctrine_source (forbidden — nothing lifts it, ever).
+---
+schema_version: pack.v0.1
+
+identity:
+  pack_id: jurisdiction.ma
+  pack_version: "0.1.0"
+  layer: jurisdiction
+  domain: domain.fiduciaire
+  jurisdiction: MA
+
+compatibility:
+  requires_packs:
+    - pack_id: fiduciaire.base
+      version_range: ">=0.1.0 <0.2.0"
+  requires_resolver:
+    min_version: pack-resolver@0.1.0
+
+composition:
+  controls: []
+
+vocabulary:
+  terms:
+    - etats_de_synthese
+    - cgnc
+  labels:
+    etats_de_synthese: "Etats de synthese"
+
+required_checks:
+  checks:
+    - check.cgnc_conformite
+    - check.tva_ma
+
+provenance:
+  authored_by: fixture
+  authority_id: authority.ma.regulator
+  published_at: "2026-02-01T00:00:00Z"
+  source_ref: "fixture://examples/jurisdiction.ma.pack.yaml"

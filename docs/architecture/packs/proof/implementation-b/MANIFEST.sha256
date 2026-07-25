@@ -1,0 +1,22 @@
+1f232d9c1246f6534291594ccae60f1f5fecc08b4b167c408140c5e7a83cc2f9  inputs/resolution-vectors.INPUTS-ONLY.json
+d86d7ea931e1e91d488bcfc41208c6781d20ec558b25f60558750c447dbe3299  sealed/resolver_b.py
+8d029c8bedc6e1facd70e456eb58f8966385e0818b272657dc3a6742978eef70  sealed/replay_b.py
+5588919f360e0fb06b2010faa6a568c71d477aeeaa6b347305a7f870e58aaeaa  sealed/results-b.json
+835b58352d7673d2cb312770344de600b94aa893c4b885b0d9760d7b6fd3f491  r2/resolver_b.py
+8d029c8bedc6e1facd70e456eb58f8966385e0818b272657dc3a6742978eef70  r2/replay_b.py
+eff8a7bb22f66691ea4c5366d29c87dd560180986ea3ae2860e9814885de3794  r2/results-b.json
+
+# The five spec documents and five example packs B was given were byte-identical copies of the
+# repository's own files, verified at commit time. They are not duplicated here:
+#
+#   ../../ADR-PACK-0001-composition-and-precedence.md      bb018eb64b17ad10…
+#   ../../ADR-PRL-0014-pack-context-referents.md           c0f0820ded8930a2…
+#   ../../pack.v0.1.schema.json                            53927f9560f95821…
+#   ../../pack-resolution.v0.1.schema.json                 c5728be49d653e65…
+#   ../../compatibility-matrix.example.yaml                7241289ad1c11ab9…
+#   ../REPLAY-ENVELOPE.md                                  f0927ed1d1cfd19a…
+#   ../../examples/*.yaml                                  (all five, unmodified)
+#
+# B was NOT given resolution-vectors.v0.1.json. It was given
+# inputs/resolution-vectors.INPUTS-ONLY.json, which is that file with all 19 `expected` blocks and
+# all 20 per-pack `content_hash` values removed. Same file the clean-room kit ships.

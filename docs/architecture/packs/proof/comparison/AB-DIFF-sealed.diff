@@ -1,0 +1,577 @@
+--- canonical-A.txt	2026-07-25 21:01:34.254194270 +0000
++++ canonical-B-sealed.txt	2026-07-25 21:01:34.256980366 +0000
+@@ -12,7 +12,7 @@
+    "role": "pack_content"
+   },
+   {
+-   "key": "v1:c360c97a17669a28c2530e01ddc39dbf12b93a6a89696f6aa1459c57f4a72347",
++   "key": "v1:c30efd88ade954a26e177992c8fe9d5cd464933fb26293f7b763487736dc4bcb",
+    "ref": "",
+    "role": "resolution_refusal"
+   }
+@@ -22,15 +22,13 @@
+  "refusal_codes": [
+   "compatibility_violation"
+  ],
+- "refusal_hash": "v1:c360c97a17669a28c2530e01ddc39dbf12b93a6a89696f6aa1459c57f4a72347",
++ "refusal_hash": "v1:c30efd88ade954a26e177992c8fe9d5cd464933fb26293f7b763487736dc4bcb",
+  "refusals": [
+   {
+    "code": "compatibility_violation",
+    "detail": {
+-    "actual": "0.1.0",
+-    "expected": ">=0.2.0 <0.3.0",
+     "pack_id": "fiduciaire.base",
+-    "requirement": "requires_packs"
++    "version_range": ">=0.2.0 <0.3.0"
+    },
+    "pack_refs": [
+     "jurisdiction.ma@0.9.0"
+@@ -53,7 +51,7 @@
+    "role": "pack_content"
+   },
+   {
+-   "key": "v1:15ccecb51dff9d5781c06af3fc9702f1ebc6c13689a672a5a094966bad47bd69",
++   "key": "v1:e1e8c80ca12d85aca5df94113eaa6eeac86b93df91bd972d25b4664f23ae218a",
+    "ref": "",
+    "role": "resolution_refusal"
+   }
+@@ -63,15 +61,12 @@
+  "refusal_codes": [
+   "derogation_expired"
+  ],
+- "refusal_hash": "v1:15ccecb51dff9d5781c06af3fc9702f1ebc6c13689a672a5a094966bad47bd69",
++ "refusal_hash": "v1:e1e8c80ca12d85aca5df94113eaa6eeac86b93df91bd972d25b4664f23ae218a",
+  "refusals": [
+   {
+    "code": "derogation_expired",
+    "detail": {
+-    "derogation_ids": [
+-     "der.ma.retention.2026"
+-    ],
+-    "evaluated_at": "2027-06-01T00:00:00Z"
++    "derogation_id": "der.ma.retention.2026"
+    },
+    "pack_refs": [
+     "jurisdiction.ma@0.2.0"
+@@ -94,7 +89,7 @@
+    "role": "pack_content"
+   },
+   {
+-   "key": "v1:1dcb1e01ce3ebcb9d8c5a49e30efe64e3fc58b102a31cfc004003334eb1d65e7",
++   "key": "v1:9c49e3fd4d243519c9c2031d3759a06fa49e983c1d9d8059c38c870db1f11748",
+    "ref": "",
+    "role": "resolution_refusal"
+   }
+@@ -104,15 +99,12 @@
+  "refusal_codes": [
+   "derogation_invalid"
+  ],
+- "refusal_hash": "v1:1dcb1e01ce3ebcb9d8c5a49e30efe64e3fc58b102a31cfc004003334eb1d65e7",
++ "refusal_hash": "v1:9c49e3fd4d243519c9c2031d3759a06fa49e983c1d9d8059c38c870db1f11748",
+  "refusals": [
+   {
+    "code": "derogation_invalid",
+    "detail": {
+-    "derogation_id": "der.ma.retention.malformed",
+-    "reasons": [
+-     "non_positive_window"
+-    ]
++    "derogation_id": "der.ma.retention.malformed"
+    },
+    "pack_refs": [
+     "jurisdiction.ma@0.4.0"
+@@ -135,7 +127,7 @@
+    "role": "pack_content"
+   },
+   {
+-   "key": "v1:a80d8c43a1d8da8437f2fbeeef43e9ac4af033fa3559d6f33df44c807f2db511",
++   "key": "v1:e0b63821888a90fd6e048b459a442f80d4b28e40372ec79ff820574f25620a44",
+    "ref": "",
+    "role": "resolution_refusal"
+   }
+@@ -145,13 +137,10 @@
+  "refusal_codes": [
+   "derogation_required"
+  ],
+- "refusal_hash": "v1:a80d8c43a1d8da8437f2fbeeef43e9ac4af033fa3559d6f33df44c807f2db511",
++ "refusal_hash": "v1:e0b63821888a90fd6e048b459a442f80d4b28e40372ec79ff820574f25620a44",
+  "refusals": [
+   {
+    "code": "derogation_required",
+-   "detail": {
+-    "layer_rank": 2
+-   },
+    "pack_refs": [
+     "jurisdiction.ma@0.3.0"
+    ],
+@@ -178,7 +167,7 @@
+    "role": "pack_content"
+   },
+   {
+-   "key": "v1:4b2914dc552af5459f648f08510343a30dbd1d3df67dbe4e6d75d8e5bd4f5926",
++   "key": "v1:9ab46a0ed092c4576fe14b78133fc8325f10303f6bed29d1781713b88ce031bb",
+    "ref": "",
+    "role": "resolution_trace"
+   }
+@@ -262,7 +251,7 @@
+     "overridden_sources": [],
+     "override": "open",
+     "path": "required_checks.checks",
+-    "resolution_rule": "commutative_fold",
++    "resolution_rule": "layer_override",
+     "selected_from": [
+      "fiduciaire.base@0.1.0",
+      "jurisdiction.ma@0.2.0"
+@@ -348,7 +337,7 @@
+     "overridden_sources": [],
+     "override": "open",
+     "path": "vocabulary.terms",
+-    "resolution_rule": "commutative_fold",
++    "resolution_rule": "layer_override",
+     "selected_from": [
+      "fiduciaire.base@0.1.0",
+      "jurisdiction.ma@0.2.0"
+@@ -360,7 +349,7 @@
+   "resolver_version": "pack-resolver@0.1.0",
+   "schema_version": "pack-resolution.v0.1"
+  },
+- "trace_hash": "v1:4b2914dc552af5459f648f08510343a30dbd1d3df67dbe4e6d75d8e5bd4f5926"
++ "trace_hash": "v1:9ab46a0ed092c4576fe14b78133fc8325f10303f6bed29d1781713b88ce031bb"
+ }
+ ===== duplicate-pack-identity (perms=6 distinct=1) =====
+ {
+@@ -381,7 +370,7 @@
+    "role": "pack_content"
+   },
+   {
+-   "key": "v1:609ca14b9dbb0d9e5d066c4cb70804291dd2ce84f624653d3c14ff91a920d359",
++   "key": "v1:dd79cfde5f1d7ecc4e390c5dded7fdc93574f72c9dfcdff22a4893a8a340ce8e",
+    "ref": "",
+    "role": "resolution_refusal"
+   }
+@@ -391,13 +380,10 @@
+  "refusal_codes": [
+   "duplicate_pack_identity"
+  ],
+- "refusal_hash": "v1:609ca14b9dbb0d9e5d066c4cb70804291dd2ce84f624653d3c14ff91a920d359",
++ "refusal_hash": "v1:dd79cfde5f1d7ecc4e390c5dded7fdc93574f72c9dfcdff22a4893a8a340ce8e",
+  "refusals": [
+   {
+    "code": "duplicate_pack_identity",
+-   "detail": {
+-    "reason": "same pack_id at multiple versions in one resolution"
+-   },
+    "pack_refs": [
+     "jurisdiction.ma@0.1.0",
+     "jurisdiction.ma@0.2.0"
+@@ -464,7 +450,7 @@
+    "role": "pack_content"
+   },
+   {
+-   "key": "v1:be6f100a73d0e51b92efd1e121b82cead0aa7ab8a9585c4726c6033e65d2379e",
++   "key": "v1:92e6e1ffee3924d4b2cfb31f7ee607fe4430504b48e1d80aa2dbe00da52f4c5c",
+    "ref": "",
+    "role": "resolution_refusal"
+   }
+@@ -474,13 +460,10 @@
+  "refusal_codes": [
+   "forbidden_override"
+  ],
+- "refusal_hash": "v1:be6f100a73d0e51b92efd1e121b82cead0aa7ab8a9585c4726c6033e65d2379e",
++ "refusal_hash": "v1:92e6e1ffee3924d4b2cfb31f7ee607fe4430504b48e1d80aa2dbe00da52f4c5c",
+  "refusals": [
+   {
+    "code": "forbidden_override",
+-   "detail": {
+-    "layer_rank": 3
+-   },
+    "pack_refs": [
+     "organization.demo@1.1.0"
+    ],
+@@ -502,7 +485,7 @@
+    "role": "pack_content"
+   },
+   {
+-   "key": "v1:3fca5e4a65041eea4011bbcef654069bfdc5ac206359b8a4d9f755ea1c78afeb",
++   "key": "v1:fe95913b25c05889eb1d45f8360989ba05379ca9f1063dda679d88875c7265cc",
+    "ref": "",
+    "role": "resolution_refusal"
+   }
+@@ -512,18 +495,12 @@
+  "refusal_codes": [
+   "merge_semantics_conflict"
+  ],
+- "refusal_hash": "v1:3fca5e4a65041eea4011bbcef654069bfdc5ac206359b8a4d9f755ea1c78afeb",
++ "refusal_hash": "v1:fe95913b25c05889eb1d45f8360989ba05379ca9f1063dda679d88875c7265cc",
+  "refusals": [
+   {
+    "code": "merge_semantics_conflict",
+-   "detail": {
+-    "attempted": [
+-     "replace"
+-    ],
+-    "introduced": "union",
+-    "reason": "merge semantics are fixed by the introducing layer"
+-   },
+    "pack_refs": [
++    "fiduciaire.base@0.1.0",
+     "jurisdiction.ma@0.6.0"
+    ],
+    "path": "vocabulary.terms"
+@@ -549,7 +526,7 @@
+    "role": "pack_content"
+   },
+   {
+-   "key": "v1:b46a1ae848dd20e1456c4e062ee45c26d6403d75c5a2ae4c9865bb2a12803047",
++   "key": "v1:1b6b7dc170a7d01eaeb2b258834db354eedf8d5920c526bf354b41630716dc5d",
+    "ref": "",
+    "role": "resolution_refusal"
+   }
+@@ -559,15 +536,10 @@
+  "refusal_codes": [
+   "peer_conflict"
+  ],
+- "refusal_hash": "v1:b46a1ae848dd20e1456c4e062ee45c26d6403d75c5a2ae4c9865bb2a12803047",
++ "refusal_hash": "v1:1b6b7dc170a7d01eaeb2b258834db354eedf8d5920c526bf354b41630716dc5d",
+  "refusals": [
+   {
+    "code": "peer_conflict",
+-   "detail": {
+-    "distinct_values": 2,
+-    "layer_rank": 2,
+-    "merge": "replace"
+-   },
+    "pack_refs": [
+     "jurisdiction.fr@0.1.1",
+     "jurisdiction.ma@0.1.1"
+@@ -605,7 +577,7 @@
+    "role": "pack_content"
+   },
+   {
+-   "key": "v1:18231ddb5ca4b93fc1bdc7d5a34a5f6344014fe72bf777cf355340cfebdb1389",
++   "key": "v1:c6c8e419f9b2494a6715eb00209cc50cff4ffc7e7aefeacf292cae7093b119bf",
+    "ref": "",
+    "role": "resolution_trace"
+   }
+@@ -714,7 +686,7 @@
+     "overridden_sources": [],
+     "override": "open",
+     "path": "required_checks.checks",
+-    "resolution_rule": "commutative_fold",
++    "resolution_rule": "layer_override",
+     "selected_from": [
+      "fiduciaire.base@0.1.0",
+      "jurisdiction.fr@0.1.0",
+@@ -812,7 +784,7 @@
+     "overridden_sources": [],
+     "override": "open",
+     "path": "vocabulary.terms",
+-    "resolution_rule": "commutative_fold",
++    "resolution_rule": "layer_override",
+     "selected_from": [
+      "fiduciaire.base@0.1.0",
+      "jurisdiction.fr@0.1.0",
+@@ -826,7 +798,7 @@
+   "resolver_version": "pack-resolver@0.1.0",
+   "schema_version": "pack-resolution.v0.1"
+  },
+- "trace_hash": "v1:18231ddb5ca4b93fc1bdc7d5a34a5f6344014fe72bf777cf355340cfebdb1389"
++ "trace_hash": "v1:c6c8e419f9b2494a6715eb00209cc50cff4ffc7e7aefeacf292cae7093b119bf"
+ }
+ ===== refusal-ordering-by-path (perms=6 distinct=1) =====
+ {
+@@ -847,7 +819,7 @@
+    "role": "pack_content"
+   },
+   {
+-   "key": "v1:3b1e374ce6bef78aca5f3a6b43de6d78debd24d2feab9925e0eb9a1b54dfcbe4",
++   "key": "v1:cd5831b97f0240a9c254496890e6a1a13c1a886a3902b4a85fc2928e86116c1d",
+    "ref": "",
+    "role": "resolution_refusal"
+   }
+@@ -857,47 +829,28 @@
+  "refusal_codes": [
+   "merge_semantics_conflict"
+  ],
+- "refusal_hash": "v1:3b1e374ce6bef78aca5f3a6b43de6d78debd24d2feab9925e0eb9a1b54dfcbe4",
++ "refusal_hash": "v1:cd5831b97f0240a9c254496890e6a1a13c1a886a3902b4a85fc2928e86116c1d",
+  "refusals": [
+   {
+    "code": "merge_semantics_conflict",
+-   "detail": {
+-    "attempted": [
+-     "intersect"
+-    ],
+-    "introduced": "union",
+-    "reason": "merge semantics are fixed by the introducing layer"
+-   },
+    "pack_refs": [
++    "fiduciaire.base@0.1.0",
+     "jurisdiction.ma@0.7.0"
+    ],
+    "path": "required_checks.checks"
+   },
+   {
+    "code": "merge_semantics_conflict",
+-   "detail": {
+-    "declared": [
+-     "replace",
+-     "union"
+-    ],
+-    "reason": "competing merge semantics at equal specificity"
+-   },
+    "pack_refs": [
+     "jurisdiction.fr@0.7.0",
+     "jurisdiction.ma@0.7.0"
+    ],
+-   "path": "vocabulary.aliases.grand_livre"
++   "path": "vocabulary.aliases"
+   },
+   {
+    "code": "merge_semantics_conflict",
+-   "detail": {
+-    "attempted": [
+-     "replace"
+-    ],
+-    "introduced": "union",
+-    "reason": "merge semantics are fixed by the introducing layer"
+-   },
+    "pack_refs": [
++    "fiduciaire.base@0.1.0",
+     "jurisdiction.ma@0.7.0"
+    ],
+    "path": "vocabulary.terms"
+@@ -918,7 +871,7 @@
+    "role": "pack_content"
+   },
+   {
+-   "key": "v1:e6592c390b7409d5c9fc2960252fde3c1ecae3d3b060e1d1a1450dc3082527cd",
++   "key": "v1:2472f523a0f7ca661d7234562d8c0fa63a2b3207dcb1003de40466649e206198",
+    "ref": "",
+    "role": "resolution_refusal"
+   }
+@@ -928,14 +881,13 @@
+  "refusal_codes": [
+   "compatibility_violation"
+  ],
+- "refusal_hash": "v1:e6592c390b7409d5c9fc2960252fde3c1ecae3d3b060e1d1a1450dc3082527cd",
++ "refusal_hash": "v1:2472f523a0f7ca661d7234562d8c0fa63a2b3207dcb1003de40466649e206198",
+  "refusals": [
+   {
+    "code": "compatibility_violation",
+    "detail": {
+-    "expected": ">=1.0.0 <2.0.0",
+-    "missing": "fiduciaire.aaa",
+-    "requirement": "requires_packs"
++    "pack_id": "fiduciaire.aaa",
++    "version_range": ">=1.0.0 <2.0.0"
+    },
+    "pack_refs": [
+     "jurisdiction.ma@0.8.0"
+@@ -945,9 +897,8 @@
+   {
+    "code": "compatibility_violation",
+    "detail": {
+-    "expected": ">=1.0.0 <2.0.0",
+-    "missing": "fiduciaire.zzz",
+-    "requirement": "requires_packs"
++    "pack_id": "fiduciaire.zzz",
++    "version_range": ">=1.0.0 <2.0.0"
+    },
+    "pack_refs": [
+     "jurisdiction.ma@0.8.0"
+@@ -975,17 +926,12 @@
+    "role": "pack_content"
+   },
+   {
+-   "key": "v1:3cd910ce17c5ff7c63faaed8b61ec1d04941824a70b79020c43ddb9933b42820",
+-   "ref": "jurisdiction.ma@0.1.0",
+-   "role": "pack_content"
+-  },
+-  {
+    "key": "v1:58a3a0197eb5e9a76b12edf0ca4ea9871e89226ad9fd9711ac0e563b042a2edf",
+    "ref": "organization.demo@1.0.0",
+    "role": "pack_content"
+   },
+   {
+-   "key": "v1:6cd13116eae64508782d971e8e4bdce99f8ce5a57058ba6f6d62f4b499de81cf",
++   "key": "v1:a5127ec3d7173ada66da5b0aaf7dfe97cfd4e02aeb8e36b5bdcba2823cc9dac5",
+    "ref": "",
+    "role": "resolution_trace"
+   }
+@@ -1080,7 +1026,7 @@
+     "overridden_sources": [],
+     "override": "open",
+     "path": "required_checks.checks",
+-    "resolution_rule": "commutative_fold",
++    "resolution_rule": "layer_override",
+     "selected_from": [
+      "fiduciaire.base@0.1.0",
+      "jurisdiction.ma@0.1.0",
+@@ -1163,7 +1109,7 @@
+     "overridden_sources": [],
+     "override": "open",
+     "path": "vocabulary.terms",
+-    "resolution_rule": "commutative_fold",
++    "resolution_rule": "layer_override",
+     "selected_from": [
+      "fiduciaire.base@0.1.0",
+      "jurisdiction.ma@0.1.0",
+@@ -1176,7 +1122,7 @@
+   "resolver_version": "pack-resolver@0.1.0",
+   "schema_version": "pack-resolution.v0.1"
+  },
+- "trace_hash": "v1:6cd13116eae64508782d971e8e4bdce99f8ce5a57058ba6f6d62f4b499de81cf"
++ "trace_hash": "v1:a5127ec3d7173ada66da5b0aaf7dfe97cfd4e02aeb8e36b5bdcba2823cc9dac5"
+ }
+ ===== strategy-relaxation-refused (perms=2 distinct=1) =====
+ {
+@@ -1192,7 +1138,7 @@
+    "role": "pack_content"
+   },
+   {
+-   "key": "v1:802f30a791902da2e252325365290dd9a98880fa8517b8f0a00d203786ef3601",
++   "key": "v1:d870f9d3fed23b9bab6d6c1305f7c76f5456056409c2150f2d383536bc62b81a",
+    "ref": "",
+    "role": "resolution_refusal"
+   }
+@@ -1202,16 +1148,10 @@
+  "refusal_codes": [
+   "strategy_relaxation_refused"
+  ],
+- "refusal_hash": "v1:802f30a791902da2e252325365290dd9a98880fa8517b8f0a00d203786ef3601",
++ "refusal_hash": "v1:d870f9d3fed23b9bab6d6c1305f7c76f5456056409c2150f2d383536bc62b81a",
+  "refusals": [
+   {
+    "code": "strategy_relaxation_refused",
+-   "detail": {
+-    "attempted": [
+-     "open"
+-    ],
+-    "floor": "requires_derogation"
+-   },
+    "pack_refs": [
+     "jurisdiction.ma@0.5.0"
+    ],
+@@ -1243,7 +1183,7 @@
+    "role": "pack_content"
+   },
+   {
+-   "key": "v1:6cd13116eae64508782d971e8e4bdce99f8ce5a57058ba6f6d62f4b499de81cf",
++   "key": "v1:a5127ec3d7173ada66da5b0aaf7dfe97cfd4e02aeb8e36b5bdcba2823cc9dac5",
+    "ref": "",
+    "role": "resolution_trace"
+   }
+@@ -1338,7 +1278,7 @@
+     "overridden_sources": [],
+     "override": "open",
+     "path": "required_checks.checks",
+-    "resolution_rule": "commutative_fold",
++    "resolution_rule": "layer_override",
+     "selected_from": [
+      "fiduciaire.base@0.1.0",
+      "jurisdiction.ma@0.1.0",
+@@ -1421,7 +1361,7 @@
+     "overridden_sources": [],
+     "override": "open",
+     "path": "vocabulary.terms",
+-    "resolution_rule": "commutative_fold",
++    "resolution_rule": "layer_override",
+     "selected_from": [
+      "fiduciaire.base@0.1.0",
+      "jurisdiction.ma@0.1.0",
+@@ -1434,7 +1374,7 @@
+   "resolver_version": "pack-resolver@0.1.0",
+   "schema_version": "pack-resolution.v0.1"
+  },
+- "trace_hash": "v1:6cd13116eae64508782d971e8e4bdce99f8ce5a57058ba6f6d62f4b499de81cf"
++ "trace_hash": "v1:a5127ec3d7173ada66da5b0aaf7dfe97cfd4e02aeb8e36b5bdcba2823cc9dac5"
+ }
+ ===== three-layer-permuted (perms=6 distinct=1) =====
+ {
+@@ -1460,7 +1400,7 @@
+    "role": "pack_content"
+   },
+   {
+-   "key": "v1:6cd13116eae64508782d971e8e4bdce99f8ce5a57058ba6f6d62f4b499de81cf",
++   "key": "v1:a5127ec3d7173ada66da5b0aaf7dfe97cfd4e02aeb8e36b5bdcba2823cc9dac5",
+    "ref": "",
+    "role": "resolution_trace"
+   }
+@@ -1555,7 +1495,7 @@
+     "overridden_sources": [],
+     "override": "open",
+     "path": "required_checks.checks",
+-    "resolution_rule": "commutative_fold",
++    "resolution_rule": "layer_override",
+     "selected_from": [
+      "fiduciaire.base@0.1.0",
+      "jurisdiction.ma@0.1.0",
+@@ -1638,7 +1578,7 @@
+     "overridden_sources": [],
+     "override": "open",
+     "path": "vocabulary.terms",
+-    "resolution_rule": "commutative_fold",
++    "resolution_rule": "layer_override",
+     "selected_from": [
+      "fiduciaire.base@0.1.0",
+      "jurisdiction.ma@0.1.0",
+@@ -1651,7 +1591,7 @@
+   "resolver_version": "pack-resolver@0.1.0",
+   "schema_version": "pack-resolution.v0.1"
+  },
+- "trace_hash": "v1:6cd13116eae64508782d971e8e4bdce99f8ce5a57058ba6f6d62f4b499de81cf"
++ "trace_hash": "v1:a5127ec3d7173ada66da5b0aaf7dfe97cfd4e02aeb8e36b5bdcba2823cc9dac5"
+ }
+ ===== undeclared-control-fails-closed (perms=2 distinct=1) =====
+ {
+@@ -1667,7 +1607,7 @@
+    "role": "pack_content"
+   },
+   {
+-   "key": "v1:c045a478d8c956b096ebe5cb322b409864501b3276c6b3d523e5dbcde4725053",
++   "key": "v1:b6f36ba3231342a8d67078a946ef453221c9127d295c6884bac94f552b8930bc",
+    "ref": "",
+    "role": "resolution_refusal"
+   }
+@@ -1677,13 +1617,10 @@
+  "refusal_codes": [
+   "forbidden_override"
+  ],
+- "refusal_hash": "v1:c045a478d8c956b096ebe5cb322b409864501b3276c6b3d523e5dbcde4725053",
++ "refusal_hash": "v1:b6f36ba3231342a8d67078a946ef453221c9127d295c6884bac94f552b8930bc",
+  "refusals": [
+   {
+    "code": "forbidden_override",
+-   "detail": {
+-    "layer_rank": 3
+-   },
+    "pack_refs": [
+     "organization.demo@2.0.0"
+    ],
+@@ -1705,7 +1642,7 @@
+    "role": "pack_content"
+   },
+   {
+-   "key": "v1:172a9151f94c2b52d451beda1680de0a83988e137241c987c471f410ab84e70e",
++   "key": "v1:122a8236bb1c4cae1c96a47d2890b7796f133a8f74616686f781448fb3c27cbf",
+    "ref": "",
+    "role": "resolution_refusal"
+   }
+@@ -1715,14 +1652,10 @@
+  "refusal_codes": [
+   "unknown_referent"
+  ],
+- "refusal_hash": "v1:172a9151f94c2b52d451beda1680de0a83988e137241c987c471f410ab84e70e",
++ "refusal_hash": "v1:122a8236bb1c4cae1c96a47d2890b7796f133a8f74616686f781448fb3c27cbf",
+  "refusals": [
+   {
+    "code": "unknown_referent",
+-   "detail": {
+-    "referent": "layer",
+-    "value": "regulator"
+-   },
+    "pack_refs": [
+     "regulator.ma@0.1.0"
+    ],

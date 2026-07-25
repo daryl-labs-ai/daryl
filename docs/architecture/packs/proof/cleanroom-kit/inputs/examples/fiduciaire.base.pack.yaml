@@ -1,0 +1,61 @@
+# FICTIONAL FIXTURE — not professional guidance, not a real accounting doctrine.
+# Layer: domain. This pack INTRODUCES every path below, and therefore fixes each path's
+# merge semantics permanently and its override permission as a floor (ADR-PACK-0001 R3).
+#
+# Note the three deliberate postures:
+#   vocabulary.terms / required_checks.checks  -> union   + open                (everyone contributes)
+#   vocabulary.labels.*                        -> replace + open                (a higher layer may rename)
+#   required_checks.retention_years            -> replace + requires_derogation (signed exception only)
+#   vocabulary.doctrine_source                 -> replace + forbidden           (absolute: nothing lifts it)
+---
+schema_version: pack.v0.1
+
+identity:
+  pack_id: fiduciaire.base
+  pack_version: "0.1.0"
+  layer: domain
+  domain: domain.fiduciaire
+
+compatibility:
+  requires_resolver:
+    min_version: pack-resolver@0.1.0
+
+composition:
+  controls:
+    - path: vocabulary.terms
+      merge: union
+      override: open
+    - path: vocabulary.labels
+      merge: replace
+      override: open
+    - path: vocabulary.doctrine_source
+      merge: replace
+      override: forbidden
+    - path: required_checks.checks
+      merge: union
+      override: open
+    - path: required_checks.retention_years
+      merge: replace
+      override: requires_derogation
+
+vocabulary:
+  terms:
+    - exercice_comptable
+    - grand_livre
+    - balance_generale
+  labels:
+    exercice_comptable: "Exercice comptable"
+    grand_livre: "Grand livre"
+  doctrine_source: "domain.fiduciaire/doctrine@0.1.0"
+
+required_checks:
+  checks:
+    - check.balance_equilibree
+    - check.pieces_justificatives
+  retention_years: 5
+
+provenance:
+  authored_by: fixture
+  authority_id: authority.fiduciaire.board
+  published_at: "2026-01-15T00:00:00Z"
+  source_ref: "fixture://examples/fiduciaire.base.pack.yaml"
