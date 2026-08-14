@@ -31,7 +31,11 @@ agents = ["openai>=1"]
 dev = [
     "pytest",
     "pytest-cov",
-    "ruff",
+    # Pinned to the 0.15 line: ruff 0.16 changed default rule selection and
+    # flags ~1.4k pre-existing findings (import sorting etc.) the repo's
+    # config was never written against. Raising the pin is a deliberate,
+    # separate lint-migration decision — not a CI side effect.
+    "ruff>=0.15,<0.16",
     "bandit",
     "mcp>=1.25.0",
 ]
