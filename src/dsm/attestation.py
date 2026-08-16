@@ -1,15 +1,22 @@
 """
 Compute Attestation (P11) — Input-output binding for agent compute.
 
-Proves the relationship between input and output:
-- input_hash: SHA-256 of raw request/input
-- output_hash: SHA-256 of raw response/output
-- model_id: which model/version produced the output
+Binds caller-supplied input bytes to caller-supplied output bytes:
+- input_hash: SHA-256 of the raw request/input AS SUPPLIED BY THE CALLER
+- output_hash: SHA-256 of the raw response/output AS SUPPLIED BY THE CALLER
+- model_id: the model/version the caller states produced the output
 - attestation_hash: SHA-256 of all fields combined
 - Optionally signed with Ed25519 (P9)
 
-Does NOT prove the computation was correct (requires TEEs).
-DOES prove: the agent claims this output for this input, and the claim is signed.
+What an attestation establishes: the agent CLAIMS this output for this input
+under this model, and that claim is tamper-evident and signable.
+
+What it does NOT establish:
+- that the computation was correct (requires TEEs);
+- that the attested input bytes are what the model actually consumed. The
+  bytes come from the caller. Substituting a summary for the material actually
+  read still yields status VALID — correctly, since the attestation binds
+  exactly what it was handed. This is a capture boundary, not a crypto flaw.
 """
 
 import hashlib

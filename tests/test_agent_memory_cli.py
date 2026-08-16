@@ -158,6 +158,7 @@ def test_agent_memory_explain_cli_outputs_json(tmp_path):
             "owner_entry_hash": chain["hypothesis"].hash,
             "shard": "agent_memory",
             "entry_hash": chain["fact"].hash,
+            "status": "RESOLVED",
         }
     ]
     assert payload["verification"]["scope"] == "local tamper-evident; not external anchoring"

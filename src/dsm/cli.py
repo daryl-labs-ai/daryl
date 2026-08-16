@@ -88,15 +88,38 @@ def _cmd_status(args) -> None:
             print(f"  - {s.shard_id}: {s.entry_count} entries")
 
 
+# `ShardMeta.integrity_status` is "verified" whenever an integrity pin file
+# exists — no chain verification is run to produce it. Reporting that as
+# "verified" overstates it: the pin's presence is not evidence the chain was
+# checked. `dsm verify` is the only command that verifies. This map renames
+# the signal at the presentation boundary; the kernel field is unchanged.
+_SHARD_PIN_LABELS = {
+    "verified": "pin_present",
+    "unknown": "no_pin",
+}
+
+
+def _shard_pin_label(integrity_status: str) -> str:
+    """Report whether a shard has an integrity pin — not whether it verifies."""
+    return _SHARD_PIN_LABELS.get(integrity_status, integrity_status)
+
+
 def _cmd_list_shards(args) -> None:
-    """dsm list-shards: list all shards with metadata."""
+    """dsm list-shards: list all shards with metadata.
+
+    The last column reports pin presence, not verification. Run
+    `dsm verify --shard <id>` to actually check a chain.
+    """
     storage = _get_storage(args.data_dir)
     shards = storage.list_shards()
     if not shards:
         print("No shards found.")
         return
     for s in shards:
-        print(f"{s.shard_id}\t{s.entry_count}\t{s.last_updated}\t{s.integrity_status}")
+        print(
+            f"{s.shard_id}\t{s.entry_count}\t{s.last_updated}\t"
+            f"{_shard_pin_label(s.integrity_status)}"
+        )
 
 
 def _print_entry(e: Entry, use_color: bool = False, flush: bool = False) -> None:
@@ -811,15 +834,23 @@ def _cmd_witness_check(args) -> int:
 
 
 def _cmd_orphans(args) -> int:
-    """dsm orphans --data-dir <path>: list intents without result (crash detection). Exit 0 if none, 1 if any."""
+    """dsm orphans --data-dir <path>: list recorded intents without a recorded result.
+
+    This reports a shape in the trail — an intent was recorded, no matching
+    result was. It does NOT identify the cause: a crash, an abandoned action,
+    an action still in flight, and a caller that never confirmed all look the
+    same from the registry. The cause is unknown.
+
+    Exit 0 if none, 1 if any.
+    """
     data_dir = getattr(args, "data_dir", None) or "data"
     storage = _get_storage(data_dir)
     graph = SessionGraph(storage=storage)
     orphaned = graph.find_orphaned_intents(storage=storage)
     if not orphaned:
-        print("No orphaned intents.")
+        print("No intents without a recorded result.")
         return 0
-    print(f"Found {len(orphaned)} orphaned intent(s):")
+    print(f"Found {len(orphaned)} intent(s) without a recorded result (cause: unknown):")
     for e in orphaned:
         meta = e.metadata or {}
         intent_id = meta.get("intent_id") or e.id
@@ -918,7 +949,17 @@ def _memory_contract_record(record: dict) -> dict:
     }
 
 
-def _memory_contract_source_refs(records: list[dict]) -> list[dict]:
+def _memory_contract_source_refs(
+    records: list[dict],
+    status_map: dict[tuple[str, str], str],
+) -> list[dict]:
+    """Build the contract's source_refs list, each carrying an existence status.
+
+    `status` is RESOLVED or MISSING and reports existence only. RESOLVED never
+    asserts that the source is relevant, supporting, or true.
+    """
+    from .memory import SOURCE_REF_MISSING
+
     refs = []
     seen = set()
     for record in records:
@@ -937,6 +978,7 @@ def _memory_contract_source_refs(records: list[dict]) -> list[dict]:
                     "owner_entry_hash": owner_hash,
                     "shard": shard,
                     "entry_hash": entry_hash,
+                    "status": status_map.get((shard, entry_hash), SOURCE_REF_MISSING),
                 }
             )
     return refs
@@ -995,14 +1037,43 @@ def _memory_explain_warnings(explanation: dict, query: dict) -> list[dict]:
             }
         )
 
+    warnings.extend(_memory_unresolved_source_ref_warnings(explanation))
+
     return warnings
 
 
+def _memory_unresolved_source_ref_warnings(explanation: dict) -> list[dict]:
+    """One warning per source_ref that does not resolve to a stored entry.
+
+    This is the only source_ref defect DSM can establish from the registry
+    alone. A ref that DOES resolve produces no warning and no endorsement:
+    existence is not relevance.
+    """
+    from .memory import SOURCE_REF_MISSING
+
+    return [
+        {
+            "code": "unresolved_source_ref",
+            "message": (
+                f"source_ref not found in local storage: "
+                f"shard={item.get('shard', '')} entry_hash={item.get('entry_hash', '')}"
+            ),
+            "shard": item.get("shard", ""),
+            "entry_hash": item.get("entry_hash", ""),
+        }
+        for item in explanation.get("source_ref_status", [])
+        if item.get("status") == SOURCE_REF_MISSING
+    ]
+
+
 def _memory_explain_contract(explanation: dict, query: dict, local_status: str) -> dict:
+    from .memory import source_ref_status_map
+
     decision = explanation["decision"]
     supporting = explanation.get("supporting_entries", [])
     verification = explanation.get("verification", {})
     hint = verification.get("hint", f"dsm verify --shard {query['shard']}")
+    status_map = source_ref_status_map(explanation.get("source_ref_status", []))
 
     return {
         "schema_version": _AGENT_MEMORY_EXPLAIN_SCHEMA_VERSION,
@@ -1026,7 +1097,7 @@ def _memory_explain_contract(explanation: dict, query: dict, local_status: str) 
                 if record.get("kind") == "inference"
             ],
         },
-        "source_refs": _memory_contract_source_refs([decision, *supporting]),
+        "source_refs": _memory_contract_source_refs([decision, *supporting], status_map),
         "verification": {
             "local_status": local_status,
             "hint": hint,
@@ -1059,7 +1130,12 @@ def _memory_explain_error_contract(error: ValueError, query: dict) -> dict:
     }
 
 
-def _memory_source_ref_lines(records: list[dict]) -> list[str]:
+def _memory_source_ref_lines(
+    records: list[dict],
+    status_map: dict[tuple[str, str], str],
+) -> list[str]:
+    from .memory import SOURCE_REF_MISSING
+
     lines = []
     seen = set()
     for record in records:
@@ -1071,15 +1147,23 @@ def _memory_source_ref_lines(records: list[dict]) -> list[str]:
             if key in seen:
                 continue
             seen.add(key)
-            lines.append(f"  - from {record.get('kind', 'entry')} {owner}: shard={shard} entry_hash={entry_hash}")
+            status = status_map.get((shard, entry_hash), SOURCE_REF_MISSING)
+            lines.append(
+                f"  - from {record.get('kind', 'entry')} {owner}: "
+                f"shard={shard} entry_hash={entry_hash} -> {status}"
+            )
     return lines or ["  - none"]
 
 
 def _print_memory_explanation(explanation: dict, local_status: str = "UNKNOWN") -> None:
+    from .memory import source_ref_status_map
+
     decision = explanation["decision"]
     dependencies = explanation.get("dependencies", [])
     supporting = explanation.get("supporting_entries", [])
     missing = explanation.get("missing_dependencies", [])
+    status_map = source_ref_status_map(explanation.get("source_ref_status", []))
+    unresolved = _memory_unresolved_source_ref_warnings(explanation)
     verification = explanation.get("verification", {})
     shard_id = verification.get("shard_id", "agent_memory")
     hint = verification.get("hint", f"dsm verify --shard {shard_id}")
@@ -1109,7 +1193,7 @@ def _print_memory_explanation(explanation: dict, local_status: str = "UNKNOWN") 
 
     print("")
     print("Source refs:")
-    for line in _memory_source_ref_lines([decision, *supporting]):
+    for line in _memory_source_ref_lines([decision, *supporting], status_map):
         print(line)
 
     if missing:
@@ -1117,6 +1201,12 @@ def _print_memory_explanation(explanation: dict, local_status: str = "UNKNOWN") 
         print("Missing dependencies:")
         for ref in missing:
             print(f"  - {ref}")
+
+    if unresolved:
+        print("")
+        print("Warnings:")
+        for warning in unresolved:
+            print(f"  - {warning['code']}: {warning['message']}")
 
     print("")
     print("DSM hashes:")
@@ -1289,7 +1379,7 @@ def main_dsm() -> None:
     p_tail.set_defaults(func=_cmd_tail)
 
     # dsm orphans
-    p_orphans = subparsers.add_parser("orphans", help="List action intents without result (crash detection)")
+    p_orphans = subparsers.add_parser("orphans", help="List recorded action intents with no recorded result (cause unknown)")
     p_orphans.add_argument("--data-dir", default=None, help="DSM data directory (default: data)")
     p_orphans.set_defaults(func=_cmd_orphans)
 

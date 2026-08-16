@@ -6,7 +6,7 @@ Three runnable demos that show what DSM actually does.
 
 ## 1. `demo_verify.py` — Tamper Detection
 
-**What it proves:** DSM detects post-hoc modification of an agent's decision trail.
+**What it shows:** DSM detects post-hoc modification of an agent's recorded decision trail.
 
 **Scenario:** A luxury AI advisor records a €120,000 watch recommendation.
 Someone modifies the trail after the fact. DSM catches it.
@@ -17,7 +17,7 @@ python demo_verify.py
 
 **What you'll see:**
 - 7 entries recorded (start + 5 actions + end)
-- Chain verified clean
+- Chain verification clean
 - Trail modified: `price_eur 120000 → 45000`
 - DSM detects the exact tampered entry
 - Verdict: `TRAIL COMPROMISED`
@@ -26,8 +26,9 @@ python demo_verify.py
 
 ## 2. `demo_end_to_end.py` — Multi-Agent Verifiable Causality
 
-**What it proves:** DSM records and verifies decisions across multiple agents,
-with cryptographic proof of causality and tamper detection per agent.
+**What it shows:** DSM records and verifies decisions across multiple agents,
+cryptographically binding each recorded response to its specific recorded
+request, with tamper detection per agent.
 
 **Scenario:** Agent A (Luxury Advisor) delegates inventory analysis to Agent B
 (Inventory Specialist). Both trails are recorded. Agent B's trail is tampered.
@@ -51,7 +52,7 @@ python demo/demo_end_to_end.py
 
 ## 3. `demo_support_agent.py` — Customer Support Agent
 
-**What it proves:** DSM records and verifies a real-world business decision —
+**What it shows:** DSM records and verifies a real-world business decision —
 a customer support agent applying a retention policy — and detects post-hoc alteration.
 
 **Scenario:** A support AI agent handles a subscription cancellation request.
@@ -65,7 +66,7 @@ python demo/demo_support_agent.py
 
 **What you'll see:**
 - 6 entries recorded (start + 4 actions + end)
-- Chain verified clean: all decisions intact
+- Chain verification clean: all decisions intact
 - Policy entry tampered: `discount_pct 30 → 0`, rationale altered
 - DSM detects the exact modified entry
 - Verdict: `TRAIL COMPROMISED`
@@ -81,7 +82,7 @@ python demo/demo_support_agent.py
 | Tamper detection | ✅ | ✅ | ✅ |
 | Business scenario | — | — | ✅ |
 | Multi-agent tracing | — | ✅ | — |
-| Causal proof (dispatch) | — | ✅ | — |
+| Request/response binding (dispatch) | — | ✅ | — |
 | Cross-agent trust receipts | — | ✅ | — |
 | Per-agent isolation | — | ✅ | — |
 
@@ -91,14 +92,14 @@ python demo/demo_support_agent.py
 
 Receipts and `verify_shard` operate on two distinct layers:
 
-- **Receipt** → proves an entry was published with a given hash at a given time
+- **Receipt** → binds an entry hash to a shard state (tip hash + entry count) at issuance time
 - **verify_shard** → recomputes hashes from raw content and detects any alteration
 
 When content is modified without recomputing the stored hash:
 the receipt confirms the entry was published,
 `verify_shard` confirms the content was altered after publication.
 
-> *Receipts prove publication. `verify_shard` proves integrity.
+> *Receipts commit to a shard state. `verify_shard` checks chain integrity.
 > Together, they make agent history admissible as evidence.*
 
 ---

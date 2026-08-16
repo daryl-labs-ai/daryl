@@ -8,7 +8,7 @@ Introduced in Daryl v1.1.0. 77 tests, 0 regressions against the existing 1153.
 
 ## Problem
 
-DSM v1.0 solved the write side: every agent decision is recorded as an append-only, hash-chained entry. Verification proves the trail has not been tampered with.
+DSM v1.0 solved the write side: every agent decision **recorded through DSM** becomes an append-only, hash-chained entry. Verification detects post-hoc tampering with that recorded trail — it says nothing about activity that was never recorded.
 
 But recording is only half the problem. An agent that cannot read its own history is an agent with amnesia. It will repeat decisions, contradict prior commitments, and lose institutional knowledge across sessions.
 
@@ -16,7 +16,7 @@ The missing piece was a read path that satisfies three constraints simultaneousl
 
 1. **Relevance** — not all history matters for the current task. The agent needs the subset that is relevant, ranked by importance.
 2. **Budget** — LLM context windows are finite. Recalled memory must fit within a token budget without truncating critical information.
-3. **Provenance** — recalled memory must be traceable to its source entries and verifiable against the original hash chain. Unverified recall is no better than hallucination.
+3. **Provenance** — recalled memory must be traceable to its source entries and checkable against the original hash chain. Recall that cannot be traced back to a recorded entry is no better than hallucination. (Traceability is not truth: an entry can be intact, chain-verified, and wrong.)
 
 No existing system provides all three. Vector databases handle relevance but not provenance. RAG pipelines handle budget but not integrity. DSM now handles all three through the Consumption Layer.
 
@@ -66,9 +66,14 @@ result = search_memory(
 )
 
 # result["past_session_recall"] — ranked matches from past sessions
-# result["verified_claims"]     — extracted verified facts
+# result["verified_claims"]     — claims from action results RECORDED as successful
 # result["provenance"]          — integrity metadata for recalled entries
 ```
+
+Naming caveat: `verified_claims` and the `verified_facts` section below mean
+"drawn from an action result that was **recorded** as successful". That is a
+status recorded by the caller, not a cryptographic verification and not a check
+that the claim is true.
 
 ### Phase 2 — `dsm.context.build_context()`
 
@@ -112,10 +117,14 @@ Two modes:
 - `verify=False` (lightweight): integrity and trust derived from metadata only. No hash recomputation.
 - `verify=True` (full): runs `verify_shard()` on each source shard. Reports broken chains and computes trust level.
 
-Trust level semantics:
-- `verified` — all source shards pass chain verification
+Trust level semantics — these describe **local chain integrity only**:
+- `verified` — all source shards pass local hash-chain verification
 - `partial` — some shards pass, some fail
 - `unverified` — no shards pass, or verification was not run
+
+`trust_level: verified` is not a statement about the truthfulness of the
+entries, about the completeness of what was recorded into those shards, or
+about external anchoring.
 
 ```python
 from dsm.provenance import build_provenance
@@ -143,7 +152,7 @@ The `demo_consumption_layer.py` script in the `demo/` directory demonstrates the
 
 3. **Context** — `build_context()` packages the results into a token-budgeted context pack. `build_prompt_context()` renders it as a string ready for injection into an LLM system prompt.
 
-4. **Provenance** — `build_provenance(verify=True)` verifies the hash chain of the `sessions` shard. Reports `integrity=OK`, `trust=verified`, `broken_chains=0`.
+4. **Provenance** — `build_provenance(verify=True)` verifies the hash chain of the `sessions` shard. Reports `integrity=OK`, `trust_level=verified` (local chain integrity), `broken_chains=0`.
 
 ```bash
 python demo/demo_consumption_layer.py
@@ -161,7 +170,7 @@ Agent writes (Trust Layer)          Agent reads (Consumption Layer)
 SessionGraph.execute_action()       search_memory()
   → append-only entry                 → scan + score + rank
   → SHA-256 hash chain                → temporal status
-  → Ed25519 signature (optional)      → verified claims extraction
+  → Ed25519 signature (optional)      → recorded-success claim extraction
 
 verify_shard()                      build_context()
   → binary integrity check            → bucket + trim + compact

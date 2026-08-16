@@ -18,6 +18,8 @@ TRUST_LIMITATIONS = [
     "It does not replace `dsm verify`.",
     "It is not external anchoring.",
     "It includes no witness, MMR, STH, or anchoring mechanism.",
+    "Source refs report existence only: RESOLVED does not mean relevant, "
+    "supporting, or true.",
 ]
 
 
@@ -62,22 +64,27 @@ def _render_ok_report(report: dict[str, Any]) -> list[str]:
         "",
         "## Decision",
     ]
-    lines.extend(_render_record_details(decision))
+    status_map = _source_ref_status_map(source_refs)
+    lines.extend(_render_record_details(decision, status_map))
     lines.extend([
         "",
         "## Supporting Facts",
     ])
-    lines.extend(_render_record_list(chain.get("facts") or [], "Fact"))
+    lines.extend(_render_record_list(chain.get("facts") or [], "Fact", status_map))
     lines.extend([
         "",
         "## Hypotheses",
     ])
-    lines.extend(_render_record_list(chain.get("hypotheses") or [], "Hypothesis"))
+    lines.extend(
+        _render_record_list(chain.get("hypotheses") or [], "Hypothesis", status_map)
+    )
     lines.extend([
         "",
         "## Inferences",
     ])
-    lines.extend(_render_record_list(chain.get("inferences") or [], "Inference"))
+    lines.extend(
+        _render_record_list(chain.get("inferences") or [], "Inference", status_map)
+    )
     lines.extend([
         "",
         "## Source References",
@@ -131,20 +138,37 @@ def _render_header(status: str) -> list[str]:
     ]
 
 
-def _render_record_list(records: list[dict[str, Any]], label: str) -> list[str]:
+def _source_ref_status_map(
+    source_refs: list[dict[str, Any]],
+) -> dict[tuple[Any, Any], Any]:
+    """Index the report's top-level source_refs by (shard, entry_hash)."""
+    return {
+        (ref.get("shard"), ref.get("entry_hash")): ref.get("status") or "not provided"
+        for ref in source_refs
+    }
+
+
+def _render_record_list(
+    records: list[dict[str, Any]],
+    label: str,
+    status_map: dict[tuple[Any, Any], Any],
+) -> list[str]:
     if not records:
         return ["- None"]
 
     lines: list[str] = []
     for index, record in enumerate(records, start=1):
         lines.append(f"### {label} {index}")
-        lines.extend(_render_record_details(record))
+        lines.extend(_render_record_details(record, status_map))
         if index < len(records):
             lines.append("")
     return lines
 
 
-def _render_record_details(record: dict[str, Any]) -> list[str]:
+def _render_record_details(
+    record: dict[str, Any],
+    status_map: dict[tuple[Any, Any], Any] | None = None,
+) -> list[str]:
     lines = _render_statement(record.get("statement"))
     lines.extend([
         f"- Entry hash: {_code(record.get('entry_hash'))}",
@@ -161,9 +185,13 @@ def _render_record_details(record: dict[str, Any]) -> list[str]:
     source_refs = record.get("source_refs") or []
     lines.append("- Source refs:")
     if source_refs:
+        lookup = status_map or {}
         for ref in source_refs:
+            shard = ref.get("shard")
+            entry_hash = ref.get("entry_hash")
+            status = lookup.get((shard, entry_hash), "not provided")
             lines.append(
-                f"  - shard={_code(ref.get('shard'))} entry_hash={_code(ref.get('entry_hash'))}"
+                f"  - shard={_code(shard)} entry_hash={_code(entry_hash)} -> {status}"
             )
     else:
         lines.append("  - none")
@@ -180,12 +208,19 @@ def _render_statement(statement: Any) -> list[str]:
 
 
 def _render_source_refs(source_refs: list[dict[str, Any]]) -> list[str]:
+    """Render each source ref with its existence status.
+
+    `RESOLVED` means the referenced entry was found in local storage. It is not
+    a statement that the source is relevant, supporting, or true — the report
+    must never be read that way. `MISSING` means the ref did not resolve.
+    """
     if not source_refs:
         return ["- None"]
     return [
         (
             f"- {ref.get('owner_kind', 'entry')} {_code(ref.get('owner_entry_hash'))} "
-            f"-> shard={_code(ref.get('shard'))} entry_hash={_code(ref.get('entry_hash'))}"
+            f"-> shard={_code(ref.get('shard'))} entry_hash={_code(ref.get('entry_hash'))} "
+            f"-> {ref.get('status') or 'not provided'}"
         )
         for ref in source_refs
     ]

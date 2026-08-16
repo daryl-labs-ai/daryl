@@ -1,8 +1,14 @@
 """
 Cross-Agent Trust Receipts (P6).
 
-Portable proof of work: Agent B issues a TaskReceipt; Agent A stores it.
-Third parties can verify the receipt against B's DSM.
+Portable entry-state token: Agent B issues a TaskReceipt; Agent A stores it.
+Third parties can check the receipt against B's DSM.
+
+What a receipt binds: this entry hash was present in this shard at this tip
+hash and entry count. It is evidence about the RECORDED trail — not evidence
+that the work described was performed, and not evidence about the material the
+agent actually consumed (see dsm.receipts for that capture boundary).
+
 P9: optional Ed25519 signature and public_key on receipt.
 """
 

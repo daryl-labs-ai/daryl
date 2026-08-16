@@ -1,9 +1,22 @@
 """
 Input receipt utilities for DSM.
 
-Agents use these helpers to hash external responses before
-logging them with confirm_action(). This proves not just what
-the agent DID, but what it SAW.
+Agents use these helpers to hash external responses before logging them with
+confirm_action(). A receipt binds the CALLER-SUPPLIED input bytes to the
+recorded result.
+
+Capture boundary — read this before relying on a receipt as evidence:
+
+    A receipt hashes the bytes it is handed. It does NOT establish that those
+    bytes are what the agent or model actually observed. If a caller reads a
+    source file and then passes a summary of it to make_receipt(), the receipt
+    is internally consistent and will verify as INTACT — faithfully, because it
+    binds exactly what it was given.
+
+    Detecting that substitution requires the true material to be available and
+    compared explicitly against the recorded input_hash. DSM cannot do that on
+    its own; it would need an instrumentation/runtime boundary that captures
+    the input at the point of consumption.
 """
 
 import hashlib

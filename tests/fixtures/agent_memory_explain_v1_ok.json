@@ -21,7 +21,8 @@
       "entry_hash": "v1:<hash>",
       "owner_entry_hash": "v1:<hash>",
       "owner_kind": "hypothesis",
-      "shard": "agent_memory"
+      "shard": "agent_memory",
+      "status": "RESOLVED"
     }
   ],
   "status": "ok",
