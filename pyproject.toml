@@ -21,7 +21,9 @@ Source = "https://github.com/daryl-labs-ai/daryl"
 "Bug Tracker" = "https://github.com/daryl-labs-ai/daryl/issues"
 
 [project.optional-dependencies]
-goose = ["mcp>=1.25.0"]
+# mcp 2.0 removed mcp.server.fastmcp (imported by the goose server); the 2.x
+# migration is a separate, deliberate decision — pin to the 1.x line.
+goose = ["mcp>=1.25.0,<2"]
 # PRL P8 local semantic index — heavy ML stack, isolated from core/dev/CI.
 # Install on demand: pip install daryl-dsm[semantic]
 semantic = ["sentence-transformers>=3"]
@@ -31,9 +33,13 @@ agents = ["openai>=1"]
 dev = [
     "pytest",
     "pytest-cov",
-    "ruff",
+    # Pinned to the 0.15 line: ruff 0.16 changed default rule selection and
+    # flags ~1.4k pre-existing findings (import sorting etc.) the repo's
+    # config was never written against. Raising the pin is a deliberate,
+    # separate lint-migration decision — not a CI side effect.
+    "ruff>=0.15,<0.16",
     "bandit",
-    "mcp>=1.25.0",
+    "mcp>=1.25.0,<2",
 ]
 
 [project.scripts]
