@@ -34,7 +34,7 @@ The key insight: the hash was not recomputed after modification. This is what ma
 
 ---
 
-## 2. `demo/demo_end_to_end.py` — Multi-Agent Causality
+## 2. `demo/demo_end_to_end.py` — Recorded Cross-Agent Task Linkage
 
 **What it demonstrates**: Two agents collaborate. Agent A delegates to Agent B. DSM records both trails and cryptographically binds B's recorded response to A's specific recorded request.
 

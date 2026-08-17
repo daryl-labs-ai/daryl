@@ -121,7 +121,7 @@ Logs tell you *that* something ran. Observability dashboards tell you *how long*
 - Vector databases reconstruct context probabilistically — they don't preserve decisions.
 - Agent frameworks track tool calls, but not in a form whose integrity can be checked afterwards.
 
-When a regulator, an auditor, or your own CTO asks *"show me this agent's trail and show me it hasn't been rewritten"*, none of these tools can answer. DSM is built to provide **tamper-evidence** for that history. Note the boundary: DSM makes the *recorded* trail checkable. Whether that trail is a complete account of what the agent did depends on what was recorded into it — see [Threat model & limitations](#threat-model--limitations). It detects post-hoc modification, reordering, and truncation of a recorded trail; strong append-only guarantees against a fully privileged adversary additionally require external anchoring (see [Threat model & limitations](#threat-model--limitations)).
+When a regulator, an auditor, or your own CTO asks *"show me this agent's trail and show me it hasn't been rewritten"*, none of these tools can answer. DSM is built to provide **tamper-evidence** for that history. It detects post-hoc modification, reordering, and truncation of a recorded trail; strong append-only guarantees against a fully privileged adversary additionally require external anchoring. Note the boundary: DSM makes the *recorded* trail checkable — whether that trail is a complete account of what the agent did depends on what was recorded into it (see [Threat model & limitations](#threat-model--limitations)).
 
 ## The Solution
 

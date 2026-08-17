@@ -24,7 +24,7 @@ python demo_verify.py
 
 ---
 
-## 2. `demo_end_to_end.py` — Multi-Agent Verifiable Causality
+## 2. `demo_end_to_end.py` — Recorded Cross-Agent Task Linkage
 
 **What it shows:** DSM records and verifies decisions across multiple agents,
 cryptographically binding each recorded response to its specific recorded
@@ -100,7 +100,7 @@ the receipt confirms the entry was published,
 `verify_shard` confirms the content was altered after publication.
 
 > *Receipts commit to a shard state. `verify_shard` checks chain integrity.
-> Together, they make agent history admissible as evidence.*
+> Together, they make the recorded agent history tamper-evident.*
 
 ---
 

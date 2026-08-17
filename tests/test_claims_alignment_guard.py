@@ -75,7 +75,30 @@ BANNED_CLAIMS = [
         "every action, every decision",
         "Experiment 1: coverage is limited to what was recorded through DSM.",
     ),
+    (
+        "admissible as evidence",
+        "Legal admissibility depends on jurisdiction and process; a library "
+        "cannot assert it. Only the explicit disclaimer form is allowed.",
+    ),
+    (
+        "verifiable causality",
+        "Experiments 4 and 5: dispatch hashes bind a RECORDED response to a "
+        "RECORDED request. Real-world causality is not established.",
+    ),
+    (
+        "causal proof",
+        "Same boundary: the binding is over recorded task linkage, not cause.",
+    ),
+    (
+        "proof of causality",
+        "Same boundary: the binding is over recorded task linkage, not cause.",
+    ),
 ]
+
+# These bans target positive assertions only. Honest negations such as
+# "does not establish causality" or the legal-admissibility disclaimer in
+# README.md must stay writable, so the phrases above are the asserting forms
+# rather than the bare words `causality` or `admissible`.
 
 # Phrases whose ABSENCE would mean an honest limitation was dropped.
 # Each maps to the experiment it keeps on the record.
