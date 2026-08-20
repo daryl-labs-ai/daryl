@@ -179,6 +179,10 @@ The Consumption Layer never writes to storage. It never modifies entries. It is 
 
 ## Guarantees
 
+> **Boundary:** DSM proves properties of the record, not reality itself.
+> A factually false entry can be cryptographically intact; integrity is not truth.
+> See [DSM_VERIFY_BOUNDARY.md](architecture/DSM_VERIFY_BOUNDARY.md).
+
 - **Read-only** — the Consumption Layer never writes to any shard. `search_memory`, `build_context`, and `build_provenance` are pure readers.
 - **Deterministic scoring** — keyword overlap + recency decay + type weighting. No stochastic components. Same inputs produce same rankings.
 - **Temporal correctness** — superseded detection uses strict token-subset comparison. An entry is only marked superseded if a strictly newer entry covers all of its matched query tokens.
