@@ -1,0 +1,30 @@
+{
+  "document_type": "questionnaire",
+  "document_id": "Q17",
+  "version": "1.1",
+  "title": "Profil investisseur — Version 17",
+  "created_at": "2026-04-01T14:30:00Z",
+  "changes_from_previous": "Ajout question ESG, reformulation q3",
+  "questions": [
+    {
+      "id": "q1",
+      "text": "Quel est votre horizon d'investissement ?",
+      "options": ["< 2 ans", "2-5 ans", "5-10 ans", "> 10 ans"]
+    },
+    {
+      "id": "q2",
+      "text": "Quelle part de votre patrimoine représente cet investissement ?",
+      "options": ["< 10%", "10-25%", "25-50%", "> 50%"]
+    },
+    {
+      "id": "q3",
+      "text": "En cas de baisse significative (-20%), quelle serait votre réaction ?",
+      "options": ["Vendre immédiatement", "Réduire l'exposition", "Maintenir la position", "Renforcer"]
+    },
+    {
+      "id": "q4",
+      "text": "Souhaitez-vous intégrer des critères ESG dans votre allocation ?",
+      "options": ["Non", "Oui, si rendement équivalent", "Oui, prioritairement"]
+    }
+  ]
+}

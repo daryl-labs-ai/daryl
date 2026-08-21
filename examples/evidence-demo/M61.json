@@ -1,0 +1,25 @@
+{
+  "manifest_type": "evidence_binding",
+  "manifest_id": "M61",
+  "created_at": "2026-04-10T09:20:00Z",
+  "description": "Liaison des documents pour la recommandation R42",
+  "bound_objects": [
+    {
+      "role": "questionnaire_previous",
+      "document_id": "Q16",
+      "file": "Q16.json"
+    },
+    {
+      "role": "questionnaire_current",
+      "document_id": "Q17",
+      "file": "Q17.json"
+    },
+    {
+      "role": "recommendation",
+      "document_id": "R42",
+      "file": "R42.json",
+      "based_on": "Q17"
+    }
+  ],
+  "integrity_note": "Ce manifeste enregistre la relation déclarée entre les documents. DSM garantit que cette relation, une fois enregistrée, n'a pas été modifiée a posteriori. DSM ne garantit PAS que le conseiller a effectivement utilisé Q17, ni que R42 est une recommandation pertinente ou conforme."
+}
