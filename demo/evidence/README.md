@@ -26,11 +26,11 @@ La recommandation R42 déclare `"based_on": "Q17"`. Cette relation est **enregis
 ## Exécution
 
 ```bash
-# Depuis le répertoire examples/evidence-demo/
-python run_demo.py
+# Depuis la racine du dépôt
+python demo/evidence/run_demo.py
 
 # Conserver les données pour inspection
-python run_demo.py --keep-data
+python demo/evidence/run_demo.py --keep-data
 ```
 
 ---
@@ -59,10 +59,13 @@ Le hash stocké ne correspond plus au contenu.
 [VÉRIFICATION APRÈS ALTÉRATION]
 ✗ Status       : TAMPERED
   Entrées      : 4
-  Vérifiées    : 1
+  Vérifiées    : 3
   Altérées     : 1
-  Ruptures     : 2
+  Ruptures     : 0
 ```
+
+Note : 3 entrées restent vérifiées (Q16, R42, M61). Seule Q17 est détectée comme altérée.
+`Ruptures` compte les discontinuités de chaîne (`prev_hash`), pas les altérations de contenu.
 
 ---
 
@@ -103,12 +106,13 @@ Ce contenu est hashé comme tout autre contenu DSM. Son intégrité est garantie
 ## Architecture
 
 ```
-examples/evidence-demo/
+demo/evidence/
 ├── Q16.json      # Questionnaire v16
 ├── Q17.json      # Questionnaire v17
 ├── R42.json      # Recommandation (based_on: Q17)
 ├── M61.json      # Manifeste de liaison
 ├── run_demo.py   # Script de démonstration
+├── test_demo.py  # Tests automatisés
 └── README.md     # Ce fichier
 ```
 
@@ -116,35 +120,14 @@ examples/evidence-demo/
 
 ## Intégration
 
-Pour utiliser DSM dans votre propre code :
+Pour intégrer DSM dans votre application, consultez le [README principal](../../README.md)
+et les exemples dans `demo/`. L'API recommandée passe par `SessionGraph` pour
+l'enregistrement et `dsm verify` (CLI) ou `verify_shard` pour la vérification.
 
-```python
-from dsm.core.storage import Storage
-from dsm.core.models import Entry
-from dsm.verify import verify_shard
+Vérification en ligne de commande :
 
-# Initialiser le stockage
-storage = Storage(data_dir="my_data")
-
-# Enregistrer un document
-entry = Entry(
-    id="unique-id",
-    timestamp=datetime.now(timezone.utc),
-    session_id="my-session",
-    source="my-app",
-    content=json.dumps(my_document),
-    shard="my_shard",
-    hash="",
-    prev_hash=None,
-    metadata={"document_id": "DOC-001"},
-    version="v2.0",
-)
-stored = storage.append(entry)
-print(f"Hash: {stored.hash}")
-
-# Vérifier l'intégrité
-result = verify_shard(storage, "my_shard")
-print(f"Status: {result['status']}")
+```bash
+dsm verify --shard my_shard --data-dir my_data
 ```
 
 ---
