@@ -52,12 +52,23 @@ daryl = "prl.daryl_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+# The daryl-dsm distribution ships DSM and the PRL layer built on it, and
+# nothing else. HexaShard is developed and tested in this monorepo but is a
+# separate, experimental concern with no dependency in either direction, so it
+# is deliberately not part of this distribution. Listed positively rather than
+# by exclusion so a new package under src/ cannot be published by accident.
+include = ["dsm*", "prl*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 addopts = "-ra"
-pythonpath = ["."]
+# "src" keeps the source tree importable for tests independently of how the
+# editable install happens to expose it, now that packages.find is scoped.
+pythonpath = [".", "src"]
+markers = [
+    "integration: HexaShard long-project architecture validation",
+]
 
 [tool.ruff]
 lint.ignore = [

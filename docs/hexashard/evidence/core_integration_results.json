@@ -1,0 +1,177 @@
+{
+  "fixture": {
+    "filler": 320,
+    "planted": 12,
+    "queries": 10,
+    "seed": 20260827,
+    "sha256": "ee89fb44237e3d141447f59d73743d0af3ed0fb8514de5586dc26aab5f90f5e7"
+  },
+  "config": {
+    "active_context_budget_tokens": 6000,
+    "retrieval_budget_tokens": 1200,
+    "turns": 260,
+    "supersession_turn": 80
+  },
+  "project_total_tokens": 170855,
+  "active_state_peak_tokens": 5384,
+  "active_state_final_tokens": 5384,
+  "active_state_mean_tokens": 2935.7,
+  "store_to_active_ratio": 31.7,
+  "retrieval_tokens": 175518,
+  "retrieval_count": 260,
+  "retrieval_tokens_mean": 675.1,
+  "epoch_count": 4,
+  "epoch_rotations": 3,
+  "turns_per_epoch": [
+    69,
+    66,
+    64
+  ],
+  "handoff_tokens": [
+    389,
+    544,
+    690
+  ],
+  "active_state_before_rotation": [
+    5431,
+    5442,
+    5452
+  ],
+  "active_state_after_rotation": [
+    394,
+    550,
+    695
+  ],
+  "pin_count": 4,
+  "critical_pin_count": 3,
+  "hot_hex_count": 7,
+  "warm_hex_count": 0,
+  "cold_hex_count": 5,
+  "hex_count": 12,
+  "source_count": 332,
+  "fragment_count": 652,
+  "hexmap_index_tokens": 384,
+  "model_calls": 0,
+  "model_input_tokens": 0,
+  "model_output_tokens": 0,
+  "retrieval_accuracy": 1.0,
+  "authority_accuracy": 1.0,
+  "query_detail": [
+    {
+      "query": "what is the telemetry downlink budget per pass",
+      "kind": "authority",
+      "expected": "downlink_budget",
+      "returned": [
+        "downlink_budget",
+        "apogee_note",
+        "thermal_limit"
+      ],
+      "retrieval_ok": true,
+      "authority_ok": true
+    },
+    {
+      "query": "what is the thermal cycling limit for the dish drive",
+      "kind": "authority",
+      "expected": "thermal_limit",
+      "returned": [
+        "thermal_limit",
+        "apogee_note",
+        "downlink_budget"
+      ],
+      "retrieval_ok": true,
+      "authority_ok": true
+    },
+    {
+      "query": "how long is the ground station handover window",
+      "kind": "authority",
+      "expected": "handover_v2",
+      "returned": [
+        "handover_v2",
+        "downlink_budget",
+        "apogee_note"
+      ],
+      "retrieval_ok": true,
+      "authority_ok": true
+    },
+    {
+      "query": "what elevation is site KELL-9",
+      "kind": "retrieval",
+      "expected": "kell9_elevation",
+      "returned": [
+        "kell9_elevation",
+        "apogee_note",
+        "downlink_budget"
+      ],
+      "retrieval_ok": true,
+      "authority_ok": null
+    },
+    {
+      "query": "which buffering approach did we adopt for telemetry",
+      "kind": "authority",
+      "expected": "adr007",
+      "returned": [
+        "adr007",
+        "downlink_budget",
+        "P1.S0016"
+      ],
+      "retrieval_ok": true,
+      "authority_ok": true
+    },
+    {
+      "query": "what p99 frame latency did validation run V-118 record",
+      "kind": "retrieval",
+      "expected": "validation_v118",
+      "returned": [
+        "validation_v118",
+        "adr007"
+      ],
+      "retrieval_ok": true,
+      "authority_ok": null
+    },
+    {
+      "query": "how often is the raster scan calibration repeated",
+      "kind": "retrieval",
+      "expected": "raster_note",
+      "returned": [
+        "raster_note",
+        "apogee_note",
+        "downlink_budget"
+      ],
+      "retrieval_ok": true,
+      "authority_ok": null
+    },
+    {
+      "query": "what is the apogee dwell time",
+      "kind": "retrieval",
+      "expected": "apogee_note",
+      "returned": [
+        "apogee_note",
+        "downlink_budget",
+        "raster_note"
+      ],
+      "retrieval_ok": true,
+      "authority_ok": null
+    },
+    {
+      "query": "what was the original handover window before the refit",
+      "kind": "historical",
+      "expected": "handover_v1",
+      "returned": [
+        "handover_v1",
+        "adr002"
+      ],
+      "retrieval_ok": true,
+      "authority_ok": true
+    },
+    {
+      "query": "what did ADR-002 originally decide about buffering",
+      "kind": "historical",
+      "expected": "adr002",
+      "returned": [
+        "adr002"
+      ],
+      "retrieval_ok": true,
+      "authority_ok": true
+    }
+  ]
+}
