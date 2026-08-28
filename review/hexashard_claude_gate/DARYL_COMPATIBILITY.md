@@ -58,7 +58,11 @@ to `hexashard_fixtures/` and `hexashard_adapter_fixtures/`.
 `hexashard` and `hexashard_adapter` are now **included in the `daryl-dsm`
 distribution**. The repository has a `publish-pypi.yml` workflow.
 
-Nothing was published and no version was bumped, but **the next PyPI release of
-`daryl-dsm` would ship HexaShard unless this is decided deliberately.** The options are
-to accept it, or to add an explicit `exclude` to the packages configuration. This was
-left as-is rather than changed silently — flagging it is the point.
+**RESOLVED** — see [HEXASHARD_PACKAGING_DECISION.md](HEXASHARD_PACKAGING_DECISION.md).
+
+A follow-up packaging gate confirmed empirically that a wheel built from this branch
+did contain both `hexashard` and `hexashard_adapter`, and ruled that it should not:
+`daryl-dsm` is a scoped distribution (DSM plus the PRL layer built on it), not a DARYL
+umbrella — the monorepo already publishes four separate distributions. Discovery is now
+an allowlist, `include = ["dsm*", "prl*"]`, and the resulting wheel's file list is
+identical to the one built from `main`.

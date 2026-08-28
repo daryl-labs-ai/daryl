@@ -123,12 +123,13 @@ new tests.
 Roughly **460 MB** of research trees, raw provider logs, duplicate Core copies and the
 orphaned Cursor Core. See DARYL_MIGRATION_MANIFEST.md.
 
-## Requires a human decision
+## Packaging — raised here, resolved in a follow-up gate
 
-`packages.find` discovers `src/` automatically, so **HexaShard is now inside the
-`daryl-dsm` distribution**. Nothing was published and no version bumped, but the next
-PyPI release would ship it unless that is decided deliberately. Flagged rather than
-silently changed.
+`packages.find` discovered `src/` automatically, so HexaShard was landing inside the
+`daryl-dsm` distribution. This was flagged rather than silently changed, then settled
+by a dedicated packaging gate: **excluded**. See
+[HEXASHARD_PACKAGING_DECISION.md](HEXASHARD_PACKAGING_DECISION.md). Nothing was
+published, versioned or tagged.
 
 ## Stop
 
