@@ -43,6 +43,9 @@ jobs:
       - name: Security check with bandit
         run: bandit -r src/ -ll
 
+      - name: Architecture check — HexaShard / DSM import boundary (ADR-HEXASHARD-0001)
+        run: python scripts/forbid_cross_boundary_imports.py
+
       - name: Run tests with coverage
         run: python -m pytest tests/ -v --tb=short --cov=src/dsm --cov-report=term-missing --cov-report=html
 

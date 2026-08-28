@@ -89,6 +89,19 @@ writes nothing, and refuses write operations. It is not a Core mode.
 and reopening a project restores state, map, pins and cold sources; the visible chat
 history is irrelevant to what the model is told.
 
+## Repository status
+
+HexaShard is an **independent runtime temporarily co-located in DARYL**. It is not
+a DSM or PRL module: nothing here imports `dsm` or `prl`, nothing there imports
+HexaShard, and HexaShard is deliberately excluded from the `daryl-dsm`
+distribution.
+
+That boundary is a hard invariant, enforced in CI by
+`scripts/forbid_cross_boundary_imports.py`. The reasoning, the conditions under
+which HexaShard moves to its own repository, and what happens when it does are
+governed by
+[ADR-HEXASHARD-0001](../architecture/ADR-HEXASHARD-0001-repository-boundary.md).
+
 ## The boundary rule
 
 The Adapter holds no copy of project truth. Every fact it shows a model is read from
