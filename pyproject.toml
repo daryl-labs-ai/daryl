@@ -58,6 +58,9 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 addopts = "-ra"
 pythonpath = ["."]
+markers = [
+    "integration: HexaShard long-project architecture validation",
+]
 
 [tool.ruff]
 lint.ignore = [
