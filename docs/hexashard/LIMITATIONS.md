@@ -5,6 +5,14 @@ stated with its measurement.
 
 ## Retrieval
 
+**A follow-up that refers indirectly to a superseded value may not find it.** Two
+independent dogfoods hit this on ordinary phrasing — *"didn't we originally plan
+for more than that?"*, *"wasn't that number lower before?"*. Neither shares
+vocabulary with the source that answers it, so lexical retrieval returns nothing
+and the old value stays out of reach. This is the sharp edge of the paraphrase
+weakness below. It is **unchanged and unaddressed**: fixing it means changing
+retrieval, which needs its own experiment rather than a patch.
+
 **Lexical retrieval degrades under paraphrase.** Retrieval is BM25 over fragments.
 On the frozen paraphrase bank:
 
@@ -42,7 +50,10 @@ repoints a pin, it stamps the stored pin `NEEDS_REVIEW` and keeps the old value 
 `check_pins()` re-resolves against the new pointer and returns `ACTIVE`, so Core's own
 `pin_warnings` is empty. The Adapter compensates and reports these, so
 `ChatTurnResult.pin_warnings` is correct; **direct Core users should read the pin's
-stored `status`, not `check_pins()` alone.** Reconciliation only adopts a new value
+stored `status`, not `check_pins()` alone.** The `supersede` command reports this
+immediately, naming the pin and the value it still holds; `status` does not,
+because it reads `check_pins()`. That inconsistency is known and was deliberately
+left alone rather than patched under an unrelated change. Reconciliation only adopts a new value
 when the successor is CURRENT *and* declares a matching `claim_key`/`claim_value`.
 
 ## Adapter and state
@@ -64,8 +75,17 @@ hexes, enforces the budget and saves to disk. Measured consequences:
 written** across 30 turns. It is an Adapter-level wrapper over `Core.retrieve()`, not
 a Core mode.
 
-**A provider failure still consumes a turn.** State advances and is saved before the
-provider is called, so a failed call spends a turn with no answer.
+**A provider failure no longer consumes a turn** *(changed in Product Seam
+v0.1.1)*. State still advances before the provider is called — it is what builds
+the context to send — but the Adapter now rolls the turn back when it produces no
+response. Project truth was never at risk; what is undone is the turn counter,
+retrieval hints, hex references and any epoch the failed turn rotated into. The
+attempt is still recorded in `adapter_metrics.jsonl`.
+
+This covers failures the Adapter can observe: the provider raising, a malformed
+provider reply, or the assembled context exceeding the provider limit. **It is not
+crash consistency** — a process kill or power loss between Core's own atomic
+writes is a different problem and is not addressed here.
 
 **`Core.handle_turn()` returns live references into ActiveState.** A caller that
 mutates the returned `response_context` mutates Core state, and the change persists.
