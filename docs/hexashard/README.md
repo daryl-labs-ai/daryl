@@ -55,22 +55,68 @@ docs/hexashard/           this documentation
 
 ## Use
 
-```python
-from hexashard_adapter import AdapterConfig, HexaShardAdapter
+A project is not a chat session. The chat window can be empty, on another
+machine, or pointed at a different provider; the project is what persists. These
+commands maintain it — no Python required.
 
-adapter = HexaShardAdapter.create(
-    "./my-project", name="my-project", mission="Ship the thing.",
-    config=AdapterConfig(provider="mock"),
-)
-source = adapter.add_source("spec", "Budget", "The downlink budget per pass is 6.1 TB.")
-adapter.pin("downlink", "6.1 TB", source.source_id, critical=True)
+```bash
+python -m hexashard_adapter create ./launch --name launch --mission "Ship it."
 
-result = adapter.chat("What is the downlink budget?")
-print(result.response_text, result.retrieved_source_ids, result.pin_warnings)
+python -m hexashard_adapter source add ./launch \
+    --type legal --title "Data residency" \
+    --text "All customer data stays in the EU. Non-negotiable."
+
+python -m hexashard_adapter pin ./launch \
+    --key residency --value "EU only" --source "Data residency" --critical
+
+python -m hexashard_adapter chat ./launch --provider ollama
 ```
 
-Use `mode="READ_ONLY"` for questions that must not advance project state — see
-LIMITATIONS.
+`python -m hexashard_adapter --help` lists everything. Sources are referred to by
+title or by id — you never have to invent an id, and an ambiguous title is an
+error rather than a guess.
+
+### Keeping the project true
+
+**Sources ground; pins point.** A pin records an invariant *and the source that
+backs it*. Pinning without `--source` is refused unless you pass `--ungrounded`
+to say you meant it.
+
+**Superseding** makes one source replace another. The old one stays retrievable
+as history:
+
+```bash
+python -m hexashard_adapter source add ./launch --type finance \
+    --title "Budget revision" --text "The budget is now 1.8M." \
+    --claim-key budget --claim-value "1.8M"
+python -m hexashard_adapter supersede ./launch --old "Budget" --new "Budget revision"
+```
+
+Declaring `--claim-key`/`--claim-value` lets a pin on that fact carry the new
+value forward automatically. **Without it the pin keeps its old value**, is marked
+`NEEDS_REVIEW`, and `supersede` tells you so — see LIMITATIONS.
+
+**A decision is something you record, not something the model says.** A model
+answer never becomes project truth, and neither does the transcript:
+
+```bash
+python -m hexashard_adapter decision ./launch "Launch moves to 12 November."
+python -m hexashard_adapter question add ./launch --text "Who covers Spain?"
+python -m hexashard_adapter question resolve ./launch --id Q1
+```
+
+### Asking without changing anything
+
+`chat --mode READ_ONLY` answers from the project and mutates nothing — no turn,
+no epoch, no bytes written. It is a flag you choose up front, which is a known
+usability limitation rather than a design goal.
+
+### When the provider fails
+
+A turn that produces no response does not persist. If generation fails, the
+project is left exactly as it was — same turn, same epoch, same state — and the
+request can simply be retried. The failure is still recorded in the adapter's
+metrics, because observability is not project truth.
 
 Run the tests:
 

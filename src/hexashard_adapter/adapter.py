@@ -109,6 +109,60 @@ def _require_provider_result(result: Any, provider: ChatProvider) -> None:
         )
 
 
+#: Files ``Project.save()`` writes. A chat turn can dirty these and nothing
+#: else — in particular it never writes ``sources/``, so the cost of snapshotting
+#: a turn is independent of how large the project store is.
+_TURN_STATE_FILES = (
+    "project.json",
+    "active_state.json",
+    "hexmap.jsonl",
+    "pins.jsonl",
+    "relations.jsonl",
+)
+
+
+class _TurnSnapshot:
+    """The conversational state a turn is allowed to change, captured before it.
+
+    ``Project.handle_turn`` advances state and persists it *before* the caller
+    can call a provider, because it is what produces the context the provider is
+    given. A turn that then fails to produce a response would otherwise leave the
+    project looking as though a conversation had happened.
+
+    This captures only what such a turn can write. Project truth — sources, pins,
+    open questions — is not copied, because nothing on the failing path writes it;
+    that is asserted by test instead, which keeps the per-turn cost flat.
+
+    Adapter-local. Core is not modified, and a successful turn never touches this.
+    """
+
+    __slots__ = ("_root", "_files", "_epoch_artifacts")
+
+    def __init__(self, root: Path) -> None:
+        self._root = root
+        self._files = {
+            name: (root / name).read_bytes()
+            for name in _TURN_STATE_FILES
+            if (root / name).is_file()
+        }
+        epochs = root / "epochs"
+        self._epoch_artifacts = (
+            {p.name for p in epochs.iterdir() if p.is_file()} if epochs.is_dir() else set()
+        )
+
+    def restore(self) -> None:
+        """Put the recorded state back and drop anything the failed turn added."""
+        for name, blob in self._files.items():
+            path = self._root / name
+            if not path.is_file() or path.read_bytes() != blob:
+                path.write_bytes(blob)
+        epochs = self._root / "epochs"
+        if epochs.is_dir():
+            for path in epochs.iterdir():
+                if path.is_file() and path.name not in self._epoch_artifacts:
+                    path.unlink()
+
+
 class HexaShardAdapter:
     def __init__(self, project: Project, config: AdapterConfig, provider: ChatProvider) -> None:
         config.validate()
@@ -254,11 +308,17 @@ class HexaShardAdapter:
         # home_hex_id is organisational only — never applied as hex_ids filter.
         _ = self.config.home_hex_id
 
+        snapshot: _TurnSnapshot | None = None
         if self.config.mode == "READ_ONLY":
             ctx, state_update, retrieval_ms, retr_tokens = self._prepare_readonly(
                 user_message, filters
             )
         else:
+            # handle_turn advances and persists state before a provider can be
+            # called, because it is what produces the context to send. Record
+            # what it may change so a turn that never yields a response can be
+            # undone. READ_ONLY mutates nothing and needs no snapshot.
+            snapshot = _TurnSnapshot(self.project.root)
             t0 = time.perf_counter()
             turn = self.project.handle_turn(
                 user_message, filters=filters, objective=objective
@@ -268,29 +328,35 @@ class HexaShardAdapter:
             state_update = turn.state_update
             retr_tokens = int(state_update.get("retrieval_tokens") or 0)
 
-        ctx = _harden_context(ctx)
+        # From here to a validated provider result the state has advanced but no
+        # response exists yet. Any failure in that window rolls the turn back.
+        try:
+            ctx = _harden_context(ctx)
 
-        assembled = assemble(
-            user_message=user_message,
-            response_context=ctx,
-            budget=self.config.model_context_budget,
-        )
-        if assembled.tokens > self.config.provider_context_limit:
-            from .errors import ContextBudgetExceeded
-            raise ContextBudgetExceeded(
-                "assembled context exceeds provider_context_limit "
-                f"{self.config.provider_context_limit}"
+            assembled = assemble(
+                user_message=user_message,
+                response_context=ctx,
+                budget=self.config.model_context_budget,
             )
+            if assembled.tokens > self.config.provider_context_limit:
+                from .errors import ContextBudgetExceeded
+                raise ContextBudgetExceeded(
+                    "assembled context exceeds provider_context_limit "
+                    f"{self.config.provider_context_limit}"
+                )
 
-        t1 = time.perf_counter()
-        result = self.provider.generate(
-            messages=[{"role": "user", "content": user_message}],
-            context=assembled.project_block,
-            system=assembled.system,
-            max_output_tokens=self.config.max_output_tokens,
-            config=self.config,
-        )
-        _require_provider_result(result, self.provider)
+            t1 = time.perf_counter()
+            result = self.provider.generate(
+                messages=[{"role": "user", "content": user_message}],
+                context=assembled.project_block,
+                system=assembled.system,
+                max_output_tokens=self.config.max_output_tokens,
+                config=self.config,
+            )
+            _require_provider_result(result, self.provider)
+        except BaseException as exc:
+            self._abandon_turn(snapshot, user_message, exc)
+            raise
         model_ms = int((time.perf_counter() - t1) * 1000)
         wall = int((time.perf_counter() - wall0) * 1000)
         overhead = max(0, wall - model_ms - retrieval_ms)
@@ -329,6 +395,45 @@ class HexaShardAdapter:
         )
         self._commit_turn(out)
         return out
+
+    def _abandon_turn(
+        self, snapshot: "_TurnSnapshot | None", user_message: str, exc: BaseException
+    ) -> None:
+        """Undo a turn that advanced state but produced no response.
+
+        Project truth is untouched either way — a chat turn never writes sources,
+        pins or open questions. What is undone is the conversational state:
+        the turn counter, retrieval hints, hex references and any epoch the
+        failed turn rotated into.
+
+        The failure itself is *kept*. Observability is not project truth, so the
+        metrics record survives the rollback and the attempt remains auditable.
+        """
+        self._record_failure(user_message, exc, rolled_back=snapshot is not None)
+        if snapshot is None:
+            return
+        snapshot.restore()
+        # Bytes on disk are back; the live object still holds the advanced state,
+        # so rebuild it from what was just restored.
+        self.project = Project.open(
+            self.project.root,
+            trust=self.project.trust,
+            provider=self.project.provider,
+            counter=self.project.counter,
+        )
+
+    def _record_failure(
+        self, user_message: str, exc: BaseException, *, rolled_back: bool
+    ) -> None:
+        append_metric(self._metrics_path, {
+            "outcome": "failed",
+            "error": type(exc).__name__,
+            "error_detail": str(exc)[:200],
+            "turn_rolled_back": rolled_back,
+            "mode": self.config.mode,
+            "provider": self.provider.name,
+            "user_message_tokens": estimate_tokens(user_message),
+        })
 
     def _commit_turn(self, result: ChatTurnResult) -> None:
         """Persist adapter metrics only. Never ingest model prose as a source."""

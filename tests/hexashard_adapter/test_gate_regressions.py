@@ -130,11 +130,17 @@ def test_f05_caller_cannot_mutate_core_state_through_the_turn_context(tmp_path):
     assert len(adapter.project.state.active_pins) == before
 
 
-# F-03 — documented, not fixed -------------------------------------------
-def test_f03_provider_failure_still_consumes_a_turn(tmp_path):
-    """Documented limitation: NORMAL mode advances state before the model call.
+# F-03 — fixed in Product Seam v0.1.1 ------------------------------------
+def test_f03_provider_failure_no_longer_consumes_a_turn(tmp_path):
+    """This limitation was deliberately removed; the change is recorded here.
 
-    This locks the behaviour in so a future change to it is deliberate.
+    The original test locked in the caveat that NORMAL mode advanced state
+    before the model call, "so a future change to it is deliberate". Two
+    independent dogfoods then reproduced the consequence in real use, which
+    authorised Product Seam v0.1.1. The Adapter now rolls a turn back when it
+    produces no response. Core is unchanged.
+
+    Full coverage of the new invariant lives in test_turn_atomicity.py.
     """
     class Boom(ChatProvider):
         name = "boom"
@@ -147,7 +153,7 @@ def test_f03_provider_failure_still_consumes_a_turn(tmp_path):
     before = adapter.project.state.turn
     with pytest.raises(RuntimeError):
         adapter.chat("what is the downlink budget")
-    assert adapter.project.state.turn == before + 1
+    assert adapter.project.state.turn == before
 
 
 def test_read_only_mode_consumes_nothing(tmp_path):
