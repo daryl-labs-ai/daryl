@@ -1,0 +1,128 @@
+{
+  "project_store_tokens": 101627,
+  "source_count": 64,
+  "mean_active_state": 242.0,
+  "peak_active_state": 278,
+  "mean_retrieved": 96.7,
+  "peak_model_visible": 363,
+  "mean_model_visible": 336.0,
+  "store_visible_ratio": 279.96,
+  "mean_retrieval_ms": 1.0,
+  "mean_adapter_overhead_ms": 0.0,
+  "mean_model_ms": 0.0,
+  "session_reset_ok": true,
+  "queries": [
+    {
+      "q": "What is the BEACONEL elevation?",
+      "ids": [
+        "P1.S0001",
+        "P1.S0063",
+        "P1.S0064",
+        "P1.S0004"
+      ],
+      "trunc": false,
+      "visible": 346,
+      "active": 197,
+      "retrieved": 111,
+      "store": 101627,
+      "retr_ms": 1,
+      "overhead_ms": 0,
+      "model_ms": 0,
+      "epoch": 1,
+      "blob_head": "CRITICAL PINS:\n- BEACONEL = 41.2 (source P1.S0001, status ACTIVE)\n- GATEBUDGET = 6.1TB (source P1.S0063, status ACTIVE)\n- ADR-OG-01 = CREDITBP (source P1.S0064, status ACTIVE)\n\nMission: Deliver the ORION-GATE ground ingest path without HEXM"
+    },
+    {
+      "q": "What is the current GATEBUDGET daily cap?",
+      "ids": [
+        "P1.S0063",
+        "P1.S0064",
+        "P1.S0001",
+        "P1.S0004"
+      ],
+      "trunc": false,
+      "visible": 347,
+      "active": 208,
+      "retrieved": 111,
+      "store": 101627,
+      "retr_ms": 1,
+      "overhead_ms": 0,
+      "model_ms": 0,
+      "epoch": 1,
+      "blob_head": "CRITICAL PINS:\n- BEACONEL = 41.2 (source P1.S0001, status ACTIVE)\n- GATEBUDGET = 6.1TB (source P1.S0063, status ACTIVE)\n- ADR-OG-01 = CREDITBP (source P1.S0064, status ACTIVE)\n\nMission: Deliver the ORION-GATE ground ingest path without HEXM"
+    },
+    {
+      "q": "What was the previous GATEBUDGET daily cap before rev 2?",
+      "ids": [
+        "P1.S0002",
+        "P1.S0003"
+      ],
+      "trunc": false,
+      "visible": 241,
+      "active": 222,
+      "retrieved": 25,
+      "store": 101627,
+      "retr_ms": 1,
+      "overhead_ms": 0,
+      "model_ms": 0,
+      "epoch": 1,
+      "blob_head": "CRITICAL PINS:\n- BEACONEL = 41.2 (source P1.S0001, status ACTIVE)\n- GATEBUDGET = 6.1TB (source P1.S0063, status ACTIVE)\n- ADR-OG-01 = CREDITBP (source P1.S0064, status ACTIVE)\n\nMission: Deliver the ORION-GATE ground ingest path without HEXM"
+    },
+    {
+      "q": "What is the current ADR-OG-01 ingest path?",
+      "ids": [
+        "P1.S0064",
+        "P1.S0004",
+        "P1.S0063",
+        "P1.S0001"
+      ],
+      "trunc": false,
+      "visible": 348,
+      "active": 234,
+      "retrieved": 111,
+      "store": 101627,
+      "retr_ms": 1,
+      "overhead_ms": 0,
+      "model_ms": 0,
+      "epoch": 1,
+      "blob_head": "CRITICAL PINS:\n- BEACONEL = 41.2 (source P1.S0001, status ACTIVE)\n- GATEBUDGET = 6.1TB (source P1.S0063, status ACTIVE)\n- ADR-OG-01 = CREDITBP (source P1.S0064, status ACTIVE)\n\nMission: Deliver the ORION-GATE ground ingest path without HEXM"
+    },
+    {
+      "q": "What HEAPSTARVE failure is recorded for BUG-4412?",
+      "ids": [
+        "P1.S0004",
+        "P1.S0001",
+        "P1.S0064",
+        "P1.S0063"
+      ],
+      "trunc": false,
+      "visible": 349,
+      "active": 247,
+      "retrieved": 111,
+      "store": 101627,
+      "retr_ms": 1,
+      "overhead_ms": 0,
+      "model_ms": 0,
+      "epoch": 1,
+      "blob_head": "CRITICAL PINS:\n- BEACONEL = 41.2 (source P1.S0001, status ACTIVE)\n- GATEBUDGET = 6.1TB (source P1.S0063, status ACTIVE)\n- ADR-OG-01 = CREDITBP (source P1.S0064, status ACTIVE)\n\nMission: Deliver the ORION-GATE ground ingest path without HEXM"
+    },
+    {
+      "q": "What is the ZEPHYRX mass in kilograms?",
+      "ids": [
+        "P1.S0063",
+        "P1.S0001",
+        "P1.S0064",
+        "P1.S0004"
+      ],
+      "trunc": false,
+      "visible": 363,
+      "active": 257,
+      "retrieved": 111,
+      "store": 101627,
+      "retr_ms": 1,
+      "overhead_ms": 0,
+      "model_ms": 0,
+      "epoch": 1,
+      "blob_head": "CRITICAL PINS:\n- BEACONEL = 41.2 (source P1.S0001, status ACTIVE)\n- GATEBUDGET = 6.1TB (source P1.S0063, status ACTIVE)\n- ADR-OG-01 = CREDITBP (source P1.S0064, status ACTIVE)\n\nPROJECT WARNING:\nNo project source was retrieved for this claim"
+    }
+  ]
+}
