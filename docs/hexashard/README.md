@@ -43,6 +43,13 @@ See [EVIDENCE.md](EVIDENCE.md) and [LIMITATIONS.md](LIMITATIONS.md).
   full-context arm could not run at all while the HexaShard arm completed. At smaller
   sizes the two arms answered within one question of each other.
 
+## Repository status
+
+An independent runtime temporarily co-located in DARYL — not a DSM module, and
+excluded from the `daryl-dsm` distribution. Its repository boundary and
+extraction triggers are governed by
+[ADR-HEXASHARD-0001](../architecture/ADR-HEXASHARD-0001-repository-boundary.md).
+
 ## Layout
 
 ```
