@@ -404,7 +404,13 @@ def dsm_search(
 
 @mcp.tool()
 def dsm_status() -> str:
-    """Show DSM data directory, shards, entry counts, and integrity status."""
+    """Show DSM data directory, shards, entry counts, and integrity-pin presence.
+
+    `integrity_pin` reports whether a shard has an integrity pin, not whether
+    its chain was verified. Use `dsm_verify` to verify a chain.
+    """
+    from dsm.cli import _shard_pin_label
+
     agent = _get_agent()
     storage = agent.storage
     shards = storage.list_shards()
@@ -419,7 +425,7 @@ def dsm_status() -> str:
                 "entry_count": s.entry_count,
                 "created_at": s.created_at.isoformat() if hasattr(s, "created_at") else None,
                 "last_updated": s.last_updated.isoformat() if s.last_updated else None,
-                "integrity": s.integrity_status,
+                "integrity_pin": _shard_pin_label(s.integrity_status),
             }
             for s in shards
         ],

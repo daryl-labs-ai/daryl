@@ -89,7 +89,15 @@ business decision validity.
 - no external anchoring yet;
 - no witness/MMR/STH yet;
 - no provider-as-authority;
-- no blockchain integration yet.
+- no blockchain integration yet;
+- no completeness guarantee — DSM covers what was recorded through DSM, and
+  cannot see or infer activity that never crossed its boundary;
+- no guarantee that recorded input bytes are what a model actually consumed —
+  receipts and attestations bind caller-supplied bytes;
+- no guarantee that a declared provenance chain is the real investigation path —
+  DSM replays the provenance it was given;
+- no relevance judgement on `source_refs` — existence is reported, semantic
+  support is not.
 
 ## Where to look
 
@@ -105,53 +113,57 @@ business decision validity.
 
 You deployed an AI agent. It made a decision. Something went wrong.
 
-Now prove what happened.
+Now show what was recorded — and show that the record has not been altered since.
 
-Logs tell you *that* something ran. Observability dashboards tell you *how long* it took. Neither can answer the question that matters: **did the agent actually do what it claims it did, and can you prove it hasn't been altered after the fact?**
+Logs tell you *that* something ran. Observability dashboards tell you *how long* it took. Neither can answer the narrower question DSM targets: **is the trail you are reading the same trail that was written, or has it been edited after the fact?**
 
 - Logs are mutable. Anyone with access can edit or delete them.
 - Vector databases reconstruct context probabilistically — they don't preserve decisions.
-- Agent frameworks track tool calls, not verifiable proof of execution.
+- Agent frameworks track tool calls, but not in a form whose integrity can be checked afterwards.
 
-When a regulator, an auditor, or your own CTO asks *"prove this agent did X and not Y"*, none of these tools can answer. DSM is built to provide **tamper-evidence** for that history. It detects post-hoc modification, reordering, and truncation of a recorded trail; strong append-only guarantees against a fully privileged adversary additionally require external anchoring (see [Threat model & limitations](#threat-model--limitations)).
+When a regulator, an auditor, or your own CTO asks *"show me this agent's trail and show me it hasn't been rewritten"*, none of these tools can answer. DSM is built to provide **tamper-evidence** for that history. It detects post-hoc modification, reordering, and truncation of a recorded trail; strong append-only guarantees against a fully privileged adversary additionally require external anchoring. Note the boundary: DSM makes the *recorded* trail checkable — whether that trail is a complete account of what the agent did depends on what was recorded into it (see [Threat model & limitations](#threat-model--limitations)).
 
 ## The Solution
 
 **DSM (Daryl Sharding Memory)** is a trust layer that gives AI agents a cryptographically verifiable execution trail. DSM turns agent execution into cryptographic evidence.
 
-Every action, every decision, every input-output pair is recorded as an immutable, hash-chained entry. Each entry carries a SHA-256 hash linked to the previous one. Alter one byte anywhere in the chain, and verification fails. One command checks the entire history.
+Every action **recorded through DSM** — decisions, and the input-output pairs the caller supplies — becomes an append-only, hash-chained entry. Each entry carries a SHA-256 hash linked to the previous one. Alter one byte anywhere in the chain, and verification fails. One command checks the entire recorded history.
 
-DSM does not replace your logs or your vector database. It sits alongside them as the **proof layer** — the part you hand to an auditor.
+DSM does not replace your logs or your vector database. It sits alongside them as the **evidence layer** for what was recorded — the part you hand to an auditor.
+
+**What "recorded through DSM" excludes.** DSM's coverage is exactly the set of events that were written to it. Activity that never crossed the DSM boundary leaves no trace and cannot be inferred from one: a clean `verify_shard` and a 100% `replay` describe the recorded events, not the completeness of the real activity. Closing that gap would require a different instrumentation/runtime boundary than the one DSM occupies today. See [Threat model & limitations](#threat-model--limitations).
 
 ## How It Works
 
 ```
 1. Agent acts                      →  action intent is appended to an append-only shard
 2. Entry is hashed                 →  SHA-256(content + prev_hash) — chained to all prior entries
-3. Entry is signed                 →  Ed25519 signature proves authorship (optional)
+3. Entry is signed                 →  Ed25519 signature binds the entry to a keyholder (optional)
 4. Chain is sealed                 →  shard can be archived with a cryptographic tombstone
 5. Anyone can verify independently →  replay the chain, recompute every hash, confirm integrity
 ```
 
 **Append-only**: entries are never modified or deleted. New entries extend the chain.
 **Hash-chained**: each entry's hash depends on the previous entry. Tampering breaks the chain.
-**Attestation**: input-output bindings prove which output was produced for which input.
-**Replay**: the full agent history can be deterministically replayed and verified.
+**Attestation**: binds the caller-supplied input bytes to the caller-supplied output bytes for a stated model.
+**Replay**: recorded events can be deterministically replayed and verified.
 
 ## How It Compares
 
 | Capability | Logs | Vector DB | Agent Frameworks | **Daryl (DSM)** |
 |---|:---:|:---:|:---:|:---:|
-| Prove nothing was altered | - | - | - | **SHA-256 hash chain** |
-| Prove agent authorship | - | - | - | **Ed25519 signatures** |
-| Prove input→output binding | - | - | - | **Compute attestation** |
-| Replay exact execution history | - | - | Partial | **Full deterministic replay** |
-| Cross-agent causal proof | - | - | - | **Dispatch + routing hashes** |
-| Compliance-ready audit trail | - | - | - | **Seal + archive** |
+| Detect alteration of recorded entries | - | - | - | **SHA-256 hash chain** |
+| Bind an entry to a keyholder | - | - | - | **Ed25519 signatures** |
+| Bind caller-supplied input to output | - | - | - | **Compute attestation** |
+| Deterministic replay of recorded events | - | - | Partial | **Chain replay + verify** |
+| Bind cross-agent request to response | - | - | - | **Dispatch + routing hashes** |
+| Audit trail for a compliance review | - | - | - | **Seal + archive** |
 | Semantic search | - | Yes | - | - |
 | Real-time dashboards | Yes | - | Yes | - |
 
-DSM is not a replacement for observability. It is the layer designed to make your agent's history **auditable and tamper-evident**. (Legal admissibility depends on jurisdiction and process and is not something a library can assert on its own.)
+Every row above is scoped to *what was recorded through DSM*. None of them establishes that the recording is complete, that the recorded bytes are what the model actually consumed, or that a declared provenance chain matches the real investigation path. See [Threat model & limitations](#threat-model--limitations).
+
+DSM is not a replacement for observability. It is the layer designed to make your agent's recorded history **auditable and tamper-evident**. (Legal admissibility depends on jurisdiction and process and is not something a library can assert on its own.)
 
 ## Architecture
 
@@ -164,11 +176,11 @@ SessionGraph              ← lifecycle: start, act, confirm, end
     ↓
 ┌──────────────────────────────────────────────────────┐
 │  Trust Modules                                       │
-│  · Ed25519 Signing     — prove authorship            │
-│  · Compute Attestation — bind input to output        │
-│  · Causal Binding      — prove cross-agent causality │
-│  · Trust Receipts      — portable proof of work      │
-│  · Shard Sealing       — archive with crypto proof   │
+│  · Ed25519 Signing     — bind entry to a keyholder   │
+│  · Compute Attestation — bind supplied in/out bytes  │
+│  · Causal Binding      — bind response to request    │
+│  · Trust Receipts      — portable entry-state token  │
+│  · Shard Sealing       — archive with crypto tombstone│
 └──────────────────────────────────────────────────────┘
     ↓
 ┌──────────────────────────────────────────────────────┐
@@ -287,7 +299,8 @@ python demo/demo_verify.py
 ## Consumption Layer
 
 DSM does not just store memory.
-It recalls it, packages it, and proves its origin.
+It recalls it, packages it, and reports the local chain integrity of the shards
+it came from.
 
 ```python
 from dsm.recall import search_memory
@@ -302,11 +315,16 @@ result = search_memory(storage, query="kernel decisions",
 pack = build_context(storage, query="kernel decisions",
                      max_tokens=4000)
 
-# Verify cryptographic origin
+# Check the local chain integrity of the source shards
 prov = build_provenance(storage, source_shards=["sessions"],
                         verify=True)
-# → integrity: OK | trust: verified | broken_chains: 0
+# → integrity: OK | trust_level: verified | broken_chains: 0
 ```
+
+`trust_level: verified` means exactly one thing: **local chain integrity was
+verified** for the named shards. It is not a statement about the truth of their
+contents, about the correctness of the agent's reasoning, or about the
+completeness of what was recorded into them.
 
 → Full walkthrough: [`demo_consumption_layer.py`](demo/demo_consumption_layer.py)
 
@@ -357,10 +375,11 @@ python demo/demo_agent_memory_justified_answer.py --data-dir /tmp/daryl-agent-me
 
 The demo records a deterministic `fact -> hypothesis -> inference -> decision`
 chain for a simple operational question, then uses `explain_decision()` to
-reconstruct the justification and print DSM entry hashes. It proves that the
-answer can be backed by local tamper-evident DSM entries; it does not prove
-truthfulness of the original facts or strong resistance to fully privileged
-local rewrite without future witness / anchoring.
+reconstruct the justification and print DSM entry hashes. It shows that the
+answer can be backed by local tamper-evident DSM entries; it does not establish
+truthfulness of the original facts, that the recorded chain is the reasoning
+path the agent actually followed, or resistance to a fully privileged local
+rewrite without future witness / anchoring.
 
 The demo prints the `Data dir`, `Decision hash`, and a ready-to-run CLI command
 for rendering the same decision as a Markdown audit report:
@@ -397,7 +416,8 @@ dsm memory explain <decision_hash> --json
 
 The command reconstructs a recorded decision's Agent Memory chain: decision,
 direct inference dependencies, supporting facts and hypotheses, DSM hashes, and
-verifiable `source_refs`. To verify the shard hash chain directly, run:
+`source_refs` with their existence status. To verify the shard hash chain
+directly, run:
 
 ```bash
 dsm verify --shard agent_memory --data-dir data
@@ -435,7 +455,15 @@ agents, dashboards, comparison tools, and human audit reports. Minimal shape:
     "hypotheses": [],
     "inferences": []
   },
-  "source_refs": [],
+  "source_refs": [
+    {
+      "owner_kind": "hypothesis",
+      "owner_entry_hash": "v1:...",
+      "shard": "agent_memory",
+      "entry_hash": "v1:...",
+      "status": "RESOLVED"
+    }
+  ],
   "verification": {
     "local_status": "OK",
     "hint": "dsm verify --shard agent_memory",
@@ -448,17 +476,26 @@ agents, dashboards, comparison tools, and human audit reports. Minimal shape:
 Field semantics:
 
 - `verification.local_status` is a convenience local status reported by
-  `memory explain` for the target shard. It does not prove that facts are true,
-  does not prove that the agent reasoned correctly, and does not replace an
-  explicit `dsm verify` run.
+  `memory explain` for the target shard. It does not establish that facts are
+  true, that the agent reasoned correctly, or that the recorded chain is the
+  reasoning path actually taken, and it does not replace an explicit
+  `dsm verify` run.
 - `verification.hint` is the command or operator hint for local DSM
   verification, for example `dsm verify --shard agent_memory`.
 - `verification.scope` states the trust boundary: local tamper-evident status,
   not external anchoring.
+- `source_refs[].status` reports **existence only**, as `RESOLVED` or
+  `MISSING`. `RESOLVED` means the referenced `{shard, entry_hash}` was located
+  in local storage. It does **not** mean the source is relevant, supporting,
+  or true — an unrelated recorded entry resolves exactly like a genuinely
+  supporting one. `MISSING` means the ref did not resolve within the read
+  window and is reported as a warning.
 - `warnings` is a list of non-blocking resolution anomalies. Current warning
-  codes include `missing_dependency`, `depth_limit_reached`, and
-  `cycle_detected` when observable by the bounded traversal. Future resolvers
-  may also report unresolved `source_refs`.
+  codes are `missing_dependency`, `depth_limit_reached`, `cycle_detected`
+  when observable by the bounded traversal, and `unresolved_source_ref` for
+  every `source_ref` that does not resolve. A report cannot show both
+  `status: ok` and an empty `warnings` list while a `source_ref` is
+  unresolved.
 
 For `--json` failures, the command returns `status: "error"` with a stable
 `error.code` such as `decision_not_found`. The contract reports local
@@ -492,7 +529,7 @@ MMR/STH, or anchoring mechanism; this report does not provide that.
 ## Core Guarantees
 
 - **Stable kernel** — the core storage engine (`src/dsm/core/`) is change-controlled: it evolves only through the documented kernel process (see `CONTRIBUTING.md`), and most work happens in the layers above it via the public API. (A prior version of this README claimed the kernel was "frozen since March 2026 with zero modifications"; that was inaccurate and has been corrected — security fixes to the kernel are recorded in `docs/security/`.)
-- **Crash-safe writes** — the WAL (write-ahead log) pattern ensures that if a process crashes between `execute_action` and `confirm_action`, the incomplete intent is detectable on replay. No silent data loss.
+- **Recorded-intent completion tracking** — the WAL (write-ahead log) pattern means that when `execute_action` was recorded and no matching `confirm_action` follows, that gap is detectable on replay: an *intent without a recorded result*. The cause is **unknown** — crash, abandonment, an action still in flight, or a caller that simply never confirmed are indistinguishable from the trail. This detects incompleteness *within* a recorded intent/result pair; it says nothing about work that was never recorded at all.
 - **Deterministic verification** — `verify_shard` recomputes every hash from raw data in chronological order and compares the observed tip and entry count against the pinned tip. It detects in-place modification, reordering, and **trailing truncation** (deletion of the most recent entries). A shard with no integrity pin is reported as `UNPINNED` rather than a silent `OK`.
 
 ## Threat model & limitations
@@ -505,7 +542,11 @@ DSM is honest about what it does and does not prove.
 - Trailing truncation of recent entries (observed tip/count vs the pinned tip).
 
 **What DSM does *not* prove on its own:**
+- **Completeness of real activity.** DSM sees what was written to DSM. If seven things happened and three were recorded, `verify_shard` and `replay` still report clean and 100% — because both describe the recorded events, not the world. A clean verify is not evidence that nothing else happened. Detecting uncaptured activity requires a mandatory-instrumentation or runtime boundary that DSM does not occupy.
+- **That recorded input bytes are what the model actually consumed.** Receipts and attestations hash *the bytes the caller supplied*. If a caller reads a source file and then supplies a summary of it as the input, the receipt is `INTACT`, the storage check `CONFIRMED`, and the attestation `VALID` — all correctly, because they bind the supplied bytes faithfully. The mismatch only becomes visible when the true material is available and compared explicitly. This is a capture boundary, not a cryptographic weakness.
+- **That a declared provenance chain is the real investigation path.** DSM replays the provenance it was given. A chain recorded as `fact → inference → decision` verifies identically whether it reflects the actual path taken or was composed after the fact. Provenance recorded at too high a level, or reconstructed retroactively, still yields `status: ok` and empty warnings. DSM cannot infer a path that was never captured.
 - That the original data was truthful, or that the agent's computation was correct (that needs TEEs).
+- That a resolved `source_ref` is relevant to the statement citing it. DSM reports whether a reference exists (`RESOLVED` / `MISSING`), never whether it supports anything.
 - Strong append-only against a **fully privileged adversary** who can rewrite both the shard *and* the local integrity pin in the same step. The pin raises the bar (truncation is detected, and `reconcile` refuses to shrink it without an explicit, audited `allow_truncation` flag), but a local-only pin shares the same trust boundary as the data. Defeating this requires **external anchoring** — signed checkpoints, independent witnesses, or on-chain anchoring — which is on the roadmap (see `docs/security/P0_REMEDIATION.md`).
 - Non-equivocation (an operator showing different histories to different verifiers) — also addressed by external witnessing.
 
@@ -517,7 +558,9 @@ In short: DSM today is a strong **tamper-evidence** layer for honest-but-curious
 
 *Module: `dsm.exchange`*
 
-When Agent B completes work for Agent A, it issues a **TaskReceipt** — a portable proof-of-work token. The receipt includes the entry hash, shard tip hash, and entry count at the time of issuance. A third party can check the receipt against Agent B's shard to confirm the entry exists and the hashes match. (Note: this binds the receipt to a shard *state*; it does not by itself prevent a later truncation of that shard — see [Threat model & limitations](#threat-model--limitations). Anchored, fully third-party-verifiable receipts are on the roadmap.)
+When Agent B completes work for Agent A, it issues a **TaskReceipt** — a portable token binding a specific entry to a specific shard state. The receipt includes the entry hash, shard tip hash, and entry count at the time of issuance. A third party can check the receipt against Agent B's shard to confirm the entry exists and the hashes match.
+
+What the receipt binds: *this entry hash* was present in *this shard* at *this tip and count*. What it does not establish: that the recorded entry content reflects work actually performed, or that the input bytes it references are what the agent actually consumed. (It also binds the receipt to a shard *state* and does not by itself prevent a later truncation of that shard — see [Threat model & limitations](#threat-model--limitations). Anchored, fully third-party-verifiable receipts are on the roadmap.)
 
 ```python
 from dsm.exchange import issue_receipt, verify_receipt, verify_receipt_against_storage
@@ -536,7 +579,7 @@ result = verify_receipt_against_storage(storage, receipt)
 
 *Module: `dsm.signing`*
 
-Every entry or receipt can be signed with an Ed25519 keypair. This proves authorship: only the agent holding the private key could have produced a valid signature. Supports key rotation, key revocation, and hash-chained key history.
+Every entry or receipt **can** be signed with an Ed25519 keypair. Where a signature is present and verifies, it binds the signed hash to the holder of that private key: no one without the key could have produced it. Signing is optional — an unsigned append carries no such binding, so do not read "recorded in DSM" as "signed by a known agent". Supports key rotation, key revocation, and hash-chained key history.
 
 ```python
 from dsm.signing import AgentSigning
@@ -556,7 +599,7 @@ result = signer.verify_signature(data_hash="abc123...",
 
 *Module: `dsm.causal`*
 
-Proves that Agent B's work was in response to Agent A's specific dispatch — not a coincidence, not a replay. The dispatch hash binds A's entry, task parameters, and timestamp into a single verifiable token.
+Binds a recorded response to Agent A's specific dispatch, so a matching pair cannot be passed off as a coincidence or a replay of a different dispatch. The dispatch hash commits A's entry, task parameters, and timestamp into a single verifiable token. It binds the *recorded* request/response pair; it does not establish what work Agent B actually performed.
 
 ```python
 from dsm.causal import create_dispatch_hash, DispatchRecord, verify_dispatch_hash
@@ -583,7 +626,9 @@ result = verify_dispatch_hash(record)
 
 *Module: `dsm.attestation`*
 
-Binds a specific input to a specific output for a given model. The attestation hash proves that *this agent* claims *this output* was produced from *this input* using *this model*. Does not prove the computation was correct (that requires TEEs) — but it makes the claim verifiable and signed.
+Binds caller-supplied input bytes to caller-supplied output bytes for a stated model. The attestation hash records that *this agent claims* *this output* was produced from *this input* using *this model*, and makes that claim tamper-evident and signable.
+
+It does not establish that the computation was correct (that requires TEEs), **nor that the attested input bytes are what the model actually consumed** — the bytes come from the caller. If a caller substitutes a summary for the material actually read, the attestation is `VALID` and correctly so: it faithfully binds what it was given. See [Threat model & limitations](#threat-model--limitations).
 
 ```python
 from dsm.attestation import create_attestation, verify_attestation, sign_attestation
@@ -605,7 +650,7 @@ signed = sign_attestation(attestation, signer)
 
 *Module: `dsm.seal`*
 
-When a shard is complete — a session is over, a compliance window has closed — it can be **sealed**. Sealing computes a cryptographic tombstone over the entire shard, optionally archives the data, and records the seal in a registry. The shard data can then be deleted; the seal proves the history existed and what it contained.
+When a shard is complete — a session is over, a compliance window has closed — it can be **sealed**. Sealing computes a cryptographic tombstone over the entire shard, optionally archives the data, and records the seal in a registry. The shard data can then be deleted; the seal is a tamper-evident commitment to the recorded history's content and extent at seal time, checkable against an archive.
 
 ```python
 from dsm.seal import seal_shard, SealRegistry, verify_seal
@@ -624,7 +669,7 @@ result = verify_seal(registry, "old_sessions")
 
 **Accountability**: When an agent makes a consequential decision — approving a loan, triaging a patient, executing a trade — the organization must be able to reconstruct what happened. DSM is designed to make that reconstruction verifiable rather than merely plausible, within the limits described below.
 
-**Internal governance**: For teams running multi-agent systems, DSM provides the infrastructure to answer "which agent did what, when, and was it authorized?" — with cryptographic proof, not log grep.
+**Internal governance**: For teams running multi-agent systems, DSM provides the infrastructure to answer "which agent recorded what, when, and was it authorized?" — against a tamper-evident trail, not a log grep.
 
 ## Open vs Private
 
@@ -681,4 +726,4 @@ MIT — see [LICENSE](LICENSE).
 
 ## Disclaimer
 
-DSM provides cryptographic integrity verification for agent execution trails. It proves that recorded data has not been tampered with after the fact. It does **not** prove that the original data was truthful, that the computation was correct, or that the agent behaved as intended. Hash chain integrity is a necessary condition for trustworthy audit trails, not a sufficient one. For claims about computation correctness, additional infrastructure (e.g., trusted execution environments) is required.
+DSM provides cryptographic integrity verification for agent execution trails. It detects post-hoc modification, reordering, and trailing truncation of recorded data. It does **not** establish that the original data was truthful, that the recording is complete, that the recorded input bytes are what a model actually consumed, that the computation was correct, or that the agent behaved as intended. Hash chain integrity is a necessary condition for trustworthy audit trails, not a sufficient one. For claims about computation correctness, additional infrastructure (e.g., trusted execution environments) is required.

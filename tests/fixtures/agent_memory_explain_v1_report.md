@@ -44,7 +44,7 @@
 - Depends on:
   - none
 - Source refs:
-  - shard=`agent_memory` entry_hash=`v1:<hash>`
+  - shard=`agent_memory` entry_hash=`v1:<hash>` -> RESOLVED
 
 ## Inferences
 ### Inference 1
@@ -61,7 +61,7 @@
   - none
 
 ## Source References
-- hypothesis `v1:<hash>` -> shard=`agent_memory` entry_hash=`v1:<hash>`
+- hypothesis `v1:<hash>` -> shard=`agent_memory` entry_hash=`v1:<hash>` -> RESOLVED
 
 ## Warnings
 - None
@@ -78,3 +78,4 @@
 - It does not replace `dsm verify`.
 - It is not external anchoring.
 - It includes no witness, MMR, STH, or anchoring mechanism.
+- Source refs report existence only: RESOLVED does not mean relevant, supporting, or true.

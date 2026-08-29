@@ -23,6 +23,22 @@ _DEFAULT_SOURCE = "agent_memory"
 _ALLOWED_KINDS = frozenset({"fact", "hypothesis", "inference", "decision"})
 SourceRef = dict[str, str]
 
+# Source-ref existence states (source-ref integrity v0).
+#
+# These two states describe EXISTENCE ONLY: whether the referenced
+# {shard, entry_hash} pair can be located in local DSM storage.
+#
+# RESOLVED means the referenced entry exists. It does NOT mean the source is
+# relevant, supporting, semantically related, or true. A recorded fact that
+# says "It's sunny in Paris" resolves exactly like a genuinely supporting one;
+# DSM does not judge relevance and must not be read as doing so.
+#
+# MISSING means the referenced entry could not be located in the shard the ref
+# names. That is the one source-ref defect DSM can establish from the registry
+# alone.
+SOURCE_REF_RESOLVED = "RESOLVED"
+SOURCE_REF_MISSING = "MISSING"
+
 
 def record_fact(
     statement: str,
@@ -194,10 +210,89 @@ def explain_decision(
         "dependency_map": dependency_map,
         "supporting_entries": supporting_entries,
         "missing_dependencies": missing,
+        "source_ref_status": _resolve_source_refs(
+            storage,
+            [decision, *supporting_entries],
+            limit=limit,
+        ),
         "verification": {
             "shard_id": shard,
             "hint": f"dsm verify --shard {shard}",
         },
+    }
+
+
+def _resolve_source_refs(
+    storage: Storage,
+    records: list[dict[str, Any]],
+    *,
+    limit: int,
+) -> list[dict[str, str]]:
+    """Report the EXISTENCE of every distinct ``source_ref`` in ``records``.
+
+    Returns one entry per distinct ``{shard, entry_hash}`` pair, in first-seen
+    order, each carrying ``status`` of :data:`SOURCE_REF_RESOLVED` or
+    :data:`SOURCE_REF_MISSING`.
+
+    This is an existence check and nothing more. ``RESOLVED`` says the
+    referenced entry was located in local storage; it says nothing about
+    whether that entry is relevant to, supports, or corroborates the statement
+    that cites it. DSM has no mechanism for judging that and does not claim one.
+
+    Known bound: resolution reads at most ``limit`` recent entries per
+    referenced shard, the same window the traversal itself uses. A reference to
+    an entry older than that window is reported ``MISSING`` — read that as
+    "not found within the read window", not as proof of absence.
+    """
+    order: list[tuple[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for record in records:
+        for ref in record.get("source_refs") or []:
+            key = (ref.get("shard") or "", ref.get("entry_hash") or "")
+            if key in seen:
+                continue
+            seen.add(key)
+            order.append(key)
+
+    if not order:
+        return []
+
+    relay = DSMReadRelay(storage=storage)
+    present: dict[str, set[str]] = {}
+    for shard, _ in order:
+        if shard in present:
+            continue
+        try:
+            entries = relay.read_recent(shard, limit=limit)
+        except Exception:
+            # An absent or unreadable shard resolves nothing: every ref into it
+            # is reported MISSING rather than silently passing as fine.
+            entries = []
+        present[shard] = {entry.hash for entry in entries if entry.hash}
+
+    return [
+        {
+            "shard": shard,
+            "entry_hash": entry_hash,
+            "status": (
+                SOURCE_REF_RESOLVED
+                if entry_hash in present.get(shard, frozenset())
+                else SOURCE_REF_MISSING
+            ),
+        }
+        for shard, entry_hash in order
+    ]
+
+
+def source_ref_status_map(
+    source_ref_status: list[dict[str, str]],
+) -> dict[tuple[str, str], str]:
+    """Index a ``source_ref_status`` list by ``(shard, entry_hash)``."""
+    return {
+        (item.get("shard", ""), item.get("entry_hash", "")): item.get(
+            "status", SOURCE_REF_MISSING
+        )
+        for item in source_ref_status
     }
 
 

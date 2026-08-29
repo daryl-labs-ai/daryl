@@ -4,8 +4,13 @@ demo_end_to_end.py — Daryl Multi-Agent Trust Demo
 
 Two agents collaborate on a high-value client recommendation.
 Agent A (Luxury Advisor) delegates inventory analysis to Agent B (Inventory Specialist).
-DSM records the full decision trail with cryptographic proof of causality.
-Then the trail is tampered. DSM detects it.
+DSM records the decision trail and cryptographically binds B's recorded
+response to A's specific recorded dispatch. Then the trail is tampered.
+DSM detects it.
+
+Scope: everything shown here concerns the trail as RECORDED. The demo does not
+establish that the recording is complete, nor that the recorded inputs are what
+a model actually consumed.
 
 Usage:
     python demo/demo_end_to_end.py
@@ -63,7 +68,7 @@ def main():
     try:
         # ── STEP 1 — Setup ──
         print_header("DARYL VERIFY — End-to-End Multi-Agent Demo")
-        print("  Two agents. One decision. Full cryptographic proof.")
+        print("  Two agents. One decision. A recorded trail you can check.")
         time.sleep(0.3)
 
         storage_a = Storage(data_dir=os.path.join(tmp_dir, "agent_a"))
@@ -159,7 +164,7 @@ def main():
         receipt_result = verify_receipt(receipt)
         receipt_status = receipt_result["status"]
         receipt_status_str = receipt_status.value if hasattr(receipt_status, "value") else str(receipt_status)
-        print(f"  [Agent B] → Receipt issued and verified: {receipt_status_str}")
+        print(f"  [Agent B] → Receipt issued, internal consistency: {receipt_status_str}")
         time.sleep(0.3)
 
         # ── STEP 6 — Agent A finalizes ──
@@ -293,7 +298,7 @@ def main():
             hash_matches = storage_check.get("hash_matches", "N/A")
             print(f"\n  Receipt vs storage: status={storage_check_str}, hash_matches={hash_matches}")
             if not hash_matches:
-                print("  → Portable proof no longer reconciles with compromised trail.")
+                print("  → Receipt no longer reconciles with the compromised trail.")
 
         time.sleep(0.3)
 
@@ -305,12 +310,12 @@ def main():
   Agent B entries    : {result_b['total_entries']}
   Agent A status     : {status_str(result_a_after)}
   Agent B status     : {status_str(result_b_tampered)}
-  Dispatch proof     : VERIFIED
+  Dispatch binding   : VERIFIED
   Receipt status     : {receipt_status_str}
   Tamper detected    : YES (Agent B — entry: return_recommendation)
   Verdict            : AGENT B TRAIL COMPROMISED
 {'─' * 55}
-  Two agents. One decision. Verifiable causality.
+  Two agents. One decision. Response bound to request, in the record.
 """)
 
     finally:

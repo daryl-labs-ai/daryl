@@ -25,7 +25,7 @@ python demo/demo_verify.py
 **What to look for**:
 
 - 7 entries recorded (session start + 5 actions + session end)
-- Chain verified clean: `status: OK`
+- Chain verification clean: `status: OK`
 - One entry modified: `price_eur 120000 -> 45000`
 - Re-verification detects the tamper: `tampered: 1`, `chain_breaks` propagated
 - Verdict: `TRAIL COMPROMISED`
@@ -34,11 +34,11 @@ The key insight: the hash was not recomputed after modification. This is what ma
 
 ---
 
-## 2. `demo/demo_end_to_end.py` — Multi-Agent Causality
+## 2. `demo/demo_end_to_end.py` — Recorded Cross-Agent Task Linkage
 
-**What it demonstrates**: Two agents collaborate. Agent A delegates to Agent B. DSM records both trails with cryptographic proof that B's work was in response to A's specific request.
+**What it demonstrates**: Two agents collaborate. Agent A delegates to Agent B. DSM records both trails and cryptographically binds B's recorded response to A's specific recorded request.
 
-**Why it matters**: In multi-agent systems, proving causality — not just correlation — between agent actions requires more than timestamps. The dispatch hash binds A's entry to B's task parameters. The trust receipt proves B completed the work.
+**Why it matters**: In multi-agent systems, binding a response to a specific request — not just correlating timestamps — requires more than clocks. The dispatch hash binds A's entry to B's task parameters. The trust receipt binds B's recorded result entry to B's shard state at issuance. Neither establishes what work B actually performed off-registry.
 
 **How to run**:
 
@@ -57,7 +57,7 @@ python demo/demo_end_to_end.py
 - Agent B: `TAMPERED`
 - Receipt no longer reconciles with compromised storage
 
-The key insight: each agent's trail is independently verifiable. Tampering one does not affect the other. But the receipt — issued before tampering — proves the original state.
+The key insight: each agent's trail is independently verifiable. Tampering one does not affect the other. The receipt — issued before tampering — commits to the prior shard state, so the tampered trail no longer reconciles with it.
 
 ---
 
@@ -65,7 +65,7 @@ The key insight: each agent's trail is independently verifiable. Tampering one d
 
 **What it demonstrates**: A support agent handles a cancellation request, applies a 30% retention discount for a loyal customer. Someone removes the discount after the fact. DSM catches it.
 
-**Why it matters**: This is the scenario regulators care about. Did the agent apply the correct policy? Can you prove it? The answer must come from the trail, not from someone's memory of what happened.
+**Why it matters**: This is the scenario regulators care about. What policy did the agent record applying, and has that record been altered since? The answer must come from the trail, not from someone's memory of what happened. (The trail shows what was recorded; it does not independently confirm the policy was applied.)
 
 **How to run**:
 
@@ -76,12 +76,12 @@ python demo/demo_support_agent.py
 **What to look for**:
 
 - 6 entries recorded (start + classify_intent + check_subscription + apply_policy + confirm_response + end)
-- Chain verified clean
+- Chain verification clean
 - Policy entry modified: `discount_pct 30 -> 0`, rationale changed
 - Re-verification detects the exact modified entry
 - Verdict: `TRAIL COMPROMISED`
 
-The key insight: the tamper changes a business decision (discount granted vs. denied). Without DSM, there would be no way to prove what the agent originally decided.
+The key insight: the tamper changes a business decision (discount granted vs. denied). Without DSM, there would be no way to tell the altered record from the original.
 
 ---
 
@@ -106,7 +106,7 @@ python demo/demo_consumption_layer.py
 - Newer gRPC decision scores higher than older REST decision
 - REST decision marked `superseded` (a newer entry covers the same query tokens)
 - Older entries marked `outdated` (>30 days)
-- Verified claims extracted from `action_result` entries
+- Claims extracted from `action_result` entries recorded as successful
 
 **ACT 3 — Context** (`build_context`):
 - Memory packaged into a `ContextPack` with sections: system_facts, past_session_recall, verified_claims
@@ -114,7 +114,7 @@ python demo/demo_consumption_layer.py
 - `build_prompt_context()` renders the pack as a string ready for LLM injection
 
 **ACT 4 — Provenance** (`build_provenance`):
-- Full chain verification: `integrity=OK`, `trust_level=verified`
+- Full chain verification: `integrity=OK`, `trust_level=verified` (local chain integrity only)
 - `broken_chains=0`
 - Source shards and entry hashes traced
 
@@ -133,7 +133,7 @@ The key insight: the older REST decision is not deleted or hidden. It is still p
 | Tamper detection | x | x | x | - |
 | Business scenario | - | - | x | x |
 | Multi-agent tracing | - | x | - | - |
-| Causal proof (dispatch) | - | x | - | - |
+| Request/response binding (dispatch) | - | x | - | - |
 | Cross-session recall | - | - | - | x |
 | Temporal superseded detection | - | - | - | x |
 | Token-budgeted context | - | - | - | x |
