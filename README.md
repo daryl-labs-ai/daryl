@@ -21,7 +21,7 @@ Created by <strong>Mohamed Azizi</strong> · <a href="https://www.daryl.md">dary
 <img src="https://github.com/daryl-labs-ai/daryl/actions/workflows/ci.yml/badge.svg">
 <img src="https://img.shields.io/badge/python-3.10%2B-blue">
 <img src="https://img.shields.io/badge/license-MIT-green">
-<img src="https://img.shields.io/badge/coverage-90%25-brightgreen">
+<img src="https://img.shields.io/badge/coverage-CI%20floor%2075%25-yellow">
 <img src="https://img.shields.io/badge/tests-1500%2B%20passing-brightgreen">
 <img src="https://img.shields.io/badge/kernel-stable-blueviolet">
 <img src="https://img.shields.io/badge/demo-60s%20tamper%20detection-black">
@@ -87,6 +87,8 @@ business decision validity.
 - no repeatability guarantee;
 - no external verification yet;
 - no external anchoring yet;
+- no trusted timestamp (RFC 3161 / TSA) yet;
+- no legally binding or opposable proof;
 - no witness/MMR/STH yet;
 - no provider-as-authority;
 - no blockchain integration yet.
@@ -119,7 +121,7 @@ When a regulator, an auditor, or your own CTO asks *"prove this agent did X and 
 
 **DSM (Daryl Sharding Memory)** is a trust layer that gives AI agents a cryptographically verifiable execution trail. DSM turns agent execution into cryptographic evidence.
 
-Every action, every decision, every input-output pair is recorded as an immutable, hash-chained entry. Each entry carries a SHA-256 hash linked to the previous one. Alter one byte anywhere in the chain, and verification fails. One command checks the entire history.
+Every action, every decision, every input-output pair is recorded as an append-only, hash-chained entry. Each entry carries a SHA-256 hash linked to the previous one. Alter one byte anywhere in the chain, and verification fails. One command checks the hash chain (not Ed25519 authorship — that is a separate, optional API).
 
 DSM does not replace your logs or your vector database. It sits alongside them as the **proof layer** — the part you hand to an auditor.
 
@@ -143,11 +145,11 @@ DSM does not replace your logs or your vector database. It sits alongside them a
 | Capability | Logs | Vector DB | Agent Frameworks | **Daryl (DSM)** |
 |---|:---:|:---:|:---:|:---:|
 | Prove nothing was altered | - | - | - | **SHA-256 hash chain** |
-| Prove agent authorship | - | - | - | **Ed25519 signatures** |
+| Prove agent authorship | - | - | - | **Ed25519 (optional API; not `dsm verify`)** |
 | Prove input→output binding | - | - | - | **Compute attestation** |
 | Replay exact execution history | - | - | Partial | **Full deterministic replay** |
 | Cross-agent causal proof | - | - | - | **Dispatch + routing hashes** |
-| Compliance-ready audit trail | - | - | - | **Seal + archive** |
+| Archived audit trail | - | - | - | **Seal + archive (not a certification)** |
 | Semantic search | - | Yes | - | - |
 | Real-time dashboards | Yes | - | Yes | - |
 
@@ -191,6 +193,12 @@ DSM Core (stable; evolves only via the kernel process)
 ```bash
 pip install daryl-dsm
 ```
+
+PyPI `daryl-dsm==1.0.2` is the wheel published **2026-04-15**. The repository
+still declares version `1.0.2` while `origin/main` includes later integrity
+hardening (truncation pin, June 2026) that is **not** in that wheel. For the
+current tree, install from source. A future release should bump the version
+before republishing.
 
 ```bash
 # From source
