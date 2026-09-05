@@ -1,0 +1,24 @@
+{
+  "document_type": "questionnaire",
+  "document_id": "Q16",
+  "version": "1.0",
+  "title": "Profil investisseur — Version 16",
+  "created_at": "2026-03-15T10:00:00Z",
+  "questions": [
+    {
+      "id": "q1",
+      "text": "Quel est votre horizon d'investissement ?",
+      "options": ["< 2 ans", "2-5 ans", "5-10 ans", "> 10 ans"]
+    },
+    {
+      "id": "q2",
+      "text": "Quelle part de votre patrimoine représente cet investissement ?",
+      "options": ["< 10%", "10-25%", "25-50%", "> 50%"]
+    },
+    {
+      "id": "q3",
+      "text": "Comment réagiriez-vous à une baisse de 20% de votre portefeuille ?",
+      "options": ["Je vends tout", "Je vends une partie", "J'attends", "J'investis davantage"]
+    }
+  ]
+}
