@@ -2,6 +2,11 @@
 
 Four runnable demos that show what DSM does. Each creates its own temporary storage, runs to completion, and cleans up after itself. No configuration, no external dependencies, no network.
 
+> **Boundary:** DSM proves properties of the record, not reality itself.
+> A factually false entry can be cryptographically intact; integrity is not truth.
+> See [DSM_VERIFY_BOUNDARY.md](architecture/DSM_VERIFY_BOUNDARY.md) for the full
+> integrity model and its limits.
+
 ```bash
 git clone https://github.com/daryl-labs-ai/daryl
 cd daryl
@@ -81,7 +86,7 @@ python demo/demo_support_agent.py
 - Re-verification detects the exact modified entry
 - Verdict: `TRAIL COMPROMISED`
 
-The key insight: the tamper changes a business decision (discount granted vs. denied). Without DSM, there would be no way to prove what the agent originally decided.
+The key insight: the tamper changes a business decision (discount granted vs. denied). DSM provides a tamper-evident trail that detects such post-hoc modifications.
 
 ---
 

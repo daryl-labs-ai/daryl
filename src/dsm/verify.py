@@ -1,6 +1,12 @@
 """
 DSM hash-chain verification.
 
+Boundary statement
+------------------
+DSM proves properties of the record, not reality itself. A factually false
+entry can be cryptographically intact; integrity is not truth. See
+docs/architecture/DSM_VERIFY_BOUNDARY.md for the full integrity model.
+
 Uses storage.segment_manager.iter_shard_events() for chronological order
 and storage._entry_from_event_data() + storage._build_canonical_entry
 + dsm_primitives.verify_hash for prefix-aware (v0/v1) hash routing.

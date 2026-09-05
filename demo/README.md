@@ -99,7 +99,10 @@ the receipt confirms the entry was published,
 `verify_shard` confirms the content was altered after publication.
 
 > *Receipts prove publication. `verify_shard` proves integrity.
-> Together, they make agent history admissible as evidence.*
+> Together, they provide tamper-evidence for agent history.*
+>
+> **Boundary:** DSM proves properties of the record, not reality itself.
+> See [docs/architecture/DSM_VERIFY_BOUNDARY.md](../docs/architecture/DSM_VERIFY_BOUNDARY.md).
 
 ---
 

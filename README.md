@@ -270,6 +270,11 @@ status: OK
 
 If anyone — or anything — modifies the trail after the fact, verification fails.
 
+> **Boundary:** `dsm verify` proves properties of the record, not reality itself.
+> A factually false entry can be cryptographically intact; integrity is not truth.
+> See [DSM_VERIFY_BOUNDARY.md](docs/architecture/DSM_VERIFY_BOUNDARY.md) for the
+> full integrity model and its limits.
+
 👉 See [`demo/README.md`](demo/README.md) — tamper detection, multi-agent verification, security insight.
 
 ## 🧪 Demo
@@ -506,6 +511,8 @@ MMR/STH, or anchoring mechanism; this report does not provide that.
 ## Threat model & limitations
 
 DSM is honest about what it does and does not prove.
+See [DSM_VERIFY_BOUNDARY.md](docs/architecture/DSM_VERIFY_BOUNDARY.md) for the
+canonical boundary statement.
 
 **What DSM detects (single-host integrity):**
 - In-place modification of any recorded field (hash mismatch).
