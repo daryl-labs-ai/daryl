@@ -100,13 +100,17 @@ def run_case(
     grounding_block: GroundingBlock = DEFAULT_GROUNDING_BLOCK,
     started_at: str = FIXED_STARTED_AT,
     starting_commit: str = "0000000",
+    provider: FakeProvider | None = None,
 ) -> RunResult:
-    """Execute one case under one condition with the FakeProvider. Zero cost."""
+    """Execute one case under one condition. Default provider is the
+    deterministic FakeProvider (zero cost); B5 injects a provider with the
+    same duck-typed ``complete(uid, effective_prompt)`` interface — the walk,
+    prompts, recorders and artifacts are shared, never duplicated."""
     from dsm.core.storage import Storage  # benchmarks/ tier; recorders never see it
 
     seed = case.seed if seed is None else seed
     block = grounding_block if condition == "B" else None
-    provider = FakeProvider(seed)
+    provider = provider if provider is not None else FakeProvider(seed)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     store: PRLStore | None = None
