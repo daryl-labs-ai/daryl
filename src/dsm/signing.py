@@ -346,6 +346,15 @@ class AgentSigning:
         """Generate ed25519 keypair for this agent."""
         if not NACL_AVAILABLE:
             raise RuntimeError("PyNaCl is required for signing. Install with: pip install PyNaCl")
+        if not force and self._seed_path.exists() != self._pub_path.exists():
+            # Half a keypair on disk: generating would silently replace the
+            # surviving half (and the agent's identity). Require an explicit
+            # rotation/replacement (force=True) instead.
+            present = self._seed_path if self._seed_path.exists() else self._pub_path
+            raise ValueError(
+                f"incomplete keypair for '{self.agent_id}': only {present.name} exists; "
+                "restore the missing file or replace explicitly with force=True"
+            )
         if self._seed_path.exists() and self._pub_path.exists() and not force:
             self._load_keypair()
             pub = self.get_public_key()
@@ -391,6 +400,49 @@ class AgentSigning:
     def has_keypair(self) -> bool:
         """Check if this agent has a keypair on disk."""
         return self._seed_path.exists() and self._pub_path.exists()
+
+    def can_sign(self) -> bool:
+        """True if the private key on disk can actually be unlocked (right
+        password, readable seed) and matches the public key on disk."""
+        if not NACL_AVAILABLE or not self.has_keypair():
+            return False
+        if self._signing_key is None:
+            self._load_keypair()
+        if self._signing_key is None:
+            return False
+        try:
+            return bytes(self._signing_key.verify_key) == self._pub_path.read_bytes()
+        except OSError:
+            return False
+
+    def has_partial_keypair(self) -> bool:
+        """Exactly one of the seed / public key files exists."""
+        return self._seed_path.exists() != self._pub_path.exists()
+
+    def change_password(self, new_password: str) -> None:
+        """Re-encrypt the seed under a new password (same keypair, same identity)."""
+        if not new_password:
+            raise ValueError("new_password must be non-empty")
+        if not FERNET_AVAILABLE:
+            raise RuntimeError("cryptography is required to encrypt the seed")
+        if not self.can_sign():
+            raise ValueError("current key cannot be unlocked; cannot change password")
+        seed = bytes(self._signing_key)
+        encrypted = Fernet(self._derive_key(new_password)).encrypt(seed)
+        tmp_path = self._seed_path.with_suffix(".seed.tmp")
+        tmp_path.write_bytes(encrypted)
+        os.replace(tmp_path, self._seed_path)
+        try:
+            os.chmod(self._seed_path, 0o600)
+        except OSError:
+            pass
+        self._password = new_password
+
+    @property
+    def uses_default_password(self) -> bool:
+        """True when the seed is encrypted with the agent_id fallback, i.e.
+        anyone who copies the keys directory can decrypt it."""
+        return not self._password
 
     def get_public_key(self) -> Optional[str]:
         """Return hex-encoded public key, or None if no keypair exists.

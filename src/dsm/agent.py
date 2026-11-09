@@ -7,6 +7,7 @@ Agent developers need zero DSM knowledge; 5 lines to integrate.
 
 import json
 import logging
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, List, Optional, Set, Tuple, Union
@@ -39,9 +40,10 @@ from .exchange import (
     verify_receipt as verify_receipt_fn,
 )
 from .seal import SealRegistry, list_sealed_shards, seal_shard as seal_shard_fn, verify_seal as verify_seal_fn
-from .verify import verify_all, verify_shard
+from .verify import guarded_startup_check, verify_all, verify_shard
 from .witness import ShardWitness
-from .signing import AgentSigning, import_public_key
+from .signing import AgentSigning, import_public_key, load_public_key
+from .checkpoint import make_checkpoint, ed25519_verify
 from .artifacts import ArtifactStore
 from .identity import IdentityGuard, IdentityManager, IdentityState, replay_identity
 from .identity.identity_registry import AgentIdentity, IdentityRegistry
@@ -59,6 +61,20 @@ from .lanes import LaneGroup, LaneTip, MergeEntry, LaneWriteResult
 from .shard_families import ShardFamily, classify_shard, list_shards_by_family
 
 logger = logging.getLogger("dsm.agent")
+
+# Metadata event types that DarylAgent signs; verify_entry_signatures() expects
+# a valid signature for every entry of these types.
+SIGNED_EVENT_TYPES = ("action_intent", "action_result")
+SIGNING_PASSWORD_ENV = "DSM_SIGNING_PASSWORD"
+KEY_PROTECTION_ENV = "DSM_KEY_PROTECTION"
+KEY_PROTECTION_MODES = ("production", "dev")
+
+
+class SigningError(RuntimeError):
+    """Signing is enabled for this agent but could not be performed.
+
+    Raised instead of silently writing unsigned intents/results (fail closed).
+    """
 
 
 class DarylAgent:
@@ -85,6 +101,8 @@ class DarylAgent:
         signing_password: Optional[str] = None,
         artifact_dir: Optional[Union[str, bool]] = None,
         startup_verify: Union[bool, str] = "reconcile",
+        auto_keygen: bool = True,
+        key_protection: Optional[str] = None,
     ):
         """
         startup_verify: Integrity check at boot. Default "reconcile" fixes crash
@@ -92,6 +110,27 @@ class DarylAgent:
             tampering (slower, O(n) per shard). Use "strict" for production: same
             as "full" but raises RuntimeError on integrity errors. Note: "reconcile"
             does NOT detect tampering. Use "full", "strict", or call agent.verify() for that.
+        auto_keygen: P1 — when signing is enabled (signing_dir is not False) and no
+            keypair exists yet, generate one so intents, results, receipts and
+            checkpoints are signed by default. Pass False to keep the old opt-in
+            behaviour. Publish public_key() out of band so verifiers can trust it.
+        signing_password: protects the private key on disk. Defaults to the
+            DSM_SIGNING_PASSWORD environment variable (keep it out of the data
+            directory).
+        key_protection: "production" (default) requires that secret whenever
+            signing is enabled and raises SigningError without it. "dev" is the
+            explicit compatibility mode: without a secret the seed is encrypted
+            with the agent_id, so anyone who copies the keys directory can sign
+            as this agent. Defaults to DSM_KEY_PROTECTION, else "production".
+            Migrate a dev key with change_signing_password().
+
+        Signing fails closed: if a keypair exists but cannot be unlocked (wrong
+        password, corrupt seed), or only half of it is on disk, the constructor
+        raises SigningError (it never regenerates over a surviving half). Once
+        the agent has started with a key, signing stays mandatory for its whole
+        life: if a key file disappears later, intend()/confirm()/
+        issue_receipt()/checkpoint() raise SigningError instead of going on
+        unsigned.
         """
         self.agent_id = agent_id
         self.data_dir = Path(data_dir)
@@ -101,23 +140,31 @@ class DarylAgent:
         self._startup_report = None
         if startup_verify:
             abs_dir = str(self.data_dir.resolve())
-            if abs_dir in DarylAgent._startup_cache:
-                self._startup_report = DarylAgent._startup_cache[abs_dir]
+            full = startup_verify in ("full", "strict")
+            # S-5 cache: only the cheap "reconcile" mode may reuse a previous
+            # report from this process. "full"/"strict" promise a verification
+            # of the data as it is NOW, so they always re-run (a cached OK may
+            # predate tampering), and their fresh result refreshes the cache.
+            cached = None if full else DarylAgent._startup_cache.get(abs_dir)
+            if cached is not None:
+                self._startup_report = cached
             else:
-                full = startup_verify in ("full", "strict")
-                self._startup_report = self._storage.startup_check(full_verify=full)
+                # Verify BEFORE any pin repair (never launder a rewrite).
+                self._startup_report = guarded_startup_check(self._storage, full_verify=full)
                 DarylAgent._startup_cache[abs_dir] = self._startup_report
-                if self._startup_report["status"] == "INTEGRITY_ERROR":
-                    if startup_verify == "strict":
-                        raise RuntimeError(
-                            f"DarylAgent({agent_id}): integrity check failed: "
-                            f"{self._startup_report}"
-                        )
-                    logger.warning(
-                        "DarylAgent(%s): startup integrity check found errors: %s",
-                        agent_id,
-                        self._startup_report,
+            # Decision applied to every report, cached or fresh.
+            if self._startup_report["status"] == "INTEGRITY_ERROR":
+                if startup_verify == "strict":
+                    raise RuntimeError(
+                        f"DarylAgent({agent_id}): integrity check failed: "
+                        f"{self._startup_report}"
                     )
+                logger.warning(
+                    "DarylAgent(%s): startup integrity check found errors%s: %s",
+                    agent_id,
+                    " (cached report)" if cached is not None else "",
+                    self._startup_report,
+                )
 
         limits = SessionLimitsManager.agent_defaults(str(self.data_dir))
         self._graph = SessionGraph(storage=self._storage, limits_manager=limits)
@@ -135,9 +182,55 @@ class DarylAgent:
 
         self._pending_commitments = {}  # intent_id -> commitment_hash
         self._signing = None
+        # Latched at startup: once True, signing is required for the agent's
+        # lifetime, whatever happens to the key files afterwards.
+        self._signing_enforced = False
+        mode = key_protection or os.environ.get(KEY_PROTECTION_ENV) or "production"
+        if mode not in KEY_PROTECTION_MODES:
+            raise ValueError(f"key_protection must be one of {KEY_PROTECTION_MODES}, got {mode!r}")
+        self._key_protection = mode
         if signing_dir is not False:
             path = signing_dir if isinstance(signing_dir, str) else str(self.data_dir / "keys")
+            if signing_password is None:
+                signing_password = os.environ.get(SIGNING_PASSWORD_ENV) or None
+            if not signing_password and mode == "production":
+                raise SigningError(
+                    f"DarylAgent({agent_id}): no signing secret. Set signing_password "
+                    f"or {SIGNING_PASSWORD_ENV} (kept outside the data directory), pass "
+                    f"key_protection='dev' / {KEY_PROTECTION_ENV}=dev for development, "
+                    "or signing_dir=False to disable signing"
+                )
             self._signing = AgentSigning(path, self.agent_id, password=signing_password)
+            if self._signing.has_partial_keypair():
+                raise SigningError(
+                    f"DarylAgent({agent_id}): incomplete keypair in {path} (seed or public "
+                    "key missing); refusing to regenerate over it. Restore the missing "
+                    "file, or replace the identity explicitly with "
+                    "AgentSigning(...).generate_keypair(force=True)"
+                )
+            if auto_keygen and not self._signing.has_keypair():
+                try:
+                    self._signing.generate_keypair()
+                except RuntimeError as e:  # PyNaCl missing
+                    raise SigningError(
+                        f"DarylAgent({agent_id}): signing is required but unavailable "
+                        f"({e}); install PyNaCl, or pass signing_dir=False to run "
+                        "without signatures"
+                    ) from e
+            if self._signing.has_keypair():
+                if not self._signing.can_sign():
+                    raise SigningError(
+                        f"DarylAgent({agent_id}): signing key exists but cannot be "
+                        "unlocked (wrong signing_password or corrupt seed); refusing "
+                        "to run unsigned"
+                    )
+                self._signing_enforced = True
+                if self._signing.uses_default_password:
+                    logger.warning(
+                        "DarylAgent(%s): key_protection=dev — signing key protected only "
+                        "by agent_id; a copy of the data directory can sign as this agent",
+                        agent_id,
+                    )
         self._artifact_store = None
         if artifact_dir is not False:
             path = artifact_dir if isinstance(artifact_dir, str) else str(self.data_dir / "artifacts")
@@ -287,7 +380,43 @@ class DarylAgent:
             logger.error("snapshot failed: %s", e)
             return None
 
+    def _signing_required(self) -> bool:
+        # Latched flag, NOT has_keypair(): a key file vanishing must not turn
+        # the signing obligation off.
+        return self._signing_enforced
+
+    def _require_signer(self) -> None:
+        """Preflight: refuse to write work we will not be able to sign."""
+        if self._signing_required() and not self._signing.can_sign():
+            raise SigningError(f"DarylAgent({self.agent_id}): signing key unavailable")
+
+    def _record_entry_signature(self, entry: Any) -> None:
+        """Sign an entry hash and record it in the anchor log.
+
+        Fails closed: when signing is enabled, any failure raises SigningError
+        (the entry stays unsigned on disk and verify_entry_signatures() will
+        report it).
+        """
+        if not (self._signing_required() and entry is not None and entry.hash):
+            return
+        try:
+            signature = self._signing.sign_entry(entry.hash)
+            self._anchor_log._append_record({
+                "type": "entry_signature",
+                "entry_id": entry.id,
+                "entry_hash": entry.hash,
+                "shard_id": getattr(entry, "shard", None),
+                "signature": signature,
+                "public_key": self._signing.get_public_key(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            })
+        except Exception as e:
+            raise SigningError(
+                f"DarylAgent({self.agent_id}): failed to sign entry {entry.id}: {e}"
+            ) from e
+
     def intend(self, action_name: str, params: Optional[dict] = None) -> Optional[str]:
+        self._require_signer()
         try:
             entry = self._graph.execute_action(action_name, params or {})
             if entry is None:
@@ -300,19 +429,7 @@ class DarylAgent:
             except OSError as e:
                 logger.debug("anchor pre-commit skipped: %s", e)
             # P9: sign entry if signing enabled
-            if self._signing and self._signing.has_keypair() and entry and entry.hash:
-                try:
-                    signature = self._signing.sign_entry(entry.hash)
-                    self._anchor_log._append_record({
-                        "type": "entry_signature",
-                        "entry_id": entry.id,
-                        "entry_hash": entry.hash,
-                        "signature": signature,
-                        "public_key": self._signing.get_public_key(),
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                    })
-                except Exception as e:
-                    logger.debug("entry signing skipped: %s", e)
+            self._record_entry_signature(entry)
             return intent_id
         except OSError as e:
             logger.error("intend failed: %s", e)
@@ -325,6 +442,7 @@ class DarylAgent:
         success: bool = True,
         raw_input: Any = None,
     ) -> Optional[Any]:
+        self._require_signer()
         receipt = {}
         if raw_input is not None:
             receipt = make_receipt(raw_input)
@@ -341,6 +459,11 @@ class DarylAgent:
         # P4: post-commit anchoring
         try:
             commitment_hash = self._pending_commitments.pop(intent_id, None)
+            if commitment_hash is None:
+                # Intent opened by another process/instance: bind to the logged
+                # pre_commit so the pair stays verifiable.
+                pre = self._anchor_log.find_by_intent(intent_id).get("pre_commit")
+                commitment_hash = pre.get("commitment_hash") if pre else None
             post_commit(
                 self._anchor_log, intent_id, result_data,
                 raw_input=raw_input, commitment_hash=commitment_hash,
@@ -355,6 +478,7 @@ class DarylAgent:
                 input_hash=receipt.get("input_hash"),
                 input_preview=receipt.get("input_preview"),
             )
+            self._record_entry_signature(result_entry)
             if result_entry is not None and artifact_hash is not None and self._artifact_store is not None:
                 try:
                     self._artifact_store.link_to_entry(artifact_hash, result_entry.id)
@@ -372,11 +496,118 @@ class DarylAgent:
             logger.error("orphaned_intents failed: %s", e)
             return []
 
-    def verify(self, shard_id: Optional[str] = None) -> Any:
+    def verify(
+        self,
+        shard_id: Optional[str] = None,
+        checkpoint: Optional[dict] = None,
+        trusted_public_key: Optional[str] = None,
+    ) -> Any:
+        """Verify one shard (or all). Pass a client-held `checkpoint` (from
+        checkpoint()) and the agent's `trusted_public_key` to detect truncation
+        or a full rewrite even if the on-disk pin was removed or recomputed."""
         if shard_id:
-            return verify_shard(self._storage, shard_id)
+            return verify_shard(
+                self._storage, shard_id,
+                checkpoint=checkpoint, trusted_public_key=trusted_public_key,
+            )
+        if checkpoint is not None or trusted_public_key is not None:
+            raise ValueError("checkpoint verification requires a shard_id")
         return verify_all(self._storage)
 
+    def checkpoint(self, shard_id: Optional[str] = None) -> List[dict]:
+        """Export checkpoints (signed when a keypair exists) of one or all shards.
+
+        Hand these to the client/auditor and keep them OUTSIDE this agent's data
+        directory: they are the completeness proof the local pin cannot be.
+        """
+        self._require_signer()
+        signing = self._signing if self._signing_required() else None
+        if shard_id:
+            shard_ids = [shard_id]
+        else:
+            shard_ids = [s.shard_id for s in self._storage.list_shards()]
+        return [make_checkpoint(self._storage, sid, signing=signing) for sid in shard_ids]
+
+    def verify_entry_signatures(
+        self,
+        trusted_public_key: Optional[str] = None,
+        shard_id: str = "sessions",
+        since: Optional[str] = None,
+    ) -> dict:
+        """Check that every entry this agent signs is signed, and validly.
+
+        Coverage: every entry of `shard_id` whose event_type is in
+        SIGNED_EVENT_TYPES (intents and results) must have an entry_signature
+        record in the anchor log that verifies under `trusted_public_key`
+        (default: this agent's own public key). Entries timestamped before
+        `since` (ISO 8601) are exempt — use it for history written before
+        signing was enabled.
+
+        Also reported: signatures that do not verify, and validly signed
+        entries that no longer exist in storage.
+
+        Status: ALL_VALID | INVALID_SIGNATURES | UNSIGNED_ENTRIES |
+                MISSING_ENTRIES | NOTHING_TO_VERIFY | NO_KEY
+        Precedence: INVALID_SIGNATURES > UNSIGNED_ENTRIES > MISSING_ENTRIES.
+        """
+        key = trusted_public_key or self.public_key()
+        empty = {"checked": 0, "expected": 0, "invalid": [], "unsigned": [], "missing": []}
+        if not key:
+            return {"status": "NO_KEY", **empty}
+
+        since_dt = None
+        if since is not None:
+            since_dt = datetime.fromisoformat(since.replace("Z", "+00:00"))
+
+        records = [r for r in self._anchor_log.read_log() if r.get("type") == "entry_signature"]
+        valid_hashes: Set[str] = set()
+        invalid: List[str] = []
+        for r in records:
+            entry_hash = r.get("entry_hash") or ""
+            if ed25519_verify(key, r.get("signature") or "", entry_hash):
+                valid_hashes.add(entry_hash)
+            else:
+                invalid.append(r.get("entry_id"))
+
+        entries = self._storage.read(shard_id, limit=10**6)
+        stored_hashes = {e.hash for e in entries if e.hash}
+        expected = []
+        for e in entries:
+            if (e.metadata or {}).get("event_type") not in SIGNED_EVENT_TYPES:
+                continue
+            if since_dt is not None:
+                ts = e.timestamp
+                if ts.tzinfo is None:
+                    ts = ts.replace(tzinfo=timezone.utc)
+                if ts < since_dt:
+                    continue
+            expected.append(e)
+        unsigned = [e.id for e in expected if e.hash not in valid_hashes]
+        missing = [
+            r.get("entry_id") for r in records
+            if r.get("shard_id") in (None, shard_id)
+            and (r.get("entry_hash") or "") in valid_hashes
+            and r.get("entry_hash") not in stored_hashes
+        ]
+
+        if invalid:
+            status = "INVALID_SIGNATURES"
+        elif unsigned:
+            status = "UNSIGNED_ENTRIES"
+        elif missing:
+            status = "MISSING_ENTRIES"
+        elif not expected:
+            status = "NOTHING_TO_VERIFY"
+        else:
+            status = "ALL_VALID"
+        return {
+            "status": status,
+            "checked": len(records),
+            "expected": len(expected),
+            "invalid": invalid,
+            "unsigned": unsigned,
+            "missing": missing,
+        }
     def check_coverage(
         self,
         indexed_ids: Optional[Set[str]] = None,
@@ -473,6 +704,8 @@ class DarylAgent:
         routing_hash: Optional[str] = None,
     ) -> dict:
         """Issue a receipt for completed work, optionally with causal binding."""
+        self._require_signer()
+        signing = self._signing if self._signing_required() else None
         receipt = issue_receipt_fn(
             self._storage,
             self.agent_id,
@@ -481,28 +714,38 @@ class DarylAgent:
             task_description,
             dispatch_hash=dispatch_hash,
             routing_hash=routing_hash,
+            signing=signing,
         )
-        result = receipt.to_dict()
-        if self._signing is not None and self._signing.has_keypair():
-            try:
-                result["signature"] = self._signing.sign_receipt(receipt.receipt_hash)
-                result["public_key"] = self._signing.get_public_key()
-            except Exception as e:
-                logger.debug("receipt signing skipped: %s", e)
-        return result
+        return receipt.to_dict()
 
-    def receive_receipt(self, receipt_json: str) -> dict:
+    def _trusted_key_for(self, agent_id: str) -> Optional[str]:
+        """Public key this agent trusts for `agent_id` (imported via import_agent_key)."""
+        return load_public_key(str(self.data_dir / "keys"), agent_id)
+
+    def receive_receipt(self, receipt_json: str, trusted_public_key: Optional[str] = None) -> dict:
+        """Verify and store a receipt from another agent.
+
+        Stored only if INTACT, i.e. signed by the issuer key this agent trusts
+        (passed explicitly, or previously imported with import_agent_key()).
+        """
         receipt = TaskReceipt.from_json(receipt_json)
-        vr = verify_receipt_fn(receipt)
+        key = trusted_public_key or self._trusted_key_for(receipt.issuer_agent_id)
+        vr = verify_receipt_fn(receipt, trusted_public_key=key)
         stored = False
         if vr["status"] == "INTACT":
             store_external_receipt(self._storage, receipt, self.agent_id, shard_id="receipts")
             stored = True
-        return {"stored": stored, "receipt_id": receipt.receipt_id, "integrity": vr["status"]}
+        status = vr["status"]
+        return {
+            "stored": stored,
+            "receipt_id": receipt.receipt_id,
+            "integrity": getattr(status, "value", status),
+        }
 
-    def verify_external_receipt(self, receipt_json: str) -> dict:
+    def verify_external_receipt(self, receipt_json: str, trusted_public_key: Optional[str] = None) -> dict:
         receipt = TaskReceipt.from_json(receipt_json)
-        return verify_receipt_fn(receipt)
+        key = trusted_public_key or self._trusted_key_for(receipt.issuer_agent_id)
+        return verify_receipt_fn(receipt, trusted_public_key=key)
 
     def list_receipts(self) -> List[dict]:
         return [r.to_dict() for r in list_received_receipts(self._storage, shard_id="receipts")]
@@ -535,10 +778,20 @@ class DarylAgent:
         return att.to_dict()
 
     def generate_keys(self, force: bool = False) -> dict:
-        """Generate ed25519 keypair for this agent. Idempotent."""
+        """Generate ed25519 keypair for this agent. Idempotent. From then on
+        signing is mandatory for this agent instance."""
         if self._signing is None:
             raise ValueError("Signing is disabled")
-        return self._signing.generate_keypair(force=force)
+        result = self._signing.generate_keypair(force=force)
+        self._signing_enforced = True
+        return result
+
+    def change_signing_password(self, new_password: str) -> None:
+        """Re-encrypt this agent's seed under a new secret (e.g. to migrate a
+        key created with key_protection='dev' to production)."""
+        if self._signing is None:
+            raise ValueError("Signing is disabled")
+        self._signing.change_password(new_password)
 
     def public_key(self) -> Optional[str]:
         """Return this agent's public key (hex), or None."""
