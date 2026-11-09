@@ -42,6 +42,24 @@ def _sha256(data: Union[str, bytes, dict]) -> str:
     return hashlib.sha256(raw).hexdigest()
 
 
+# Fields of a pre_commit record covered by its commitment_hash.
+_PRE_COMMIT_FIELDS = ("type", "intent_id", "action_name", "params_hash", "timestamp")
+
+
+def _params_hash_of(intent_id: str, action_name: str, params: dict) -> str:
+    return _sha256({
+        "intent_id": intent_id,
+        "action_name": action_name,
+        "params": params,
+    })
+
+
+def _commitment_hash_of(pre_record: dict) -> str:
+    """Recompute the commitment hash of a pre_commit record from its own fields."""
+    body = {k: pre_record.get(k) for k in _PRE_COMMIT_FIELDS}
+    return _sha256(json.dumps(body, sort_keys=True, separators=(",", ":")))
+
+
 class AnchorLog:
     """Append-only log for pre-commitments and environment captures."""
 
@@ -74,15 +92,21 @@ class AnchorLog:
         return records
 
     def find_by_intent(self, intent_id: str) -> dict:
-        """Find pre_commit and post_commit records for an intent_id."""
+        """Find pre_commit and post_commit records for an intent_id.
+
+        The last record of each type wins (historical behaviour); the counts
+        are returned so verifiers can reject duplicates (shadowing).
+        """
         records = self.read_log()
-        result = {"pre_commit": None, "post_commit": None}
+        result = {"pre_commit": None, "post_commit": None, "pre_count": 0, "post_count": 0}
         for r in records:
             if r.get("intent_id") == intent_id:
                 if r.get("type") == "pre_commit":
                     result["pre_commit"] = r
+                    result["pre_count"] += 1
                 elif r.get("type") == "post_commit":
                     result["post_commit"] = r
+                    result["post_count"] += 1
         return result
 
 
@@ -99,11 +123,7 @@ def pre_commit(
         {"commitment_hash": str, "params_hash": str, "intent_id": str}
     """
     timestamp = datetime.now(timezone.utc).isoformat()
-    params_hash = _sha256({
-        "intent_id": intent_id,
-        "action_name": action_name,
-        "params": params,
-    })
+    params_hash = _params_hash_of(intent_id, action_name, params)
 
     record = {
         "type": "pre_commit",
@@ -113,7 +133,7 @@ def pre_commit(
         "timestamp": timestamp,
     }
 
-    commitment_hash = _sha256(json.dumps(record, sort_keys=True, separators=(",", ":")))
+    commitment_hash = _commitment_hash_of(record)
     record["commitment_hash"] = commitment_hash
 
     anchor_log._append_record(record)
@@ -213,85 +233,93 @@ def capture_environment(
     }
 
 
-def verify_commitment(anchor_log: AnchorLog, intent_id: str) -> dict:
+def verify_commitment(
+    anchor_log: AnchorLog,
+    intent_id: str,
+    *,
+    expected_commitment_hash: Optional[str] = None,
+    action_name: Optional[str] = None,
+    params: Optional[dict] = None,
+) -> dict:
     """
     Verify a pre/post commitment pair for an intent.
 
-    Checks:
-    - Both pre_commit and post_commit exist
-    - pre_commit.timestamp < post_commit.timestamp
-    - post_commit.commitment_hash matches SHA-256 of pre_commit record
+    Checks (all from the log itself):
+    - exactly one pre_commit and one post_commit exist
+    - pre_commit.timestamp <= post_commit.timestamp
+    - pre_commit.commitment_hash is present and equals the hash recomputed from
+      the pre_commit fields (action_name, params_hash, timestamp, ...)
+    - post_commit.commitment_hash is present and equals it
+
+    Optional checks against material held OUTSIDE the anchor log (the only way
+    to detect a coherent rewrite of the whole pair, since the log is unkeyed):
+    - expected_commitment_hash: the commitment hash returned by pre_commit()
+    - action_name + params: the original intent; params_hash is recomputed
 
     Returns:
-        {"intent_id": str, "status": str, "pre_commit_at": str,
-         "post_commit_at": str, "time_delta_ms": float}
+        {"intent_id", "status", "pre_commit_at", "post_commit_at",
+         "time_delta_ms", "externally_anchored", "reason"}
 
-    Status: VERIFIED | SEQUENCE_VIOLATION | HASH_MISMATCH | INCOMPLETE
+    Status: VERIFIED | SEQUENCE_VIOLATION | HASH_MISMATCH | COMMITMENT_MISSING |
+            PARAMS_MISMATCH | DUPLICATE_RECORD | INCOMPLETE
     """
     pair = anchor_log.find_by_intent(intent_id)
     pre = pair["pre_commit"]
     post = pair["post_commit"]
+    externally_anchored = expected_commitment_hash is not None or action_name is not None
 
-    if pre is None and post is None:
+    def _result(status: str, reason: Optional[str] = None, delta=None) -> dict:
         return {
             "intent_id": intent_id,
-            "status": "INCOMPLETE",
-            "pre_commit_at": None,
-            "post_commit_at": None,
-            "time_delta_ms": None,
+            "status": status,
+            "pre_commit_at": pre.get("timestamp") if pre else None,
+            "post_commit_at": post.get("timestamp") if post else None,
+            "time_delta_ms": delta,
+            "externally_anchored": externally_anchored,
+            "reason": reason,
         }
+
+    if pair.get("pre_count", 0) > 1 or pair.get("post_count", 0) > 1:
+        return _result("DUPLICATE_RECORD", "more than one pre_commit or post_commit for this intent")
 
     if pre is None or post is None:
-        return {
-            "intent_id": intent_id,
-            "status": "INCOMPLETE",
-            "pre_commit_at": pre["timestamp"] if pre else None,
-            "post_commit_at": post["timestamp"] if post else None,
-            "time_delta_ms": None,
-        }
+        return _result("INCOMPLETE")
 
-    # Check sequence: pre must come before post
-    pre_at = pre["timestamp"]
-    post_at = post["timestamp"]
-
+    pre_at = pre.get("timestamp")
+    post_at = post.get("timestamp")
+    if not isinstance(pre_at, str) or not isinstance(post_at, str):
+        return _result("SEQUENCE_VIOLATION", "missing timestamp")
     if post_at < pre_at:
-        return {
-            "intent_id": intent_id,
-            "status": "SEQUENCE_VIOLATION",
-            "pre_commit_at": pre_at,
-            "post_commit_at": post_at,
-            "time_delta_ms": None,
-        }
+        return _result("SEQUENCE_VIOLATION", "post_commit precedes pre_commit")
 
-    # Check commitment hash: post's commitment_hash must match pre's
     pre_commitment = pre.get("commitment_hash")
     post_commitment = post.get("commitment_hash")
+    if not pre_commitment:
+        return _result("COMMITMENT_MISSING", "pre_commit has no commitment_hash")
+    if not post_commitment:
+        return _result("COMMITMENT_MISSING", "post_commit is not bound to a commitment_hash")
 
-    if pre_commitment and post_commitment and pre_commitment != post_commitment:
-        return {
-            "intent_id": intent_id,
-            "status": "HASH_MISMATCH",
-            "pre_commit_at": pre_at,
-            "post_commit_at": post_at,
-            "time_delta_ms": None,
-        }
+    if _commitment_hash_of(pre) != pre_commitment:
+        return _result("HASH_MISMATCH", "pre_commit fields do not match its commitment_hash")
+    if post_commitment != pre_commitment:
+        return _result("HASH_MISMATCH", "post_commit.commitment_hash differs from pre_commit")
+    if expected_commitment_hash is not None and expected_commitment_hash != pre_commitment:
+        return _result("HASH_MISMATCH", "commitment_hash differs from the externally held value")
 
-    # Calculate time delta
+    if action_name is not None:
+        if pre.get("action_name") != action_name:
+            return _result("PARAMS_MISMATCH", "action_name differs from the expected intent")
+        if _params_hash_of(intent_id, action_name, params or {}) != pre.get("params_hash"):
+            return _result("PARAMS_MISMATCH", "params_hash differs from the expected params")
+
     try:
-        from datetime import datetime
         t_pre = datetime.fromisoformat(pre_at.replace("Z", "+00:00"))
         t_post = datetime.fromisoformat(post_at.replace("Z", "+00:00"))
         delta_ms = (t_post - t_pre).total_seconds() * 1000
     except (ValueError, TypeError):
         delta_ms = None
 
-    return {
-        "intent_id": intent_id,
-        "status": "VERIFIED",
-        "pre_commit_at": pre_at,
-        "post_commit_at": post_at,
-        "time_delta_ms": delta_ms,
-    }
+    return _result("VERIFIED", delta=delta_ms)
 
 
 def verify_all_commitments(anchor_log: AnchorLog) -> dict:

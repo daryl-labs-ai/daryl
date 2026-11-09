@@ -115,7 +115,12 @@ def test_verify_receipt_signature_verified_true_when_valid(tmp_path):
         signature=sig,
         public_key=pub,
     )
+    # Embedded key only: signature checks out, but the issuer is not authenticated.
     result = verify_receipt(receipt)
+    assert result["signature_verified"] is True
+    assert result["status"] == "UNAUTHENTICATED"
+    # Against the key the verifier trusts: INTACT.
+    result = verify_receipt(receipt, trusted_public_key=pub)
     assert result["signature_verified"] is True
     assert result["status"] == "INTACT"
 

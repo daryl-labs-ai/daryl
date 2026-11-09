@@ -4,6 +4,13 @@ Cross-Agent Trust Receipts (P6).
 Portable proof of work: Agent B issues a TaskReceipt; Agent A stores it.
 Third parties can verify the receipt against B's DSM.
 P9: optional Ed25519 signature and public_key on receipt.
+
+P1 fix: a receipt hash is unkeyed, so anyone can edit a receipt and
+recompute it. A receipt is therefore only INTACT when its signature verifies
+under a public key the VERIFIER trusts (imported out of band); the key
+embedded in the receipt is never trusted on its own. Without a trusted key
+the best possible verdict is UNAUTHENTICATED. dispatch_hash / routing_hash
+are now covered by receipt_hash when present.
 """
 
 import hashlib
@@ -27,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 
 def _receipt_payload(receipt: "TaskReceipt") -> dict:
-    return {
+    payload = {
         "receipt_id": receipt.receipt_id,
         "issuer_agent_id": receipt.issuer_agent_id,
         "task_description": receipt.task_description,
@@ -38,6 +45,13 @@ def _receipt_payload(receipt: "TaskReceipt") -> dict:
         "shard_entry_count": receipt.shard_entry_count,
         "timestamp": receipt.timestamp,
     }
+    # Causal bindings are covered only when present, so receipts without them
+    # keep the exact same hash as before.
+    if getattr(receipt, "dispatch_hash", None) is not None:
+        payload["dispatch_hash"] = receipt.dispatch_hash
+    if getattr(receipt, "routing_hash", None) is not None:
+        payload["routing_hash"] = receipt.routing_hash
+    return payload
 
 
 def _compute_receipt_hash(payload: dict) -> str:
@@ -136,7 +150,11 @@ def issue_receipt(
     task_description: str,
     dispatch_hash: Optional[str] = None,
     routing_hash: Optional[str] = None,
+    signing=None,
 ) -> TaskReceipt:
+    """Issue a receipt for an entry. If `signing` (an AgentSigning with a
+    keypair) is given, the receipt is signed; an unsigned receipt can never
+    verify as INTACT."""
     entries = storage.read(shard_id, limit=10**6)
     entry = next((e for e in entries if e.id == entry_id), None)
     if not entry:
@@ -145,21 +163,8 @@ def issue_receipt(
     shard_tip_hash = tip_entries[0].hash if tip_entries else ""
     shard_entry_count = len(entries)
     timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-    receipt_id = str(uuid4())
-    payload = {
-        "receipt_id": receipt_id,
-        "issuer_agent_id": agent_id,
-        "task_description": task_description,
-        "entry_id": entry_id,
-        "entry_hash": entry.hash or "",
-        "shard_id": shard_id,
-        "shard_tip_hash": shard_tip_hash,
-        "shard_entry_count": shard_entry_count,
-        "timestamp": timestamp,
-    }
-    receipt_hash = _compute_receipt_hash(payload)
-    return TaskReceipt(
-        receipt_id=receipt_id,
+    receipt = TaskReceipt(
+        receipt_id=str(uuid4()),
         issuer_agent_id=agent_id,
         task_description=task_description,
         entry_id=entry_id,
@@ -168,57 +173,85 @@ def issue_receipt(
         shard_tip_hash=shard_tip_hash,
         shard_entry_count=shard_entry_count,
         timestamp=timestamp,
-        receipt_hash=receipt_hash,
+        receipt_hash="",
         dispatch_hash=dispatch_hash,
         routing_hash=routing_hash,
     )
+    receipt.receipt_hash = _compute_receipt_hash(_receipt_payload(receipt))
+    if signing is not None:
+        receipt.signature = signing.sign_receipt(receipt.receipt_hash)
+        receipt.public_key = signing.get_public_key()
+    return receipt
 
 
-def _verify_receipt_signature(receipt: TaskReceipt) -> Optional[bool]:
-    """Verify Ed25519 signature if present. Returns True/False/None (None = no signature)."""
+def _verify_receipt_signature(receipt: TaskReceipt, public_key: str) -> bool:
+    """Verify the receipt's Ed25519 signature over receipt_hash with `public_key`."""
+    from .checkpoint import ed25519_verify
+
     sig = getattr(receipt, "signature", None)
-    pub = getattr(receipt, "public_key", None)
-    if not sig or not pub:
-        return None
-    if not NACL_AVAILABLE:
+    if not sig or not NACL_AVAILABLE:
         return False
-    try:
-        pub_bytes = bytes.fromhex(pub)
-        sig_bytes = bytes.fromhex(sig)
-    except (ValueError, TypeError):
-        return False
-    if len(pub_bytes) != 32 or len(sig_bytes) != 64:
-        return False
-    try:
-        vk = nacl.signing.VerifyKey(pub_bytes)
-        msg = receipt.receipt_hash.encode("utf-8")
-        signed = sig_bytes + msg
-        vk.verify(signed)
-        return True
-    except Exception:
-        return False
+    return ed25519_verify(public_key, sig, receipt.receipt_hash)
 
 
-def verify_receipt(receipt: TaskReceipt) -> dict:
-    payload = _receipt_payload(receipt)
-    expected = _compute_receipt_hash(payload)
-    status = ReceiptStatus.INTACT if expected == receipt.receipt_hash else ReceiptStatus.TAMPERED
+def verify_receipt(receipt: TaskReceipt, trusted_public_key: Optional[str] = None) -> dict:
+    """Verify a receipt.
+
+    trusted_public_key: hex Ed25519 key of the issuer, obtained out of band
+        (e.g. DarylAgent.import_agent_key). Required for an INTACT verdict.
+
+    Status (ReceiptStatus):
+        TAMPERED          receipt_hash does not match the content
+        SIGNATURE_INVALID signature does not verify (under the trusted key, or
+                          under the embedded key when no trusted key is given)
+        UNTRUSTED_KEY     signed by a key other than the trusted one
+        UNSIGNED          trusted key given, but the receipt is not signed
+        UNAUTHENTICATED   content consistent, but no trusted key: proves nothing
+        INTACT            content consistent AND signed by the trusted key
+
+    Fields: signature_verified (True/False/None), signer_trusted, authenticated.
+    """
+    expected = _compute_receipt_hash(_receipt_payload(receipt))
+    sig = getattr(receipt, "signature", None)
+    embedded = getattr(receipt, "public_key", None)
     result = {
         "receipt_id": receipt.receipt_id,
-        "status": status,
+        "status": ReceiptStatus.TAMPERED,
         "issuer": receipt.issuer_agent_id,
         "task": receipt.task_description,
         "signature_verified": None,
+        "signer_trusted": False,
+        "authenticated": False,
     }
-    sig_ok = _verify_receipt_signature(receipt)
-    if sig_ok is None:
-        result["signature_verified"] = None
-    elif sig_ok is True:
-        result["signature_verified"] = True
-    else:
-        result["signature_verified"] = False
-        if getattr(receipt, "signature", None) and getattr(receipt, "public_key", None):
-            result["status"] = ReceiptStatus.SIGNATURE_INVALID
+    if expected != receipt.receipt_hash:
+        return result
+
+    if trusted_public_key is None:
+        # Best effort only: an embedded key proves nothing about the issuer.
+        if sig and embedded:
+            ok = _verify_receipt_signature(receipt, embedded)
+            result["signature_verified"] = ok
+            if not ok:
+                result["status"] = ReceiptStatus.SIGNATURE_INVALID
+                return result
+        result["status"] = ReceiptStatus.UNAUTHENTICATED
+        return result
+
+    if not sig:
+        result["status"] = ReceiptStatus.UNSIGNED
+        return result
+    if embedded and embedded.lower() != trusted_public_key.lower():
+        result["signature_verified"] = _verify_receipt_signature(receipt, embedded)
+        result["status"] = ReceiptStatus.UNTRUSTED_KEY
+        return result
+    ok = _verify_receipt_signature(receipt, trusted_public_key)
+    result["signature_verified"] = ok
+    if not ok:
+        result["status"] = ReceiptStatus.SIGNATURE_INVALID
+        return result
+    result["signer_trusted"] = True
+    result["authenticated"] = True
+    result["status"] = ReceiptStatus.INTACT
     return result
 
 

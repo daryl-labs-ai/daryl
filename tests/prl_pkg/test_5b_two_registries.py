@@ -110,7 +110,8 @@ def test_5b_two_independent_registries(tmp_path):
         store_a._storage, agent_id="R_A", entry_id=entry_a.id,
         shard_id=CONSULTATION_SHARD, task_description="an R_A act")
     portable = TaskReceipt.from_json(receipt.to_json())  # carried to B's context
-    assert verify_receipt(portable)["status"] == ReceiptStatus.INTACT  # self-integrity
+    # self-integrity only: unsigned receipt -> consistent but not authenticated
+    assert verify_receipt(portable)["status"] == ReceiptStatus.UNAUTHENTICATED
     confirmed = verify_receipt_against_storage(store_a._storage, portable)  # against R_A's DSM
     assert confirmed["status"] == StorageReceiptStatus.CONFIRMED and confirmed["hash_matches"]
 

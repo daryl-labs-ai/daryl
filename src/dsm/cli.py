@@ -183,11 +183,22 @@ def _cmd_verify(args) -> int:
         if not shard_id:
             print("Error: use --all or --shard <shard_id>", file=sys.stderr)
             return 1
-        results = [dsm_verify.verify_shard(storage, shard_id)]
+        checkpoint = None
+        if getattr(args, "checkpoint", None):
+            with open(args.checkpoint, "r", encoding="utf-8") as f:
+                checkpoint = json.load(f)
+        results = [dsm_verify.verify_shard(
+            storage, shard_id,
+            checkpoint=checkpoint, trusted_public_key=getattr(args, "trusted_key", None),
+        )]
 
     any_fail = False
     for r in results:
-        print(f"Shard: {r['shard_id']} | entries: {r['total_entries']} | verified: {r['verified']} | tampered: {r['tampered']} | chain_breaks: {r['chain_breaks']} | status: {r['status']}")
+        status = getattr(r["status"], "value", r["status"])
+        line = f"Shard: {r['shard_id']} | entries: {r['total_entries']} | verified: {r['verified']} | tampered: {r['tampered']} | chain_breaks: {r['chain_breaks']} | status: {status}"
+        if r.get("checkpoint_status"):
+            line += f" | checkpoint: {r['checkpoint_status']}"
+        print(line)
         if r["status"] != "OK":
             any_fail = True
     return 0 if not any_fail else 1
@@ -222,9 +233,15 @@ def _cmd_startup_check(args) -> int:
     storage = _get_storage(getattr(args, "data_dir", None))
     full = getattr(args, "full", False)
 
-    result = storage.startup_check(full_verify=full)
+    # Verify before any pin repair: a divergence that does not verify is
+    # reported and left untouched instead of being reconciled.
+    result = dsm_verify.guarded_startup_check(storage, full_verify=full)
 
     print(f"Status: {result['status']}")
+    for r in result.get("repair_refused", []):
+        status = getattr(r["status"], "value", r["status"])
+        print(f"  ✗ {r['shard_id']}: repair refused — {status} "
+              f"({r.get('mismatch_type') or r.get('pin_status')})")
     print(f"Shards reconciled: {result['shards_reconciled']}")
 
     if result.get("reconciled"):
@@ -317,7 +334,11 @@ def _cmd_agent_check(args) -> int:
     """dsm agent-check --data-dir <path>: verify + orphan detection, print summary. Exit 0 if OK, 1 if any issue."""
     data_dir = getattr(args, "data_dir", None) or "data"
     try:
-        agent = DarylAgent(agent_id="cli-check", data_dir=data_dir)
+        # Read-only check: no startup reconcile (it could move a pin), no key.
+        agent = DarylAgent(
+            agent_id="cli-check", data_dir=data_dir,
+            signing_dir=False, startup_verify=False,
+        )
     except Exception as e:
         print(f"Error initializing agent: {e}", file=sys.stderr)
         return 1
@@ -386,7 +407,7 @@ def _cmd_receipt_issue(args) -> int:
 
 
 def _cmd_receipt_verify(args) -> int:
-    """dsm receipt-verify: verify receipt integrity. Exit 0 if INTACT, 1 if TAMPERED."""
+    """dsm receipt-verify: verify a receipt. Exit 0 only if INTACT (signed by --trusted-key)."""
     receipt_arg = getattr(args, "receipt", "")
     if not receipt_arg:
         print("Error: receipt (JSON or file path) required", file=sys.stderr)
@@ -403,9 +424,12 @@ def _cmd_receipt_verify(args) -> int:
     except Exception as e:
         print(f"Error parsing receipt: {e}", file=sys.stderr)
         return 1
-    result = verify_receipt_fn(receipt)
-    print(f"receipt_id={result['receipt_id']} status={result['status']} issuer={result['issuer']} task={result['task']}")
-    return 0 if result["status"] == "INTACT" else 1
+    result = verify_receipt_fn(receipt, trusted_public_key=getattr(args, "trusted_key", None))
+    status = getattr(result["status"], "value", result["status"])
+    print(f"receipt_id={result['receipt_id']} status={status} issuer={result['issuer']} task={result['task']}")
+    if status == "UNAUTHENTICATED":
+        print("Warning: no --trusted-key given; the receipt proves nothing about its issuer.", file=sys.stderr)
+    return 0 if status == "INTACT" else 1
 
 
 def _cmd_receipt_list(args) -> int:
@@ -1257,6 +1281,8 @@ def main_dsm() -> None:
     p_verify.add_argument("--all", action="store_true", help="Verify all shards")
     p_verify.add_argument("--shard", type=str, default=None, help="Verify a single shard by ID")
     p_verify.add_argument("--data-dir", default=None, help="DSM data directory (default: data)")
+    p_verify.add_argument("--checkpoint", default=None, help="Client-held checkpoint JSON file (with --shard)")
+    p_verify.add_argument("--trusted-key", default=None, help="Trusted Ed25519 public key (hex) that must have signed the checkpoint")
     p_verify.set_defaults(func=_cmd_verify)
 
     # dsm replay <shard_id>
@@ -1335,6 +1361,7 @@ def main_dsm() -> None:
     # dsm receipt-verify
     p_receipt_verify = subparsers.add_parser("receipt-verify", help="Verify receipt integrity (offline)")
     p_receipt_verify.add_argument("receipt", help="JSON string or path to file containing receipt")
+    p_receipt_verify.add_argument("--trusted-key", default=None, help="Issuer's Ed25519 public key (hex), obtained out of band; required for INTACT")
     p_receipt_verify.set_defaults(func=_cmd_receipt_verify)
 
     # dsm receipt-list

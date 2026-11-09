@@ -8,6 +8,9 @@ class VerifyStatus(str, Enum):
     OK = "OK"
     TAMPERED = "TAMPERED"
     CHAIN_BROKEN = "CHAIN_BROKEN"
+    # Chain consistent but completeness unprovable: non-empty shard with
+    # neither an integrity pin nor a client checkpoint.
+    UNPINNED = "UNPINNED"
 
 
 class SealStatus(str, Enum):
@@ -19,9 +22,17 @@ class SealStatus(str, Enum):
 
 class ReceiptStatus(str, Enum):
     """Status for receipt verification (exchange.py)."""
+    # Hash consistent AND signature valid under a key the verifier trusts.
     INTACT = "INTACT"
     TAMPERED = "TAMPERED"
     SIGNATURE_INVALID = "SIGNATURE_INVALID"
+    # Hash consistent, but nothing ties the receipt to its issuer: no trusted
+    # key was supplied, so the content proves nothing on its own.
+    UNAUTHENTICATED = "UNAUTHENTICATED"
+    # A trusted key was supplied but the receipt carries no signature.
+    UNSIGNED = "UNSIGNED"
+    # Signed, but by a key other than the trusted one.
+    UNTRUSTED_KEY = "UNTRUSTED_KEY"
 
 
 class WitnessStatus(str, Enum):

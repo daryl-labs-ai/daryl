@@ -32,9 +32,20 @@ TEST_DATA_DIR = f"/tmp/dsm-goose-test-{os.getpid()}"
 
 @pytest.fixture(autouse=True)
 def setup_env():
-    """Use isolated test data directory."""
+    """Use isolated test data directory, with a fresh agent per test.
+
+    The data directory (keys included) is wiped after each test, so the
+    server's agent singleton must be reset too: an agent whose key files
+    vanish under it refuses to keep working unsigned.
+    """
+    from dsm.integrations.goose import server
+
     os.environ["DSM_DATA_DIR"] = TEST_DATA_DIR
+    server._agent = None
+    server._data_dir = None
     yield
+    server._agent = None
+    server._data_dir = None
     if os.path.exists(TEST_DATA_DIR):
         shutil.rmtree(TEST_DATA_DIR)
 

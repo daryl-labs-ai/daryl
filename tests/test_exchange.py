@@ -90,14 +90,32 @@ def test_receipt_to_from_json(tmp_path):
     assert back.entry_hash == receipt.entry_hash
 
 
-def test_verify_receipt_intact(tmp_path):
-    """Unmodified receipt = INTACT."""
+def test_verify_receipt_unsigned_is_unauthenticated(tmp_path):
+    """Unmodified but unsigned receipt = UNAUTHENTICATED (hash alone proves nothing)."""
     storage = Storage(data_dir=str(tmp_path / "data"))
     e = _make_entry("s1", "z")
     storage.append(e)
     receipt = issue_receipt(storage, "b", e.id, "s1", "task")
     result = verify_receipt(receipt)
+    assert result["status"] == "UNAUTHENTICATED"
+    assert result["authenticated"] is False
+    assert result["receipt_id"] == receipt.receipt_id
+    assert result["issuer"] == "b"
+
+
+def test_verify_receipt_intact(tmp_path):
+    """Unmodified receipt signed by the trusted issuer key = INTACT."""
+    from dsm.signing import AgentSigning
+
+    storage = Storage(data_dir=str(tmp_path / "data"))
+    e = _make_entry("s1", "z")
+    storage.append(e)
+    signer = AgentSigning(str(tmp_path / "keys"), "b")
+    signer.generate_keypair()
+    receipt = issue_receipt(storage, "b", e.id, "s1", "task", signing=signer)
+    result = verify_receipt(receipt, trusted_public_key=signer.get_public_key())
     assert result["status"] == "INTACT"
+    assert result["authenticated"] is True
     assert result["receipt_id"] == receipt.receipt_id
     assert result["issuer"] == "b"
     assert result["task"] == "task"
@@ -191,8 +209,13 @@ def test_full_cross_agent_flow(tmp_path):
     storage_a = Storage(data_dir=str(dir_a))
     e = _make_entry("work", "B did the job")
     storage_b.append(e)
-    receipt = issue_receipt(storage_b, "agent_b", e.id, "work", "Delegate task")
-    assert verify_receipt(receipt)["status"] == "INTACT"
+    from dsm.signing import AgentSigning
+
+    signer_b = AgentSigning(str(dir_b / "keys"), "agent_b")
+    signer_b.generate_keypair()
+    trusted_b = signer_b.get_public_key()  # exchanged out of band
+    receipt = issue_receipt(storage_b, "agent_b", e.id, "work", "Delegate task", signing=signer_b)
+    assert verify_receipt(receipt, trusted_public_key=trusted_b)["status"] == "INTACT"
     stored = store_external_receipt(storage_a, receipt, "agent_a", shard_id="receipts")
     assert stored
     listed = list_received_receipts(storage_a, shard_id="receipts")
@@ -236,7 +259,7 @@ def test_receipt_with_empty_shard(tmp_path):
     receipt = issue_receipt(storage, "b", e.id, "single", "Solo task")
     assert receipt.shard_entry_count == 1
     assert receipt.entry_hash == e.hash
-    assert verify_receipt(receipt)["status"] == "INTACT"
+    assert verify_receipt(receipt)["status"] == "UNAUTHENTICATED"
     assert verify_receipt_against_storage(storage, receipt)["status"] == "CONFIRMED"
 
 
